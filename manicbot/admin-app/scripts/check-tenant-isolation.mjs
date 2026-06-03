@@ -17,7 +17,10 @@
  * Design (rewritten 2026-06-02 — closes the blind spots an audit found):
  *   1. MUTATIONS ARE COVERED. The previous version only matched `.from()` (i.e.
  *      SELECT); `db.update()/delete()/insert()` have no `.from()` and slipped
- *      through entirely. We now match all four operations.
+ *      through entirely. We now match all four operations. For UPDATE/DELETE the
+ *      tenant predicate must sit in the `.where(...)` filter (not in `.set()` —
+ *      writing the tenant column does not scope which rows are touched), and
+ *      comments are stripped so a commented-out `tenantId` can't spoof the guard.
  *   2. THE TABLE SET IS DERIVED FROM THE SCHEMA. `deriveTenantScopedTables()`
  *      reads schema.ts and treats any `sqliteTable` declaring a `text("tenant_id")`
  *      column as tenant-scoped, minus an explicit PLATFORM_GLOBAL set. No more
@@ -135,6 +138,48 @@ function statementChain(src, start) {
 }
 
 /**
+ * Strip `//` line comments and `/* … *\/` block comments from a snippet so a
+ * predicate keyword that only appears in a comment can't satisfy the isolation
+ * check. (The Worker-side scanner hit exactly this comment false-positive: a
+ * `/* tenantId handled upstream *\/` note inside the chain spoofed the guard.)
+ * Naïve but adequate for a heuristic: strings rarely contain comment markers in
+ * these query chains, and a false strip can only make the scanner STRICTER.
+ */
+function stripComments(s) {
+  return s
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ");
+}
+
+/**
+ * Extract the argument substring of the LAST `.where(...)` in a statement chain,
+ * with balanced-paren matching (the inner `and(eq(...), eq(...))` nests parens,
+ * so a lazy `\)` regex truncates at the first close paren). Returns `null` when
+ * the chain has no `.where(...)`. Comments are stripped from the result.
+ *
+ * Used for MUTATIONS (`.update()` / `.delete()`): the isolation predicate must
+ * live in the WHERE filter, not merely somewhere in the chain — a
+ * `.set({ tenantId })` assignment WRITES the column but does NOT scope the rows
+ * being mutated, so it must not count as a tenant predicate.
+ */
+function whereClauseArg(chain) {
+  const marker = ".where(";
+  const at = chain.lastIndexOf(marker);
+  if (at === -1) return null;
+  let depth = 0;
+  const open = at + marker.length - 1; // index of the '('
+  for (let i = open; i < chain.length; i++) {
+    const c = chain[i];
+    if (c === "(") depth++;
+    else if (c === ")") {
+      depth--;
+      if (depth === 0) return stripComments(chain.slice(open + 1, i));
+    }
+  }
+  return stripComments(chain.slice(open + 1)); // unterminated → take the rest
+}
+
+/**
  * Accept a `.where(scope)` / `.where(and(...conditions))` whose variable is
  * associated with a `tenantId` predicate within a local window before the
  * callsite (the common "build the conditions array first" pattern, and the
@@ -223,7 +268,21 @@ export function scanSource(src, tenantTables) {
     // Accepted isolation predicates: tenant scoping OR per-user scoping
     // (web-user-owned rows like notifications / push subscriptions isolate by
     // webUserId, which is at least as strong as tenantId).
-    if (/\b(tenantId|webUserId)\b/.test(chain)) continue;
+    //
+    // SELECT (`.from`) / INSERT (`.values`): the predicate may appear anywhere in
+    // the chain — a SELECT has no `.set()`, and an INSERT legitimately carries
+    // `tenantId` in its `.values({...})` payload (that IS how it scopes the new
+    // row). Comments are stripped so a commented-out keyword can't spoof it.
+    //
+    // UPDATE / DELETE: the predicate MUST be in the `.where(...)` filter. A
+    // `.update(t).set({ tenantId }).where(eq(t.id, …))` writes the tenant column
+    // but filters rows by id alone — a cross-tenant write the loose chain check
+    // would have waved through. Require the isolation predicate in the WHERE.
+    const isMutationByRows = op === "update" || op === "delete";
+    const predicateScope = isMutationByRows
+      ? whereClauseArg(chain) // null when there is no .where() at all
+      : stripComments(chain);
+    if (predicateScope !== null && /\b(tenantId|webUserId)\b/.test(predicateScope)) continue;
     if (whereVarCarriesTenant(src, start, chain, tenantTables)) continue;
     if (enclosingHasAuthGuard(src, start)) continue;
     if (hasIgnoreDirective(src, start)) continue;

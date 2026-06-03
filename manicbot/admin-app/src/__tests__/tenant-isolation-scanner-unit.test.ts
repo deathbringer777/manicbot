@@ -120,6 +120,43 @@ describe("scanSource — SELECT + acceptance patterns", () => {
   });
 });
 
+describe("scanSource — mutation predicate must be in WHERE (set/comment can't spoof)", () => {
+  it("FLAGS an UPDATE that writes tenantId in .set() but filters by id alone (cross-tenant write)", () => {
+    // The row being mutated is selected by `id` only; `.set({ tenantId })` writes
+    // the column, it does NOT scope which rows are touched. Loose chain-substring
+    // matching used to wave this through — the exact write-side regression S6 cares about.
+    const src = `await ctx.db.update(appointments).set({ tenantId: input.tenantId, cancelled: 1 }).where(eq(appointments.id, input.id));`;
+    const f = scanSource(src, TENANT);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatchObject({ op: "update", table: "appointments" });
+  });
+
+  it("FLAGS a DELETE whose tenantId appears only in a block comment in the chain", () => {
+    const src = `await ctx.db.delete(reviews) /* tenantId scoping handled upstream */ .where(eq(reviews.id, input.id));`;
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("FLAGS an UPDATE whose tenantId appears only in a // line comment in the chain", () => {
+    const src = `await ctx.db.update(masters).set(patch) // tenantId already checked\n  .where(eq(masters.id, input.id));`;
+    expect(scanSource(src, TENANT)).toHaveLength(1);
+  });
+
+  it("ACCEPTS an UPDATE with tenantId in the WHERE (the correct scoping)", () => {
+    const src = `await ctx.db.update(appointments).set({ tenantId: input.tenantId, cancelled: 1 }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));`;
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+
+  it("ACCEPTS a DELETE with a nested-paren WHERE (and(eq(...), eq(...))) — balanced extraction", () => {
+    const src = `await ctx.db.delete(reviews).where(and(eq(reviews.id, input.id), eq(reviews.tenantId, input.tenantId)));`;
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+
+  it("STILL accepts an INSERT scoped by tenantId in .values() (values is the row scope, not a filter)", () => {
+    const src = `await ctx.db.insert(reviews).values({ id: input.id, tenantId: input.tenantId, text: input.text });`;
+    expect(scanSource(src, TENANT)).toHaveLength(0);
+  });
+});
+
 describe("scanSource — user-scoping and authorize-then-act", () => {
   const USER_TENANT = new Set(["userNotifications"]);
 

@@ -10,6 +10,7 @@
     "test:ws": "vitest run --config vitest.workers.config.mjs",
     "check-schema": "node scripts/check-schema-tables.mjs",
     "check-migrations": "node scripts/check-migrations.mjs",
+    "check-tenant-isolation": "node scripts/check-tenant-isolation-worker.mjs",
     "migrate": "node scripts/run-migrate.js",
     "ig-e2e:tenant": "node scripts/create-ig-e2e-tenant.mjs",
     "seed:test-accounts": "node scripts/seed-test-accounts.mjs --apply",

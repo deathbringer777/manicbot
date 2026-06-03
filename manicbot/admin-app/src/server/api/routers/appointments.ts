@@ -38,6 +38,7 @@ export const appointmentsRouter = createTRPCRouter({
       if (input.dateTo) conditions.push(lte(appointments.date, input.dateTo));
 
       // Resolve client + service names at read time (see appointmentNames.ts).
+      // tenant-scan-ignore: adminProcedure god-mode listing; the per-tenant filter is optional (conditions[]).
       const baseSelect = ctx.db
         .select({ ...getTableColumns(appointments), ...appointmentNameColumns })
         .from(appointments);
@@ -829,6 +830,7 @@ export const appointmentsRouter = createTRPCRouter({
           masterId: appointments.masterId,
           svcId: appointments.svcId,
         })
+        // tenant-scan-ignore: load-by-id to read the row's tenant; assertTenantOwner(current.tenantId) below authorizes before any write.
         .from(appointments)
         .where(eq(appointments.id, input.id))
         .limit(1);

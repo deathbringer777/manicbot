@@ -109,6 +109,18 @@ jobs:
         run: npm run check-migrations
         working-directory: manicbot
 
+      # Worker raw-SQL tenant-isolation scanner (sibling to the admin-app
+      # scanner below). ADVISORY for now: it surfaces tenant-scoped raw-SQL
+      # queries that lack a `tenant_id` predicate. The current hits are all
+      # authorize-then-act / bot→tenant resolvers / platform god-mode — verified
+      # non-breaches (see SECURITY_FINDINGS.md). continue-on-error keeps the
+      # deploy unblocked until those callsites carry `// tenant-scan-ignore`
+      # directives, after which this step flips to a hard gate.
+      - name: Worker — tenant-isolation scanner (advisory)
+        run: npm run check-tenant-isolation
+        continue-on-error: true
+        working-directory: manicbot
+
       - name: Security audit (worker deps)
         run: npm audit --audit-level=high --production
         working-directory: manicbot

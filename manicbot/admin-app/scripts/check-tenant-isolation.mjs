@@ -1,206 +1,121 @@
 #!/usr/bin/env node
+// @ts-nocheck — standalone Node CLI/CI script (run via `node scripts/...`), not
+// part of the app type-graph. The unit test imports its pure helpers; without
+// this, `checkJs` would type-check this heuristic regex code as app source.
 /**
  * Tenant-isolation scanner for admin-app tRPC routers (CI guard).
  *
- * Reads every Drizzle query expression in `src/server/api/routers/*.ts`,
- * looks at any `.from(<table>)` call referencing a tenant-scoped table, and
- * fails if the chained `.where(...)` for that query does not mention
- * `tenantId`. This is a heuristic — it cannot fully understand TypeScript —
- * but it catches the regression we care about: a developer adding a new
- * query against `appointments` / `masters` / `services` / etc. that forgets
- * the `eq(<table>.tenantId, ...)` predicate.
+ * Every SELECT/UPDATE/DELETE/INSERT against a tenant-scoped table MUST carry
+ * a `tenantId` predicate. This script flags any Drizzle query callsite
+ * (`.from()`, `.update()`, `.delete()`, `.insert()`) on a tenant-scoped table
+ * whose statement chain does not mention `tenantId`.
+ *
+ * It is a heuristic — it cannot fully parse TypeScript — but it catches the
+ * regression we care about: a query against `appointments` / `masters` /
+ * `marketingContacts` / etc. that forgets the `eq(<table>.tenantId, …)` predicate.
+ *
+ * Design (rewritten 2026-06-02 — closes the blind spots an audit found):
+ *   1. MUTATIONS ARE COVERED. The previous version only matched `.from()` (i.e.
+ *      SELECT); `db.update()/delete()/insert()` have no `.from()` and slipped
+ *      through entirely. We now match all four operations.
+ *   2. THE TABLE SET IS DERIVED FROM THE SCHEMA. `deriveTenantScopedTables()`
+ *      reads schema.ts and treats any `sqliteTable` declaring a `text("tenant_id")`
+ *      column as tenant-scoped, minus an explicit PLATFORM_GLOBAL set. No more
+ *      hand-maintained list that silently drifts behind new tables.
+ *   3. EXCEPTIONS ARE CONTENT-ANCHORED. Instead of a brittle `file:line`
+ *      allowlist (which had to be re-bumped ~30× as code moved), an intentional
+ *      cross-tenant query is annotated inline with `// tenant-scan-ignore: <reason>`
+ *      on (or just above) the query. Survives line drift; self-documents.
+ *   4. WHERE-VARIABLE AWARENESS. A `.where(scope)` whose `scope`/`conditions`
+ *      variable is built with a tenantId predicate nearby is accepted.
  *
  * Run:
  *   cd manicbot/admin-app && node scripts/check-tenant-isolation.mjs
  *   exit 0 → all good
- *   exit 1 → found a query that needs review
+ *   exit 1 → found a query that needs a tenantId predicate (or a directive)
  *
  * Wired into CI alongside `npm test` (see .github/workflows/deploy.yml).
- *
- * Maintenance: extend `TENANT_SCOPED_TABLES` when a new tenant-scoped table
- * is added to the Drizzle schema. The list is intentionally hand-maintained
- * because Drizzle's tableConfig metadata is awkward to read at script time.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const ROUTERS_DIR = join(process.cwd(), "src", "server", "api", "routers");
+const SCHEMA_FILE = join(process.cwd(), "src", "server", "db", "schema.ts");
 
 /**
- * Tables whose rows are partitioned per tenant. Every SELECT/UPDATE/DELETE
- * against these tables MUST carry a `tenantId` predicate in WHERE.
+ * Tables that carry a `tenant_id` column but are NOT partitioned per tenant —
+ * access is by web-user identity, a cross-tenant audit trail, or the platform
+ * support queue. Subtracted from the auto-derived tenant-scoped set.
+ *
+ * Keep this list SMALL and documented. Everything else with a `tenant_id`
+ * column is enforced. Adding an entry here is a deliberate audit decision.
  */
-const TENANT_SCOPED_TABLES = new Set([
-  "appointments",
-  "masters",
-  "services",
-  "users",
-  "tenantConfig",
-  "conversations",
-  "messageWindows",
-  "channelConfigs",
-  "googleIntegrations",
-  "googleBusyBlocks",
-  "marketingSegments",
-  "marketingTemplates",
-  "marketingCampaigns",
-  "marketingSends",
-  "localTickets",
-  "tenantRoles",
-  "tenantMemberPermissions",
-  "tenantActionRequests",
-  "permissionElevationCodes",
-  "bots",
+export const PLATFORM_GLOBAL_TABLES = new Set([
+  "webUsers", // auth identity — looked up by id/email/session; tenant_id nullable
+  "auditLog", // cross-tenant audit trail; tenant_id nullable for platform events
+  "platformTickets", // platform support queue; tenant_id nullable until a tenant is linked
 ]);
 
 /**
- * Tables that look tenant-scoped but are intentionally NOT — they're
- * keyed by something else (web-user id, global resources, etc.). The
- * scanner skips queries touching only these.
+ * Pure system_admin god-mode routers — every query is cross-tenant by design.
+ * Verified (2026-06-02): each of these files uses ONLY `adminProcedure`.
+ *
+ * NOTE: `appointments.ts`, `billing.ts`, and `support.ts` were REMOVED from this
+ * list. They mix `publicProcedure` / `tenantOwnerProcedure` / `protectedProcedure`
+ * with admin routes, so skipping the whole file hid tenant-scoped queries. They
+ * are now scanned; their genuine god-mode queries carry `// tenant-scan-ignore`.
  */
-const GLOBAL_OR_USER_SCOPED_TABLES = new Set([
-  "tenants",
-  "platformRoles",
-  "platformTickets",
-  "platformTicketMessages",
-  "supportAgents",
-  "stripeEvents",
-  "stripeCustomers",
-  "rateLimits",
-  "webUsers",
-  "auditLog",
-  "marketingContacts",
-  "marketingProviders",
-  "marketingConsentLog",
-  "marketingAutomations",
-  "pluginInstallations",
-  "pluginEvents",
-  "emailSubscribers",
-  "emailSuppressions",
-  "leads",
-  "tenantFts",
-  "roleChangeRequests",
+export const SKIP_FILES = new Set([
+  "marketing.ts", // adminProcedure-only cross-tenant CRM
+  "tenants.ts", // adminProcedure-only platform tenant management
+  "users.ts", // adminProcedure-only platform user listing
+  "metrics.ts", // adminProcedure-only platform metrics
+  "system.ts", // adminProcedure-only
+  "events.ts", // adminProcedure-only
+  "settings.ts", // adminProcedure-only platform settings
+  "stripe.ts", // platform billing webhooks / global
+  "provisioning.ts", // adminProcedure-only platform provisioning
+  "export.ts", // adminProcedure-only platform export
+  "search.ts", // adminProcedure-only global search
+  "analyticsEvents.ts", // adminProcedure-only platform analytics (telemetry)
+  "errorEvents.ts", // adminProcedure-only platform error observability (telemetry)
+  "leads.ts", // adminProcedure-only platform lead/CRM management
+  "marketingAutopilot.ts", // adminProcedure-only @manicbot_com platform autopilot
+  "platformBroadcasts.ts", // systemAdminProcedure-only platform broadcasts
+]);
+
+const WHERE_HELPERS = new Set([
+  "eq", "ne", "and", "or", "not", "gt", "gte", "lt", "lte", "inArray",
+  "notInArray", "isNull", "isNotNull", "like", "ilike", "between", "exists",
+  "sql", "desc", "asc", "count", "sum", "min", "max", "avg", "input", "ctx",
 ]);
 
 /**
- * Files that are explicitly cross-tenant by design (system_admin god-mode
- * routers). The scanner skips these to avoid false positives. Adding a file
- * here is a deliberate audit decision — review the file before adding it.
+ * Derive the set of tenant-scoped Drizzle table names (camelCase const names)
+ * straight from schema.ts: any `sqliteTable` whose column object declares
+ * `text("tenant_id")`. Replaces the old hand-maintained list so it cannot
+ * drift out of sync with the schema. Multi-tenant relationship tables
+ * (e.g. `referrals` with `referrer_tenant_id`/`invitee_tenant_id`) are NOT
+ * matched, because the column name is not exactly `tenant_id`.
  */
-const SKIP_FILES = new Set([
-  "marketing.ts",            // adminProcedure-only, by design cross-tenant CRM
-  "tenants.ts",              // adminProcedure-only platform tenant management
-  "users.ts",                // adminProcedure-only platform user listing
-  "metrics.ts",
-  "system.ts",
-  "events.ts",
-  "settings.ts",
-  "stripe.ts",
-  "billing.ts",
-  "provisioning.ts",
-  "export.ts",
-  "support.ts",              // platform staff cross-tenant by design
-  "search.ts",               // global search (system_admin)
-  "appointments.ts",         // adminProcedure-only (system_admin); tenantId filter is optional
-]);
-
-/**
- * Specific (file, line) hits that have been audited and confirmed as
- * intentional. The scanner skips them. Each entry MUST be commented with
- * the rationale so a future reader can re-validate.
- */
-const ALLOWLIST = new Set([
-  // salon.ts — bot_id collision check across tenants (intentional global
-  // lookup, cross-tenant by design). The procedure is tenantOwnerProcedure-
-  // gated; this read confirms the bot isn't already claimed by SOMEONE
-  // ELSE before we accept it.
-  //
-  // Line-drift history: 883 → 913 → 920 → 937 → 964 → 1049 → 1159 → 1292
-  // → 1297 → 1306 → 1307 → 1301 → 1337 → 1434 → 1449 → 1479 → 1483
-  // (#180/#182/#183 IG-OAuth audit series inserted reactivate / send-test /
-  // error_type imports above this block) → 1539 (after the 0074 favorite-
-  // master auto-suggest tRPC pair landed above) → 1741 (service-categories
-  // CRUD added ~200 lines around line 567 in the categories-PR) → 1750
-  // (0082 owner-pairing PR added the salon-JSON name mirror, +8 lines in
-  // updateSalonProfile body) → 1751 (PR-A added the captureError import
-  // at the top of the file, shifting everything below by 1 line) → 1752
-  // (PR-B added notifyOrCapture import + 6 lines of bell-state vars +
-  // the awaited bellResult block in sendMasterInvitation body; net +1) →
-  // 1760 (migration 0090 added the `chatEnabled` zod field + `chatEnabled`
-  // → `tenants` write + the `chatEnabled` projection in `getSalonProfile`;
-  // net +8 lines in updateSalonProfile body and the proc above) →
-  // 1773 (migration 0093 added the addMasterToDefaultGroup hooks in
-  // `addMaster` (+5) and `createMasterAccount` (+6), shifting the
-  // bot-collision query down by ~13 lines) → 1785 (Phase-3 security sweep
-  // awaited the master-invite emails in `addMaster` (+7) and
-  // `createMasterAccount` (+5) and surfaced `inviteEmailSent`, shifting the
-  // bot-collision query down by 12 lines) → 1789 (appointment name-resolution
-  // added the `appointmentNames` import (+1) and rewrote `getAppointments`
-  // to a `select({...resolved})` block (+3), net +4 lines above this query) →
-  // 1791 (BUG-02: markDone's seconds→ms guard in salon.ts replaced 2 lines
-  // with a commented `row.ts > Date.now()`, net +2 lines above this query) →
-  // 1821 (per-master schedule editor added the `~/lib/workHours` import (+7),
-  // the workHours/workDays zod fields (+5) and the validate+normalize block in
-  // `updateMaster` (+18), net +30 lines above this query) → 1958 (the
-  // master-schedule policy PR added `reviewMasterScheduleRequest` +
-  // `listPendingScheduleRequests` (~137 lines) above this query) → 2143 (the
-  // Phase-2 photo-albums PR added album CRUD — listAlbums/createAlbum/
-  // renameAlbum/deleteAlbum/reorderAlbums/setAlbumPhotos, ~185 lines — around
-  // line 785, shifting the bot-collision query down) → 2174 (the per-day
-  // master-schedule PR added the workSchedule zod field + decode/validate/
-  // serialize/derive imports + the workSchedule branches in `updateMaster`
-  // and `reviewMasterScheduleRequest`, ~31 lines above this query).
-  //
-  // Brittleness is now well-documented; the long-term fix is to switch to
-  // a content-anchored allowlist (match the comment on the prior line
-  // instead of an absolute line number), tracked as a follow-up.
-  "src/server/api/routers/salon.ts:2174",
-  // tenantStaff.ts — permissionElevationCodes lookup by primary key.
-  // Owner/system_admin check on next line gates access; tenantId predicate
-  // is unnecessary because the row id is globally unique and authorization
-  // is by ownerUserId. Line drifted after listMembers extension for masters (PR-A)
-  // → 388 (#D-1 revokeMember tenant-scoping added 7 lines above this block).
-  "src/server/api/routers/tenantStaff.ts:388",
-  // tenantStaff.ts:540 — tenantActionRequests query. The `where` variable is
-  // built two lines above and DOES include eq(table.tenantId, input.tenantId).
-  // The scanner's 800-char window misses the prior assignment. Line drifted
-  // 525 → 540 (PR-A) → 547 (#D-1 revokeMember tenant-scoping added 7 lines above).
-  "src/server/api/routers/tenantStaff.ts:547",
-]);
-
-function listRouterFiles(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) {
-      out.push(...listRouterFiles(full));
-    } else if (entry.endsWith(".ts") && !entry.endsWith(".test.ts")) {
-      out.push(full);
+export function deriveTenantScopedTables(schemaSrc) {
+  const re = /export\s+const\s+([A-Za-z0-9_]+)\s*=\s*sqliteTable\(/g;
+  const decls = [];
+  let m;
+  while ((m = re.exec(schemaSrc)) !== null) decls.push({ name: m[1], at: m.index });
+  const out = new Set();
+  for (let i = 0; i < decls.length; i++) {
+    const end = i + 1 < decls.length ? decls[i + 1].at : schemaSrc.length;
+    const body = schemaSrc.slice(decls[i].at, end);
+    if (/text\(\s*["'`]tenant_id["'`]\s*\)/.test(body) && !PLATFORM_GLOBAL_TABLES.has(decls[i].name)) {
+      out.add(decls[i].name);
     }
   }
   return out;
 }
 
-/**
- * Walk a TS source string and yield each `.from(<id>)` callsite plus a
- * heuristic snippet covering its query chain. We grab ~600 chars after the
- * `.from(` so chained `.where(...)` is included; that's enough for the
- * existing router patterns and avoids parsing TS for real.
- */
-function findFromCallsites(src) {
-  const out = [];
-  const re = /\.from\(\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\)/g;
-  let match;
-  while ((match = re.exec(src)) !== null) {
-    const tableName = match[1];
-    const start = match.index;
-    // Capture up to the next semicolon-ending statement or 600 chars.
-    const tail = src.slice(start, start + 800);
-    out.push({ tableName, snippet: tail, lineNumber: lineNumberFor(src, start) });
-  }
-  return out;
-}
+const CALLSITE_RE = /\.(from|update|delete|insert)\(\s*([A-Za-z_$][\w$]*)\s*\)/g;
 
 function lineNumberFor(src, idx) {
   let line = 1;
@@ -208,14 +123,128 @@ function lineNumberFor(src, idx) {
   return line;
 }
 
-function isWhitelisted(snippet) {
-  // Snippet must reference `tenantId` somewhere in its chain. Allow
-  // either `.tenantId,` (Drizzle column ref) or string literal `tenantId`
-  // (manual query construction is rare but happens in marketing).
-  return /tenantId/.test(snippet);
+/**
+ * Grab the statement chain starting at the callsite — up to the next top-level
+ * `;` (capped at 1200 chars) — so a chained `.where(...)` / `.values({...})` is
+ * captured even when it spans several lines.
+ */
+function statementChain(src, start) {
+  let end = src.indexOf(";", start);
+  if (end === -1 || end - start > 1200) end = Math.min(src.length, start + 1200);
+  return src.slice(start, end);
+}
+
+/**
+ * Accept a `.where(scope)` / `.where(and(...conditions))` whose variable is
+ * associated with a `tenantId` predicate within a local window before the
+ * callsite (the common "build the conditions array first" pattern, and the
+ * `const where = and(eq(t.tenantId, …), …)` pattern).
+ *
+ * Only BAREWORD variables count — identifiers that are NOT a property access
+ * (`t.id`), NOT a function call (`eq(...)`), NOT a query helper, and NOT a
+ * tenant-table name. This is critical: `.where(eq(contacts.id, x))` must NOT
+ * be accepted just because an earlier scoped SELECT mentioned `contacts` and
+ * `tenantId` within the window.
+ */
+function whereVarCarriesTenant(src, start, chain, tenantTables) {
+  const argMatch =
+    chain.match(/\.where\(([\s\S]*?)\)\s*(?:\.\w|;|$)/) ||
+    chain.match(/\.values\(([\s\S]*?)\)\s*(?:\.\w|;|$)/);
+  if (!argMatch) return false;
+  const idents = new Set();
+  // Lookbehind `(?<![.\w$])` (zero-width) excludes property accesses (`t.id`)
+  // without consuming the anchor char — important so a spread `...conditions`
+  // is still matched. group1 = optional spread; group2 = identifier;
+  // group3 = following `.`/`(` (→ a property access or call, not a variable).
+  const idRe = /(?<![.\w$])(\.\.\.)?([A-Za-z_$][\w$]*)\s*([.(]?)/g;
+  let mm;
+  while ((mm = idRe.exec(argMatch[1])) !== null) {
+    const id = mm[2];
+    const next = mm[3];
+    if (next === "." || next === "(") continue; // property access or fn call
+    if (WHERE_HELPERS.has(id)) continue;
+    if (tenantTables.has(id)) continue; // a table reference, not a variable
+    idents.add(id);
+  }
+  if (idents.size === 0) return false;
+  const win = src.slice(Math.max(0, start - 2600), start);
+  for (const id of idents) {
+    const esc = id.replace(/[$]/g, "\\$");
+    // The variable is associated with an isolation predicate (tenant or user).
+    if (new RegExp("\\b" + esc + "\\b[\\s\\S]{0,400}(?:tenantId|webUserId)").test(win)) return true;
+  }
+  return false;
+}
+
+/** An intentional cross-tenant query is annotated `// tenant-scan-ignore: …`. */
+function hasIgnoreDirective(src, start) {
+  const lineStart = src.lastIndexOf("\n", start) + 1;
+  const lineEnd = src.indexOf("\n", start);
+  const region = src.slice(Math.max(0, lineStart - 260), lineEnd === -1 ? src.length : lineEnd);
+  return /tenant-scan-ignore/.test(region);
+}
+
+/**
+ * Authorize-then-act: this codebase frequently establishes the tenant boundary
+ * with an explicit guard (`assertTenantOwner` / `assertTenantMember` /
+ * `assertMaster` / `assertCanWriteScope`, …) at the top of a route handler, then
+ * loads/mutates the row by primary id (having verified `row.tenantId === input
+ * .tenantId`). Accept a query when such an `assert*(…)` guard appears earlier in
+ * the SAME `.mutation()/.query()` handler. The mutation-by-id is then operating
+ * inside an authorized tenant scope. A query with NO scope, NO user predicate,
+ * and NO preceding guard is still flagged — that's the careless case we catch.
+ */
+function enclosingHasAuthGuard(src, start) {
+  const handlerStart = Math.max(
+    src.lastIndexOf(".mutation(", start),
+    src.lastIndexOf(".query(", start),
+    0,
+  );
+  // `assert*` is the dominant guard family; `ownerOnlyForTenant` is the one
+  // tenant-ownership guard that doesn't follow the assert* naming.
+  return /\b(?:assert[A-Z]\w*|ownerOnlyForTenant)\s*\(/.test(src.slice(handlerStart, start));
+}
+
+/**
+ * Scan one TS source string. Returns an array of findings:
+ * `{ line, op, table }` for each tenant-scoped query missing a tenantId
+ * predicate (and lacking a tenant-scan-ignore directive).
+ */
+export function scanSource(src, tenantTables) {
+  const findings = [];
+  let m;
+  CALLSITE_RE.lastIndex = 0;
+  while ((m = CALLSITE_RE.exec(src)) !== null) {
+    const op = m[1];
+    const table = m[2];
+    const start = m.index;
+    if (!tenantTables.has(table)) continue;
+    const chain = statementChain(src, start);
+    // Accepted isolation predicates: tenant scoping OR per-user scoping
+    // (web-user-owned rows like notifications / push subscriptions isolate by
+    // webUserId, which is at least as strong as tenantId).
+    if (/\b(tenantId|webUserId)\b/.test(chain)) continue;
+    if (whereVarCarriesTenant(src, start, chain, tenantTables)) continue;
+    if (enclosingHasAuthGuard(src, start)) continue;
+    if (hasIgnoreDirective(src, start)) continue;
+    findings.push({ line: lineNumberFor(src, start), op, table });
+  }
+  return findings;
+}
+
+function listRouterFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const st = statSync(full);
+    if (st.isDirectory()) out.push(...listRouterFiles(full));
+    else if (entry.endsWith(".ts") && !entry.endsWith(".test.ts")) out.push(full);
+  }
+  return out;
 }
 
 function main() {
+  const tenantTables = deriveTenantScopedTables(readFileSync(SCHEMA_FILE, "utf8"));
   const files = listRouterFiles(ROUTERS_DIR);
   let found = 0;
 
@@ -223,32 +252,34 @@ function main() {
     const base = file.split("/").pop();
     if (SKIP_FILES.has(base)) continue;
     const src = readFileSync(file, "utf8");
-    const relPath = file.replace(process.cwd() + "/", "");
-    for (const cs of findFromCallsites(src)) {
-      const t = cs.tableName;
-      if (!TENANT_SCOPED_TABLES.has(t)) continue; // skip global/user-scoped
-      if (isWhitelisted(cs.snippet)) continue;
-      const allowKey = `${relPath}:${cs.lineNumber}`;
-      if (ALLOWLIST.has(allowKey)) continue;
+    const rel = file.replace(process.cwd() + "/", "");
+    for (const f of scanSource(src, tenantTables)) {
       found++;
       console.error(
-        `❌ Possible tenant-isolation gap: ${allowKey} — ` +
-        `query .from(${t}) chain does not mention "tenantId" in the next 800 chars.`,
+        `❌ ${rel}:${f.line} — .${f.op}(${f.table}) on a tenant-scoped table ` +
+        `with no "tenantId" predicate in its query chain.`,
       );
     }
   }
 
   if (found > 0) {
     console.error("");
-    console.error(`Found ${found} potential gap(s).`);
+    console.error(`Found ${found} potential tenant-isolation gap(s).`);
     console.error(
-      "If a hit is intentional (e.g. cross-tenant system_admin operation), add the router file " +
-      "to SKIP_FILES in scripts/check-tenant-isolation.mjs with a comment explaining why.",
+      "Fix by adding a tenantId predicate to the query, or — if the query is an " +
+      "intentional cross-tenant (system_admin) operation — annotate it with " +
+      "`// tenant-scan-ignore: <reason>` on the line above.",
     );
     process.exit(1);
   }
 
-  console.log(`✅ Scanned ${files.length} router file(s); no missing tenantId predicates.`);
+  console.log(
+    `✅ Scanned ${files.length} router file(s) against ${tenantTables.size} ` +
+    `tenant-scoped table(s); no missing tenantId predicates.`,
+  );
 }
 
-main();
+// Run as CLI only — importing the module (unit tests) must not invoke main().
+const invokedAsCli =
+  process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedAsCli) main();

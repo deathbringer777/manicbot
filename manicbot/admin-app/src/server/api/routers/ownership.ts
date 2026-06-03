@@ -266,6 +266,7 @@ export const ownershipRouter = createTRPCRouter({
       const [toUser] = await ctx.db.select().from(webUsers).where(eq(webUsers.id, row.toUserId)).limit(1);
       if (!fromUser || !toUser) {
         // Mark cancelled so the partial unique index releases.
+        // tenant-scan-ignore: ownership-transfer token validated above; row pinned by its unguessable token id.
         await ctx.db.update(ownershipTransferTokens)
           .set({ cancelledAt: nowSec })
           .where(eq(ownershipTransferTokens.id, row.id));
@@ -285,6 +286,7 @@ export const ownershipRouter = createTRPCRouter({
         billingStatus: tenantRow?.billingStatus ?? null,
       });
       if (!recheck.ok) {
+        // tenant-scan-ignore: ownership-transfer token validated above; row pinned by its unguessable token id.
         await ctx.db.update(ownershipTransferTokens)
           .set({ cancelledAt: nowSec })
           .where(eq(ownershipTransferTokens.id, row.id));
@@ -318,6 +320,7 @@ export const ownershipRouter = createTRPCRouter({
         }).onConflictDoNothing();
       }
 
+      // tenant-scan-ignore: ownership-transfer token validated above; row pinned by its unguessable token id.
       await ctx.db.update(ownershipTransferTokens)
         .set({ consumedAt: nowSec })
         .where(eq(ownershipTransferTokens.id, row.id));

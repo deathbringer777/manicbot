@@ -168,7 +168,10 @@ export const marketingTenantRouter = createTRPCRouter({
       if (input.consentSms !== undefined) patch.consentSms = input.consentSms ? 1 : 0;
       if (input.unsubscribed !== undefined) patch.unsubscribed = input.unsubscribed ? 1 : 0;
       if (!Object.keys(patch).length) return { ok: true };
-      await ctx.db.update(marketingContacts).set(patch).where(eq(marketingContacts.id, input.id));
+      await ctx.db
+        .update(marketingContacts)
+        .set(patch)
+        .where(and(eq(marketingContacts.id, input.id), eq(marketingContacts.tenantId, input.tenantId)));
 
       // GDPR (MKT-01/MKT-06): the boolean is the send gate; this log is the
       // demonstrable audit trail of who/when granted or revoked consent. Record
@@ -820,7 +823,10 @@ export const marketingTenantRouter = createTRPCRouter({
       if (input.triggerType !== undefined) patch.triggerType = sanitizeText(input.triggerType, 64);
       if (input.triggerConfigJson !== undefined) patch.triggerConfigJson = input.triggerConfigJson;
       if (input.stepsJson !== undefined) patch.stepsJson = input.stepsJson;
-      await ctx.db.update(marketingAutomations).set(patch).where(eq(marketingAutomations.id, input.id));
+      await ctx.db
+        .update(marketingAutomations)
+        .set(patch)
+        .where(and(eq(marketingAutomations.id, input.id), eq(marketingAutomations.tenantId, input.tenantId)));
       return { ok: true };
     }),
 
@@ -844,7 +850,7 @@ export const marketingTenantRouter = createTRPCRouter({
       }
       await ctx.db.update(marketingAutomations)
         .set({ enabled: input.enabled ? 1 : 0, updatedAt: now() })
-        .where(eq(marketingAutomations.id, input.id));
+        .where(and(eq(marketingAutomations.id, input.id), eq(marketingAutomations.tenantId, input.tenantId)));
       return { ok: true };
     }),
 

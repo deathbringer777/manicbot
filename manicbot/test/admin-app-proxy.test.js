@@ -22,6 +22,9 @@ describe('isAdminAppPath', () => {
     // admin-app, NOT the landing SPA. Without this entry, /salons/warszawa
     // would proxy to the landing site and return a soft-404 (HTTP 200 with
     // the marketing HTML).
+    // T08 note: bare `/salons` is still classified as an admin-app path here,
+    // but the Worker 301-redirects it to /search BEFORE the proxy runs (it
+    // has no `salons/page.tsx` index route). See test/salons-redirect.test.js.
     ['/salons'],
     ['/salons/warszawa'],
     ['/salons/gdansk'],

@@ -8,6 +8,8 @@ import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
 import { audit } from '../utils/audit.js';
 import { buildSearchVariants, hasCyrillic } from '../lib/searchNormalize.js';
+import { splitTelegramText } from '../utils/telegramChunk.js';
+import { registerAdminBotWebhook } from '../adminbot/ctx.js';
 
 /**
  * Roles that may be created or upserted via POST /admin/web-user.
@@ -1266,6 +1268,18 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: true, count: bots.length, bots });
   }
 
+  // GET /admin/register-admin-bot-webhook — register the platform admin/ops bot's
+  // Telegram webhook + slash commands. Auth: Bearer ADMIN_KEY. Reuses NOTIFY_BOT_TOKEN
+  // (or ADMIN_BOT_TOKEN) + ADMIN_WEBHOOK_SECRET. Refuses if the secret is too short
+  // or if the botId belongs to a registered client bot (hijack guard). Re-run this
+  // after rotating ADMIN_WEBHOOK_SECRET or the admin bot token.
+  if (url.pathname === '/admin/register-admin-bot-webhook') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    const baseUrl = (env.APP_BASE_URL || url.origin).replace(/\/$/, '');
+    const result = await registerAdminBotWebhook(env, baseUrl);
+    return Response.json(result, { status: result.ok ? 200 : 400 });
+  }
+
   // POST /admin/web-user?key=ADMIN_KEY — create or update a web (email/password) user for the admin-app
   // Body: { email, password, tenantId?, role? }
   if (request.method === 'POST' && url.pathname === '/admin/web-user') {
@@ -1481,22 +1495,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
     // Split on line boundaries first; fall back to code-point-safe chunking.
     // Never cuts inside a surrogate pair (Array.from respects code points).
-    const MAX = 3500; // safety margin under Telegram's 4096-char limit
-    const chunks = [];
-    let buf = '';
-    const pushBuf = () => { if (buf) { chunks.push(buf); buf = ''; } };
-    for (const line of text.split('\n')) {
-      const candidate = buf ? buf + '\n' + line : line;
-      if (candidate.length <= MAX) { buf = candidate; continue; }
-      pushBuf();
-      if (line.length <= MAX) { buf = line; continue; }
-      // Line itself exceeds MAX — split by code points, not code units.
-      for (const ch of Array.from(line)) {
-        if ((buf + ch).length > MAX) pushBuf();
-        buf += ch;
-      }
-    }
-    pushBuf();
+    const chunks = splitTelegramText(text, 3500); // safety margin under Telegram's 4096-char limit
 
     const results = [];
     for (const chunk of chunks) {

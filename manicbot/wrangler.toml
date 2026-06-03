@@ -56,6 +56,14 @@ MARKETING_AUTOPILOT_ENABLED = "0"
 # ⚠️  ADMIN_CHAT_ID перенесён в секрет:
 #   wrangler secret put ADMIN_CHAT_ID
 # (значение: Telegram chat_id создателя платформы — даёт полный root-доступ)
+#
+# ─── Интерактивный админ/ops-бот (мониторинг платформы; только system_admin) ─
+# Превращает notify-бота в двусторонний AI-бот мониторинга. Использует тот же
+# вебхук-пайплайн (/webhook/{botId}); отвечает ТОЛЬКО владельцу (ADMIN_CHAT_ID).
+#   wrangler secret put ADMIN_WEBHOOK_SECRET   # ОБЯЗАТЕЛЬНО (≥16 символов) — без него бот выключен
+#   wrangler secret put ADMIN_BOT_TOKEN        # опционально; иначе берётся NOTIFY_BOT_TOKEN (НИКОГДА не BOT_TOKEN)
+#   wrangler secret put ADMIN_BOT_ALLOWED_IDS  # опционально; доп. авторизованные Telegram id через пробел/запятую
+# После установки секретов один раз вызвать: GET /admin/register-admin-bot-webhook (Bearer ADMIN_KEY)
 
 # ─── Секреты (задаются через wrangler secret put, НЕ хранятся в этом файле) ─
 # Следующие переменные ОБЯЗАТЕЛЬНО должны быть установлены как секреты:

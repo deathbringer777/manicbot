@@ -308,7 +308,77 @@ export function parseAIActions(aiReply) {
   return { text: text.trim().replace(/\n{3,}/g, '\n\n'), actions };
 }
 
+// #S01-3 — FAIL-CLOSED role→tag gate (single source of truth).
+//
+// `pageActions` in src/handlers/message.js is the dispatch allowlist; the
+// per-role switch statements below are the role gate. Because they live in
+// separate files, a privileged tag added to `pageActions` without a matching
+// guard would silently become client-reachable. This map is the ONE place
+// that declares which role may execute which tag. The dispatcher consults it
+// via `canRoleRunTag` and DENIES by default: a (role, tag) pair must be listed
+// here to run. Keep this map in lockstep with the switch arms below.
+const ROLE_CLIENT = 'client';
+const ROLE_MASTER = 'master';
+const ROLE_OWNER = 'tenant_owner';
+const ROLE_SUPPORT = 'support';
+const ROLE_SYSADMIN = 'system_admin';
+
+// Tags every authenticated role (including client) may trigger from free text.
+const CLIENT_TAGS = ['MY_APTS', 'PRICES', 'CATALOG', 'CONTACTS', 'MAIN', 'BOOK', 'CANCEL_ALL', 'REVIEWS', 'ABOUT'];
+// Admin panel/listing tags shared by tenant_owner and system_admin.
+const ADMIN_TAGS = ['ADM_PANEL', 'ADM_TODAY', 'ADM_TOMORROW', 'ADM_ALL_APTS', 'ADM_MASTERS', 'ADM_CLIENTS', 'ADM_SVC_LIST', 'ADM_CANCEL_ALL', 'ADM_CONFIRM_ALL'];
+// Platform-read tags shared by support and system_admin.
+const PLATFORM_READ_TAGS = ['SYSADM_PANEL', 'TENANT_LIST', 'SUPPORT_LIST'];
+
+/**
+ * AI_TAG_ROLES — explicit tag → allowed-roles mapping. Default-deny: any tag
+ * absent here is executable by NO role. Exported so test/ai-role-gate.test.js
+ * can assert the gate without mocking the dispatcher.
+ * @type {Record<string, Set<string>>}
+ */
+export const AI_TAG_ROLES = (() => {
+  const m = {};
+  const grant = (tag, ...roles) => { (m[tag] ||= new Set()); for (const r of roles) m[tag].add(r); };
+  // Client surface — available to everyone authenticated.
+  for (const tag of CLIENT_TAGS) grant(tag, ROLE_CLIENT, ROLE_MASTER, ROLE_OWNER, ROLE_SUPPORT, ROLE_SYSADMIN);
+  // BILLING: owner/master/system_admin/support.
+  grant('BILLING', ROLE_OWNER, ROLE_MASTER, ROLE_SYSADMIN, ROLE_SUPPORT);
+  // BOOK_FOR_CLIENT: owner/master/system_admin.
+  grant('BOOK_FOR_CLIENT', ROLE_OWNER, ROLE_MASTER, ROLE_SYSADMIN);
+  // Admin tags: tenant_owner + system_admin.
+  for (const tag of ADMIN_TAGS) grant(tag, ROLE_OWNER, ROLE_SYSADMIN);
+  // Master-only tags.
+  for (const tag of ['MST_PANEL', 'MST_TODAY', 'MST_TOMORROW', 'MST_CALENDAR']) grant(tag, ROLE_MASTER);
+  grant('ADM_CONFIRM_ALL', ROLE_MASTER); // master may confirm-all too
+  // Platform-read tags: support + system_admin.
+  for (const tag of PLATFORM_READ_TAGS) grant(tag, ROLE_SUPPORT, ROLE_SYSADMIN);
+  // System-admin-only platform mutations.
+  for (const tag of ['CREATE_TENANT', 'BOT_NEW']) grant(tag, ROLE_SYSADMIN);
+  return m;
+})();
+
+/**
+ * Fail-closed predicate: may `role` execute `tag`? Unknown tags and unknown
+ * roles both return false (default-deny). Pure — no I/O — so it can be unit
+ * tested directly.
+ * @param {string} role
+ * @param {string} tag
+ * @returns {boolean}
+ */
+export function canRoleRunTag(role, tag) {
+  if (!role || !tag) return false;
+  const allowed = AI_TAG_ROLES[tag];
+  return allowed ? allowed.has(role) : false;
+}
+
 export async function executeAIAction(ctx, cid, role, tag, param, from) {
+  // #S01-3 — fail-closed: deny any (role, tag) not explicitly allowlisted above.
+  // This runs BEFORE every dispatch branch, so a future tag wired into
+  // `pageActions` without a corresponding AI_TAG_ROLES entry stays unreachable.
+  if (!canRoleRunTag(role, tag)) {
+    log.warn('ai.executeAIAction', { message: 'SECURITY: denied tag for role (fail-closed)', tag, role });
+    return false;
+  }
   const lg = await getLang(ctx, cid) || 'ru';
   const name = from?.first_name ? escHtml(from.first_name.slice(0, 64)) : '👋';
   switch (tag) {

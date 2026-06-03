@@ -96,11 +96,34 @@ describe('canRoleRunTag — fail-closed role→tag gate (#S01-3)', () => {
     }
   });
 
-  it('all client tags are runnable by every staff role (no regression for shared tags)', () => {
-    for (const role of ['master', 'tenant_owner', 'support', 'system_admin']) {
+  // Drift guard (#334 regression): the client surface (lines 385-406 of
+  // executeAIAction) sits ABOVE every role check, so before the gate EVERY
+  // role reaching the switch could run client tags. Any role getRole() can
+  // emit must therefore stay grantable for the client surface — otherwise the
+  // bot goes dead for that role. `tenant_manager` was the role this very test
+  // forgot, which let the regression ship green. Keep this list in lockstep
+  // with the role values returned by services/users.js getRole().
+  const SALON_FACING_ROLES = ['client', 'master', 'tenant_owner', 'tenant_manager', 'support', 'system_admin'];
+
+  it('all client tags are runnable by every salon-facing role getRole() emits (no regression for shared tags)', () => {
+    for (const role of SALON_FACING_ROLES) {
       for (const tag of CLIENT_TAGS) {
         expect(canRoleRunTag(role, tag), `${role} should still run client tag ${tag}`).toBe(true);
       }
+    }
+  });
+
+  it('tenant_manager (Phase-2 role) runs the client surface but not owner/admin tags (pre-#334 parity)', () => {
+    // tenant_manager is a real, assignable role (roles.js, schema Phase 2) and
+    // is returned by getRole(). Pre-#334 it ran the unconditional client tags
+    // and nothing else; #334 dropped it from AI_TAG_ROLES entirely → every AI
+    // action denied. We restore exactly the client floor — admin tags via AI
+    // free-text were never granted to managers and stay denied here.
+    for (const tag of CLIENT_TAGS) {
+      expect(canRoleRunTag('tenant_manager', tag), `tenant_manager should run client tag ${tag}`).toBe(true);
+    }
+    for (const tag of ['ADM_PANEL', 'ADM_CLIENTS', 'ADM_CANCEL_ALL', 'BILLING', 'SYSADM_PANEL', 'CREATE_TENANT']) {
+      expect(canRoleRunTag('tenant_manager', tag), `tenant_manager must NOT run ${tag}`).toBe(false);
     }
   });
 

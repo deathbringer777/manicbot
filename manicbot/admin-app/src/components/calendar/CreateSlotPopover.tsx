@@ -15,6 +15,7 @@
  * is duplicated here — this is purely the lightweight intercept layer.
  */
 
+import { useState } from "react";
 import { Clock, Plus, Lock, X } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { AnchoredPopover } from "~/components/calendar/AnchoredPopover";
@@ -29,10 +30,12 @@ interface Props {
   durationMin: number;
   masterName?: string | null;
   lang: Lang;
-  /** Create a client booking → opens the full ManualBookingModal. */
-  onCreate: () => void;
-  /** Hold the slot without a client → opens the reservation dialog. */
-  onReserve: () => void;
+  /** Create a client booking → opens the full ManualBookingModal. The typed
+   *  title is carried in as the booking note. */
+  onCreate: (title: string) => void;
+  /** Hold the slot without a client → opens the reservation dialog with the
+   *  typed title prefilled as the reason. */
+  onReserve: (title: string) => void;
   onClose: () => void;
 }
 
@@ -70,6 +73,7 @@ export function CreateSlotPopover({
     }
   })();
   const endTime = addMinutes(time, durationMin);
+  const [title, setTitle] = useState("");
 
   return (
     <AnchoredPopover
@@ -111,20 +115,39 @@ export function CreateSlotPopover({
           </button>
         </div>
 
+        {/* GCal-style: type a title right here. It rides into whichever
+            dialog opens (note for a booking, reason for a reservation). */}
+        <input
+          type="text"
+          autoFocus
+          value={title}
+          maxLength={200}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onCreate(title.trim());
+            }
+          }}
+          placeholder={t("appointments.quickTitle", lang)}
+          data-testid="create-slot-title"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400 dark:placeholder:text-white/30"
+        />
+
         <div className="grid grid-cols-1 gap-2">
           <button
             type="button"
-            onClick={onCreate}
+            onClick={() => onCreate(title.trim())}
             data-testid="create-slot-create"
-            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90"
+            style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           >
             <Plus className="h-4 w-4" />
             {t("appointments.manual.create", lang)}
           </button>
           <button
             type="button"
-            onClick={onReserve}
+            onClick={() => onReserve(title.trim())}
             data-testid="create-slot-reserve"
             className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/80 dark:hover:bg-white/[0.08]"
           >

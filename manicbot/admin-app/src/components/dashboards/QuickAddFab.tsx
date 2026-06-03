@@ -143,8 +143,8 @@ export function QuickAddFab({
           onClick={() => onAddClient?.()}
           data-testid="quick-add-fab"
           data-mode="client"
-          className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_40px_-8px_rgba(124,58,237,0.55)] transition hover:scale-105 active:scale-95 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm sm:font-semibold"
-          style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+          className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_40px_-8px_rgba(209,70,56,0.55)] transition hover:scale-105 active:scale-95 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm sm:font-semibold"
+          style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           aria-label={t("clients.action.add", lang)}
         >
           <UserPlus className="h-6 w-6 sm:hidden" />
@@ -194,8 +194,8 @@ export function QuickAddFab({
         onClick={() => setOpen((v) => !v)}
         data-testid="quick-add-fab"
         data-open={open ? "1" : "0"}
-        className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_40px_-8px_rgba(124,58,237,0.55)] transition hover:scale-105 active:scale-95 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm sm:font-semibold"
-        style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+        className="flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_12px_40px_-8px_rgba(209,70,56,0.55)] transition hover:scale-105 active:scale-95 sm:h-auto sm:w-auto sm:px-5 sm:py-3 sm:text-sm sm:font-semibold"
+        style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
         aria-label={t("salon.fab.title", lang)}
         aria-expanded={open}
       >

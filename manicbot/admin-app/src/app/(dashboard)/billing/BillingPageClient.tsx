@@ -13,10 +13,19 @@ import {
   X,
   Zap,
   Loader2,
+  Wallet,
+  Receipt,
+  AlertTriangle,
+  Percent,
+  FlaskConical,
+  ArrowDownToLine,
+  Scale,
 } from "lucide-react";
-import { formatPlnWhole, PLAN_PRICES_PLN } from "~/lib/money";
+import { formatPlnWhole, formatMinorPln, PLAN_PRICES_PLN } from "~/lib/money";
 import { useLang } from "~/components/LangContext";
 import { t, localeFor } from "~/lib/i18n";
+import { RevenueChart } from "~/components/dashboard/RevenueChart";
+import { StatCard, StatCardSkeleton } from "~/components/dashboard-ui/StatCard";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20",
@@ -63,6 +72,19 @@ export default function BillingPageClient() {
     refetchInterval: 30_000,
   });
   const exportQuery = api.export.revenue.useQuery({ format: "csv" }, { enabled: false });
+
+  // Real-money half: live Stripe (balance / payouts / charges / disputes) plus
+  // the D1 ledger summary (revenue series + reconciliation). A 60s cadence is
+  // plenty — these aren't second-to-second numbers and it stays well under
+  // Stripe's rate limit even with the dashboard left open.
+  const { data: fin, isLoading: finLoading } = api.billing.getStripeFinancials.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
+  const { data: ledger, isLoading: ledgerLoading } = api.billing.getLedgerSummary.useQuery(
+    { days: 90 },
+    { refetchInterval: 60_000 },
+  );
+  const sumMinor = (arr?: { amount: number }[]) => (arr ?? []).reduce((s, b) => s + (b.amount ?? 0), 0);
 
   const updatePlanMut = api.billing.updatePlan.useMutation({
     onSuccess: () => { utils.billing.getOverview.invalidate(); setModal(null); },
@@ -152,6 +174,139 @@ export default function BillingPageClient() {
             </div>
           </div>
         )}
+
+        {/* ── Real money · Stripe (live + ledger) ─────────────────────────── */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t("gmBilling.realMoney", lang)}</p>
+            {fin?.configured && fin.liveMode === false && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase text-amber-600 bg-amber-50 border border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20">
+                <FlaskConical className="w-2.5 h-2.5" />{t("gmBilling.testData", lang)}
+              </span>
+            )}
+          </div>
+
+          {fin && !fin.configured ? (
+            <div className="glass-card rounded-2xl py-6 text-center">
+              <p className="text-xs text-slate-500">{t("gmBilling.notConfigured", lang)}</p>
+            </div>
+          ) : (
+            <>
+              {/* Real-money KPIs */}
+              {finLoading || ledgerLoading ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard label={t("gmBilling.availableBalance", lang)} value={formatMinorPln(sumMinor(fin?.balance?.available), locale)} icon={Wallet} color="bg-emerald-500/15 text-emerald-500 dark:text-emerald-400" />
+                  <StatCard label={t("gmBilling.pendingBalance", lang)} value={formatMinorPln(sumMinor(fin?.balance?.pending), locale)} icon={Clock} color="bg-amber-500/15 text-amber-500 dark:text-amber-400" />
+                  <StatCard label={t("gmBilling.netRevenue", lang)} sub={t("gmBilling.windowSub", lang)} value={formatMinorPln(ledger?.totals.net ?? 0, locale)} icon={TrendingUp} color="bg-brand-500/15 text-brand-500 dark:text-brand-400" sparkline={(ledger?.series ?? []).map((s) => s.net)} />
+                  <StatCard label={t("gmBilling.stripeFees", lang)} sub={t("gmBilling.windowSub", lang)} value={formatMinorPln(ledger?.totals.fee ?? 0, locale)} icon={Percent} color="bg-slate-500/15 text-slate-500 dark:text-slate-400" />
+                </div>
+              )}
+              {fin?.errors?.includes("balance") && (
+                <p className="text-[11px] text-amber-500">{t("gmBilling.stripeUnavailable", lang)}</p>
+              )}
+
+              {/* Revenue chart (from the D1 ledger) */}
+              <div className="glass-card rounded-2xl p-4">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">{t("gmBilling.revenueChart", lang)}</p>
+                <RevenueChart data={ledger?.series} />
+              </div>
+
+              {/* Reconciliation: estimated MRR vs actual net */}
+              {ledger && (
+                <div className="glass-card rounded-2xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Scale className="w-4 h-4 text-slate-400" />
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t("gmBilling.reconciliation", lang)}</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-[10px] text-slate-500">{t("gmBilling.estMrr", lang)}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{formatMinorPln(ledger.reconciliation.estimatedMrrMinor, locale)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500">{t("gmBilling.actualNet30", lang)}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{formatMinorPln(ledger.reconciliation.actualNet30dMinor, locale)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500">{t("gmBilling.reconDelta", lang)}</p>
+                      <p className={`text-sm font-bold ${ledger.reconciliation.deltaMinor >= 0 ? "text-emerald-500" : "text-red-500"}`}>{formatMinorPln(ledger.reconciliation.deltaMinor, locale)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Bank payouts */}
+              <div className="glass-card rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <ArrowDownToLine className="w-4 h-4 text-slate-400" />
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t("gmBilling.payouts", lang)}</p>
+                </div>
+                {fin?.errors?.includes("payouts") ? (
+                  <p className="text-[11px] text-amber-500">{t("gmBilling.stripeUnavailable", lang)}</p>
+                ) : (fin?.payouts.rows.length ?? 0) === 0 ? (
+                  <p className="text-[11px] text-slate-500">{t("common.noData", lang)}</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {fin?.payouts.rows.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-slate-500">{fmtDate(p.arrivalDate)}</span>
+                        <span className="text-slate-400 text-[10px] uppercase">{p.status}</span>
+                        <span className="font-semibold text-slate-900 dark:text-white">{formatMinorPln(p.amount, locale)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Recent real payments */}
+              <div className="glass-card rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Receipt className="w-4 h-4 text-slate-400" />
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t("gmBilling.recentCharges", lang)}</p>
+                </div>
+                {fin?.errors?.includes("charges") ? (
+                  <p className="text-[11px] text-amber-500">{t("gmBilling.stripeUnavailable", lang)}</p>
+                ) : (fin?.charges.rows.length ?? 0) === 0 ? (
+                  <p className="text-[11px] text-slate-500">{t("common.noData", lang)}</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {fin?.charges.rows.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-slate-500 shrink-0">{fmtDate(c.created)}</span>
+                        <span className="text-slate-400 truncate flex-1 text-[10px]">{c.email ?? c.description ?? ""}</span>
+                        {c.refunded && <span className="text-[9px] uppercase text-red-400 shrink-0">{t("gmBilling.refunded", lang)}</span>}
+                        <span className="font-semibold text-slate-900 dark:text-white shrink-0">{formatMinorPln(c.amount, locale)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Disputes — only surfaced when there are open ones */}
+              {(fin?.disputes.rows.length ?? 0) > 0 && (
+                <div className="glass-card rounded-2xl p-4 border border-red-500/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4 text-red-400" />
+                    <p className="text-xs font-semibold text-red-500 dark:text-red-400">{t("gmBilling.disputes", lang)}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    {fin?.disputes.rows.map((d) => (
+                      <div key={d.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-slate-500 text-[10px] uppercase">{d.reason}</span>
+                        <span className="text-slate-400 text-[10px]">{d.dueBy ? `${t("gmBilling.disputeDue", lang)} ${fmtDate(d.dueBy)}` : d.status}</span>
+                        <span className="font-semibold text-red-500">{formatMinorPln(d.amount, locale)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Tenants list */}
         <div className="space-y-2.5">

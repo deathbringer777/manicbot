@@ -11,6 +11,7 @@ import { phaseInstagramAutopilot } from './marketing/autopilot.js';
 import { maybeRunD1Backup } from './services/d1Backup.js';
 import { pruneExpiredDedupRows } from './utils/dedup.js';
 import { pruneExpiredUploadNonces } from './services/upload.js';
+import { syncStripeLedger } from './billing/ledgerSync.js';
 import { envCtx } from './http/envCtx.js';
 import { ensureDemoBotsProvisioned } from './http/demoBots.js';
 import { ensurePreviewTenantProvisioned } from './tenant/previewTenant.js';
@@ -694,6 +695,25 @@ export default {
           },
           (e) => {
             log.error('worker.uploadNonceCleanup', e instanceof Error ? e : new Error(String(e?.message || e)));
+          },
+        ),
+      );
+
+      // Stripe ledger sync (migration 0107). Incrementally mirrors Stripe
+      // balance_transactions into D1 `stripe_ledger` so God Mode Billing can
+      // chart multi-month real revenue / net / fees from D1. Self-skips when
+      // STRIPE_SECRET_KEY is absent; fire-and-forget like the platform jobs
+      // above so a Stripe blip never blocks the tenant cron.
+      _scheduledCtx.waitUntil(
+        syncStripeLedger(env).then(
+          (r) => {
+            if (r?.synced > 0) {
+              log.info('worker.stripeLedgerSync', { synced: r.synced, pages: r.pages, cursor: r.cursor });
+            }
+          },
+          (e) => {
+            log.error('worker.stripeLedgerSync', e instanceof Error ? e : new Error(String(e?.message || e)));
+            void captureError(env, e, { source: 'worker.scheduled', phase: 'stripe_ledger_sync' });
           },
         ),
       );

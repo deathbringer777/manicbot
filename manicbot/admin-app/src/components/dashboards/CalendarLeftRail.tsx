@@ -33,29 +33,25 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, Eye, EyeOff, Users, Filter, Scissors } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { FilterDropdown } from "~/components/ui/FilterDropdown";
+import { masterHueSet } from "~/lib/theme/palette";
 
 /** Brand-derived palette — must match SalonDayView/SalonWeekView so the
- *  same master gets the same color in the rail and the grid. */
-const MASTER_PALETTE = [
-  { dot: "#7c3aed", bg: "rgba(124,58,237,0.15)" },
-  { dot: "#0b9b6b", bg: "rgba(11,155,107,0.15)" },
-  { dot: "#0891b2", bg: "rgba(6,182,212,0.15)" },
-  { dot: "#ec4899", bg: "rgba(244,114,182,0.15)" },
-  { dot: "#d97706", bg: "rgba(245,158,11,0.15)" },
-  { dot: "#2563eb", bg: "rgba(59,130,246,0.15)" },
-  { dot: "#9333ea", bg: "rgba(168,85,247,0.15)" },
-  { dot: "#0d9488", bg: "rgba(20,184,166,0.15)" },
-] as const;
+ *  same master gets the same color in the rail and the grid. Sourced from
+ *  the shared theme palette (red/turquoise first). */
+const MASTER_PALETTE = Array.from({ length: 8 }, (_, i) => {
+  const s = masterHueSet(i);
+  return { dot: s.dot, bg: s.bg };
+});
 
 /** Status palette — drives both the rail toggle dot and the agenda row pill.
  *  Keys match the status filter Set values so callers can look up a tone
  *  by status string. */
 export const STATUS_TONE: Record<string, { dot: string; bg: string; text: string }> = {
-  pending:   { dot: "#d97706", bg: "rgba(245,158,11,0.15)",  text: "#b45309" },
-  confirmed: { dot: "#059669", bg: "rgba(16,185,129,0.15)",  text: "#047857" },
-  cancelled: { dot: "#dc2626", bg: "rgba(239,68,68,0.15)",   text: "#b91c1c" },
-  no_show:   { dot: "#ea580c", bg: "rgba(249,115,22,0.15)",  text: "#c2410c" },
-  done:      { dot: "#0b9b6b", bg: "rgba(11,155,107,0.15)",  text: "#0b9b6b" },
+  pending:   { dot: "var(--status-pending-dot)",   bg: "var(--status-pending-bg)",   text: "var(--status-pending-text)" },
+  confirmed: { dot: "var(--status-confirmed-dot)", bg: "var(--status-confirmed-bg)", text: "var(--status-confirmed-text)" },
+  cancelled: { dot: "var(--status-cancelled-dot)", bg: "var(--status-cancelled-bg)", text: "var(--status-cancelled-text)" },
+  no_show:   { dot: "var(--status-noshow-dot)",    bg: "var(--status-noshow-bg)",    text: "var(--status-noshow-text)" },
+  done:      { dot: "var(--status-done-dot)",      bg: "var(--status-done-bg)",      text: "var(--status-done-text)" },
 };
 
 export type StatusKey = "pending" | "confirmed" | "cancelled" | "no_show" | "done";

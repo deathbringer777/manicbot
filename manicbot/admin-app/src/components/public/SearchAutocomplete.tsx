@@ -212,7 +212,7 @@ export function SearchAutocomplete({ initialValue = "", onSearch, placeholder, a
               <p className="text-sm text-slate-500">{t("search.nothingFound", lang)} «{debouncedQ}»</p>
               <Link
                 href={`/search?q=${encodeURIComponent(debouncedQ)}`}
-                className="mt-2 inline-block text-xs text-violet-600 hover:text-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
+                className="mt-2 inline-block text-xs text-violet-600 hover:text-brand-500 dark:text-violet-400 dark:hover:text-brand-300"
                 onClick={() => setOpen(false)}
               >
                 {t("search.showAll", lang)} &rarr;

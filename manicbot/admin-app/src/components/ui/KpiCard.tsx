@@ -36,7 +36,7 @@ export function KpiCard({
     ? "text-accent-600 dark:text-accent-400 bg-accent-500/10 dark:bg-accent-500/15"
     : trendDown
     ? "text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-500/15"
-    : "text-[#6b7280] dark:text-slate-400 bg-[#f3f4f6] dark:bg-white/[0.06]";
+    : "text-muted-foreground dark:text-slate-400 bg-surface-muted dark:bg-white/[0.06]";
   const TrendIcon = trendUp ? TrendingUp : trendDown ? TrendingDown : null;
 
   const inner = (
@@ -49,14 +49,14 @@ export function KpiCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b7280] dark:text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground dark:text-slate-400">
               {label}
             </p>
             {href && (
-              <ArrowUpRight className="h-3.5 w-3.5 text-[#d1d5db] dark:text-slate-600 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 shrink-0" />
+              <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground dark:text-slate-600 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 shrink-0" />
             )}
           </div>
-          <p className="mt-0.5 text-[26px] font-bold leading-none text-[#1a1a2e] dark:text-white tabular-nums">
+          <p className="mt-0.5 text-[26px] font-bold leading-none text-foreground dark:text-white tabular-nums">
             {typeof value === "number" ? value.toLocaleString() : value}
           </p>
           <div className="mt-1.5 flex items-center gap-2 flex-wrap">
@@ -72,7 +72,7 @@ export function KpiCard({
               </span>
             )}
             {subtext && (
-              <p className="text-[12px] text-[#6b7280] dark:text-slate-500 truncate">{subtext}</p>
+              <p className="text-[12px] text-muted-foreground dark:text-slate-500 truncate">{subtext}</p>
             )}
           </div>
         </div>
@@ -87,7 +87,7 @@ export function KpiCard({
   );
 
   const base =
-    "group relative rounded-xl border border-[#e5e7eb] dark:border-white/[0.06] bg-white dark:bg-slate-800 p-5 transition-all duration-200";
+    "group relative rounded-xl border border-border dark:border-white/[0.06] bg-white dark:bg-slate-800 p-5 transition-all duration-200";
 
   if (href) {
     return (
@@ -117,15 +117,14 @@ function Sparkline({ data, trendUp, trendDown }: { data: number[]; trendUp: bool
 
   const strokeId = `kpi-sparkline-stroke-${trendDown ? "down" : "up"}`;
   const fillId = `kpi-sparkline-fill-${trendDown ? "down" : "up"}`;
-  const stroke = trendDown ? "#ef4444" : trendUp ? "#0b9b6b" : "#7c3aed";
-  const fillTop = trendDown ? "rgba(239,68,68,0.18)" : trendUp ? "rgba(11,155,107,0.20)" : "rgba(124,58,237,0.18)";
+  const stroke = trendDown ? "var(--trend-down)" : trendUp ? "var(--trend-up)" : "var(--trend-flat)";
 
   return (
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="overflow-visible">
       <defs>
         <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={fillTop} />
-          <stop offset="100%" stopColor={fillTop} stopOpacity="0" />
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
       </defs>
       <polyline
@@ -149,7 +148,7 @@ function Sparkline({ data, trendUp, trendDown }: { data: number[]; trendUp: bool
 
 export function KpiCardSkeleton() {
   return (
-    <div className="rounded-xl border border-[#e5e7eb] dark:border-white/[0.06] bg-white dark:bg-slate-800 p-5">
+    <div className="rounded-xl border border-border dark:border-white/[0.06] bg-white dark:bg-slate-800 p-5">
       <div className="flex items-start gap-4">
         <div className="h-11 w-11 shrink-0 rounded-xl skeleton-shimmer" />
         <div className="flex-1 space-y-2.5 pt-0.5">

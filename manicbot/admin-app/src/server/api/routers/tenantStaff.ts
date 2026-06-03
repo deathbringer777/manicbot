@@ -219,10 +219,17 @@ export const tenantStaffRouter = createTRPCRouter({
           eq(tenantMemberPermissions.tenantId, input.tenantId),
           eq(tenantMemberPermissions.webUserId, input.webUserId),
         ));
+      // #D-1 — scope the demotion by tenant. `ownerOnlyForTenant` only proves
+      // the caller owns `input.tenantId`; without this predicate a malicious
+      // owner could pass another tenant's `webUserId` and demote/lock-out that
+      // tenant's owner/manager. The permission DELETE above is already scoped.
       await ctx.db
         .update(webUsers)
         .set({ role: "client", tenantId: null, updatedAt: now })
-        .where(eq(webUsers.id, input.webUserId));
+        .where(and(
+          eq(webUsers.id, input.webUserId),
+          eq(webUsers.tenantId, input.tenantId),
+        ));
 
       await ctx.db.insert(auditLog).values({
         tenantId: input.tenantId,

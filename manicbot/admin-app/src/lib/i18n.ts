@@ -122,6 +122,12 @@ const translations = {
   "master.schedule.days":        { ru: "Рабочие дни", ua: "Робочі дні", en: "Working days", pl: "Dni robocze" },
   "master.schedule.error.range": { ru: "Конец работы должен быть позже начала.", ua: "Кінець роботи має бути пізніше початку.", en: "End time must be after start time.", pl: "Godzina zakończenia musi być późniejsza niż rozpoczęcia." },
   "master.schedule.saved":       { ru: "Расписание сохранено", ua: "Розклад збережено", en: "Schedule saved", pl: "Harmonogram zapisany" },
+  // ── Per-day break (перерыв) controls in the master schedule editor ──
+  "master.schedule.break":              { ru: "Перерыв", ua: "Перерва", en: "Break", pl: "Przerwa" },
+  "master.schedule.addBreak":           { ru: "Добавить перерыв", ua: "Додати перерву", en: "Add break", pl: "Dodaj przerwę" },
+  "master.schedule.removeBreak":        { ru: "Убрать перерыв", ua: "Прибрати перерву", en: "Remove break", pl: "Usuń przerwę" },
+  "master.schedule.error.breakRange":   { ru: "Конец перерыва должен быть позже начала.", ua: "Кінець перерви має бути пізніше початку.", en: "Break end must be after its start.", pl: "Koniec przerwy musi być późniejszy niż początek." },
+  "master.schedule.error.breakOutside": { ru: "Перерыв должен быть внутри рабочих часов.", ua: "Перерва має бути в межах робочих годин.", en: "Break must be within working hours.", pl: "Przerwa musi mieścić się w godzinach pracy." },
   // ── Master-schedule governance policy (salon-level) + approval workflow ──
   "salon.masterSchedulePolicy.title":           { ru: "Кто меняет часы мастеров", ua: "Хто змінює години майстрів", en: "Who edits master hours", pl: "Kto zmienia godziny mistrzów" },
   "salon.masterSchedulePolicy.hint":            { ru: "Кто может менять рабочие часы мастеров. Владелец салона меняет их всегда.", ua: "Хто може змінювати робочі години майстрів. Власник салону змінює їх завжди.", en: "Who may change masters' working hours. The salon owner can always edit them.", pl: "Kto może zmieniać godziny pracy mistrzów. Właściciel salonu zawsze może je edytować." },
@@ -410,6 +416,8 @@ const translations = {
   "onboarding.checklist.headline.setup":       { ru: "Настройте салон",              ua: "Налаштуйте салон",              en: "Set up your salon",              pl: "Skonfiguruj salon" },
   "onboarding.checklist.headline.ready":       { ru: "✅ Готов принимать записи",   ua: "✅ Готовий приймати записи",   en: "✅ Ready to take bookings",       pl: "✅ Gotowy na rezerwacje" },
   "onboarding.checklist.tier.optional":        { ru: "Расширьте профиль",            ua: "Розширте профіль",              en: "Polish your profile",            pl: "Rozszerz profil" },
+  "onboarding.checklist.dismiss":              { ru: "Скрыть",                       ua: "Сховати",                       en: "Hide",                           pl: "Ukryj" },
+  "onboarding.checklist.expand":               { ru: "Показать шаги",                ua: "Показати кроки",                en: "Show steps",                     pl: "Pokaż kroki" },
   // Essentials.
   "onboarding.checklist.connect_bot":          { ru: "Подключите Telegram-бота",     ua: "Підключіть Telegram-бота",      en: "Connect a Telegram bot",         pl: "Podłącz bota Telegram" },
   "onboarding.checklist.add_master":           { ru: "Добавьте мастера",             ua: "Додайте майстра",               en: "Add a master",                   pl: "Dodaj mistrza" },
@@ -650,6 +658,7 @@ const translations = {
   "block.create":                        { ru: "Создать", ua: "Створити", en: "Create", pl: "Utwórz" },
   "block.creating":                      { ru: "Создаю…", ua: "Створюю…", en: "Creating…", pl: "Tworzę…" },
   "block.slotConflict":                  { ru: "Этот слот уже занят — выберите другое время", ua: "Слот вже зайнятий — оберіть інший час", en: "Slot is already busy — pick a different time", pl: "Slot zajęty — wybierz inny czas" },
+  "block.allMasters":                    { ru: "Все мастера", ua: "Всі майстри", en: "All masters", pl: "Wszyscy mistrzowie" },
   "block.detail.editTitle":              { ru: "Редактировать блок", ua: "Редагувати блок", en: "Edit block", pl: "Edytuj blok" },
   "block.typeReservation":               { ru: "Резерв", ua: "Резерв", en: "Reserved", pl: "Rezerwacja" },
   "block.typeTimeOff":                   { ru: "Перерыв / выходной", ua: "Перерва / вихідний", en: "Time off", pl: "Przerwa / wolne" },
@@ -984,6 +993,7 @@ const translations = {
 
   // ── Manual booking modal ────────────────────────────────────────────────────
   "appointments.manual.title":           { ru: "Новая запись", ua: "Новий запис", en: "New booking", pl: "Nowa rezerwacja" },
+  "appointments.quickTitle":             { ru: "Добавить название", ua: "Додати назву", en: "Add title", pl: "Dodaj tytuł" },
   "appointments.manual.slotConflict":    { ru: "Это время уже занято у выбранного мастера.", ua: "Цей час уже зайнятий у обраного майстра.", en: "This time slot is already booked for the selected master.", pl: "Ten termin jest już zajęty u wybranego mistrza." },
   "salon.reschedule.success":            { ru: "Запись перенесена", ua: "Запис перенесений", en: "Appointment rescheduled", pl: "Wizyta przeniesiona" },
   "salon.reschedule.conflict":           { ru: "Слот занят — выберите другое время", ua: "Слот зайнятий — оберіть інший час", en: "Slot is busy — pick a different time", pl: "Termin zajęty — wybierz inny" },
@@ -1437,6 +1447,27 @@ const translations = {
   "gmBilling.activate":           { ru: "Активировать",           ua: "Активувати",             en: "Activate",               pl: "Aktywuj" },
   "gmBilling.activating":         { ru: "Активация...",           ua: "Активація...",           en: "Activating...",          pl: "Aktywacja..." },
   "gmBilling.perMonthShort":      { ru: "/мес",                   ua: "/міс",                   en: "/mo",                    pl: "/mies" },
+
+  // Real money · Stripe (live + ledger)
+  "gmBilling.realMoney":          { ru: "Реальные деньги · Stripe", ua: "Реальні гроші · Stripe", en: "Real money · Stripe",    pl: "Realne pieniądze · Stripe" },
+  "gmBilling.testData":           { ru: "Тестовые данные",        ua: "Тестові дані",           en: "Test data",              pl: "Dane testowe" },
+  "gmBilling.notConfigured":      { ru: "Stripe не настроен",     ua: "Stripe не налаштовано",  en: "Stripe not configured",  pl: "Stripe nie skonfigurowany" },
+  "gmBilling.availableBalance":   { ru: "Доступно",               ua: "Доступно",               en: "Available",              pl: "Dostępne" },
+  "gmBilling.pendingBalance":     { ru: "В обработке",            ua: "В обробці",              en: "Pending",                pl: "Oczekujące" },
+  "gmBilling.netRevenue":         { ru: "Нетто",                  ua: "Нетто",                  en: "Net",                    pl: "Netto" },
+  "gmBilling.stripeFees":         { ru: "Комиссии Stripe",        ua: "Комісії Stripe",         en: "Stripe fees",            pl: "Prowizje Stripe" },
+  "gmBilling.windowSub":          { ru: "за 90 дней",             ua: "за 90 днів",             en: "last 90 days",           pl: "ost. 90 dni" },
+  "gmBilling.stripeUnavailable":  { ru: "Данные Stripe недоступны", ua: "Дані Stripe недоступні", en: "Stripe data unavailable", pl: "Dane Stripe niedostępne" },
+  "gmBilling.revenueChart":       { ru: "Выручка по дням",        ua: "Виручка по днях",        en: "Daily revenue",          pl: "Przychód dzienny" },
+  "gmBilling.reconciliation":     { ru: "Сверка: оценка vs факт", ua: "Звірка: оцінка vs факт", en: "Reconciliation: estimate vs actual", pl: "Uzgodnienie: szacunek vs rzeczywistość" },
+  "gmBilling.estMrr":             { ru: "Оценка MRR",             ua: "Оцінка MRR",             en: "Estimated MRR",          pl: "Szac. MRR" },
+  "gmBilling.actualNet30":        { ru: "Факт нетто (30д)",       ua: "Факт нетто (30д)",       en: "Actual net (30d)",       pl: "Rzecz. netto (30d)" },
+  "gmBilling.reconDelta":         { ru: "Разница",                ua: "Різниця",                en: "Delta",                  pl: "Różnica" },
+  "gmBilling.payouts":            { ru: "Выплаты на банк",        ua: "Виплати на банк",        en: "Bank payouts",           pl: "Wypłaty na bank" },
+  "gmBilling.recentCharges":      { ru: "Последние платежи",      ua: "Останні платежі",        en: "Recent payments",        pl: "Ostatnie płatności" },
+  "gmBilling.refunded":           { ru: "возврат",                ua: "повернення",             en: "refunded",               pl: "zwrot" },
+  "gmBilling.disputes":           { ru: "Споры / чарджбеки",      ua: "Спори / чарджбеки",      en: "Disputes / chargebacks", pl: "Spory / chargebacki" },
+  "gmBilling.disputeDue":         { ru: "ответить до",            ua: "відповісти до",          en: "respond by",             pl: "odpowiedz do" },
 
   // ── God Mode: Tenants page ─────────────────────────────────────────────────
   "gmTenants.title":              { ru: "Салоны",                 ua: "Салони",                 en: "Salons",                 pl: "Salony" },

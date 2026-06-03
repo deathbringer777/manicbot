@@ -304,57 +304,47 @@ describe('DEMO_CHAT_SRC widget source', () => {
     expect(DEMO_CHAT_SRC).toMatch(/\bpl\s*:/);
   });
 
-  // #S14 — sanitizeBotHtml whitelist regex must match real escaped tags after
-  // the template literal → regex literal pipeline. We extract the function
-  // from the served source and execute it in an isolated VM to verify the
-  // regex actually matches `&lt;b&gt;`, `&lt;/b&gt;`, `&lt;a href="x"&gt;`.
-  it('sanitizeBotHtml restores whitelisted tags from escaped HTML', async () => {
-    const vm = await import('node:vm');
-    // Pull the sanitizeBotHtml + escapeHtml function bodies out of the IIFE
-    const escapeMatch = DEMO_CHAT_SRC.match(/function escapeHtml\([\s\S]*?\n\s\s\}/);
-    const sanitizeMatch = DEMO_CHAT_SRC.match(/function sanitizeBotHtml\([\s\S]*?\n\s\s\}/);
-    expect(escapeMatch).not.toBeNull();
-    expect(sanitizeMatch).not.toBeNull();
-    const script = new vm.Script(`
-      ${escapeMatch[0]}
-      ${sanitizeMatch[0]}
-      ({
-        bare: sanitizeBotHtml('<b>hi</b>', 'HTML'),
-        link: sanitizeBotHtml('<a href="https://x.io/?a=1&b=2">go</a>', 'HTML'),
-        script: sanitizeBotHtml('<script>alert(1)</script>', 'HTML'),
-        plain: sanitizeBotHtml('plain & <bad>', 'plain'),
-        jsHref: sanitizeBotHtml('<a href="javascript:alert(1)">click</a>', 'HTML'),
-        dataHref: sanitizeBotHtml('<a href="data:text/html,<script>alert(1)</script>">click</a>', 'HTML'),
-        vbHref: sanitizeBotHtml('<a href="vbscript:msgbox(1)">click</a>', 'HTML'),
-        whitespaceJs: sanitizeBotHtml('<a href="  javascript:alert(1)">click</a>', 'HTML'),
-        mailto: sanitizeBotHtml('<a href="mailto:hi@x.io">mail</a>', 'HTML'),
-        tel: sanitizeBotHtml('<a href="tel:+48123456789">call</a>', 'HTML'),
-      });
-    `);
-    const out = script.runInNewContext({});
-    expect(out.bare).toBe('<b>hi</b>');
-    // <a href="..."> should be unwrapped, not left as &lt;a&gt;
-    expect(out.link).toContain('<a href="');
-    expect(out.link).toContain('>go</a>');
-    // unknown tags must remain escaped (XSS guard)
-    expect(out.script).not.toContain('<script>');
-    expect(out.script).toContain('&lt;script&gt;');
-    // non-HTML mode should not unwrap anything
-    expect(out.plain).toContain('&lt;bad&gt;');
-    // #S-15 — unsafe href protocols MUST be neutralised to "#"
-    expect(out.jsHref).not.toContain('javascript:');
-    expect(out.jsHref).toContain('href="#"');
-    expect(out.dataHref).not.toContain('data:text/html');
-    expect(out.dataHref).toContain('href="#"');
-    expect(out.vbHref).not.toContain('vbscript:');
-    expect(out.vbHref).toContain('href="#"');
-    expect(out.whitespaceJs).not.toContain('javascript:');
-    expect(out.whitespaceJs).toContain('href="#"');
-    // Safe protocols must be preserved
-    expect(out.mailto).toContain('href="mailto:hi@x.io"');
-    expect(out.tel).toContain('href="tel:+48123456789"');
-    // External anchors should carry safe rel + target
-    expect(out.link).toContain('rel="noopener noreferrer nofollow"');
-    expect(out.link).toContain('target="_blank"');
+  // #S14 / #X-01 — sanitizeBotHtml is now a real export inlined into the served
+  // widget source via `${sanitizeBotHtml.toString()}`, so the browser code IS
+  // this exact function (no template-literal → regex-literal escaping pipeline
+  // to diverge). We assert (a) the served source contains it, and (b) its
+  // behaviour via the export. The #X-01 fix RECONSTRUCTS allowlisted tags
+  // WITHOUT attributes (so on* handlers never survive) and rebuilds unsafe
+  // anchors with NO href (instead of the old href="#").
+  it('inlines an XSS-safe sanitizeBotHtml into the served widget source', async () => {
+    const { sanitizeBotHtml } = await import('../src/embed/demoChat.js');
+    expect(DEMO_CHAT_SRC).toContain('function sanitizeBotHtml');
+
+    // whitelisted tags restored (attribute-free); unknown tags stay escaped
+    expect(sanitizeBotHtml('<b>hi</b>', 'HTML')).toBe('<b>hi</b>');
+    expect(sanitizeBotHtml('<script>alert(1)</script>', 'HTML')).not.toContain('<script>');
+    expect(sanitizeBotHtml('<script>alert(1)</script>', 'HTML')).toContain('&lt;script&gt;');
+    expect(sanitizeBotHtml('plain & <bad>', 'plain')).toContain('&lt;bad&gt;');
+
+    // event handlers never survive on a formatting tag
+    expect(sanitizeBotHtml('<b onmouseover="alert(1)">x</b>', 'HTML')).toBe('<b>x</b>');
+
+    // safe protocols preserved + rel/target forced
+    expect(sanitizeBotHtml('<a href="mailto:hi@x.io">mail</a>', 'HTML')).toContain('href="mailto:hi@x.io"');
+    expect(sanitizeBotHtml('<a href="tel:+48123456789">call</a>', 'HTML')).toContain('href="tel:+48123456789"');
+    const link = sanitizeBotHtml('<a href="https://x.io/?a=1&b=2">go</a>', 'HTML');
+    expect(link).toContain('<a href="');
+    expect(link).toContain('>go</a>');
+    expect(link).toContain('rel="noopener noreferrer nofollow"');
+    expect(link).toContain('target="_blank"');
+
+    // unsafe protocols (and any attribute) dropped — anchor rebuilt with no href
+    for (const bad of [
+      '<a href="javascript:alert(1)">click</a>',
+      '<a href="data:text/html,<script>alert(1)</script>">click</a>',
+      '<a href="vbscript:msgbox(1)">click</a>',
+      '<a href="  javascript:alert(1)">click</a>',
+    ]) {
+      const o = sanitizeBotHtml(bad, 'HTML');
+      expect(o).not.toContain('javascript:');
+      expect(o).not.toContain('data:text/html');
+      expect(o).not.toContain('vbscript:');
+      expect(o).toMatch(/^<a rel="noopener noreferrer nofollow" target="_blank">/);
+    }
   });
 });

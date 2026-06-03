@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   svc_id TEXT NOT NULL,
   date TEXT NOT NULL,
   time TEXT NOT NULL,
+  -- Per-appointment duration override in minutes; NULL = use the service's
+  -- nominal duration (legacy). Set by drag-the-bottom-edge resize (migration 0106).
+  duration INTEGER,
   -- epoch MILLISECONDS, UTC — Warsaw wall-clock converted via warsawToUTC in
   -- the Worker and warsawToUtcMs in admin-app lib/time. NOT seconds; reminders,
   -- GCal sync, stats and cleanup all assume ms. See BUG-05.
@@ -710,6 +713,28 @@ CREATE TABLE IF NOT EXISTS stripe_events (
   processed_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_stripe_events_type ON stripe_events(type, received_at);
+
+-- Platform Stripe account ledger (migration 0107). Mirror of Stripe
+-- balance_transactions, synced by the 15-min cron (syncStripeLedger). Powers
+-- the multi-month real revenue / net / fee widgets in the system_admin Billing
+-- dashboard. Money fields are minor units; created/available_on are unix sec.
+-- Platform-level: the platform's own Stripe account, no tenant scope.
+CREATE TABLE IF NOT EXISTS stripe_ledger (
+  id TEXT PRIMARY KEY,
+  type TEXT,
+  reporting_category TEXT,
+  amount INTEGER NOT NULL DEFAULT 0,
+  fee INTEGER NOT NULL DEFAULT 0,
+  net INTEGER NOT NULL DEFAULT 0,
+  currency TEXT,
+  source TEXT,
+  created INTEGER NOT NULL DEFAULT 0,
+  available_on INTEGER,
+  description TEXT,
+  synced_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_stripe_ledger_created ON stripe_ledger(created);
+CREATE INDEX IF NOT EXISTS idx_stripe_ledger_type_created ON stripe_ledger(type, created);
 
 CREATE TABLE IF NOT EXISTS tenant_onboarding (
   tenant_id TEXT PRIMARY KEY,

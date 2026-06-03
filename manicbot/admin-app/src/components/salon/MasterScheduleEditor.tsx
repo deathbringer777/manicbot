@@ -3,69 +3,70 @@
 /**
  * MasterScheduleEditor — per-master weekly booking schedule.
  *
- * Edits the single `{from,to}` daily window + the set of working weekdays the
- * Worker booking engine honours (see ~/lib/workHours and src/services/
- * appointments.js → getSlots). Shared by the owner-side master card
- * (MasterDetailModal) and the master's own dashboard, so both surfaces write
- * the identical on-disk shape.
+ * One row per weekday (Mon..Sun): a brand Switch ("working day" / "day off"),
+ * open/close time Selects at 30-minute granularity, and ONE optional break
+ * (перерыв) per day on a wrapping sub-line. Mirrors the salon WorkHoursEditor
+ * so both surfaces feel identical, but stores the richer per-master shape the
+ * Worker booking engine reads:
+ *   masters.work_hours = {"days":{"mon":{"open","close","break":{"start","end"}}, …, "sun":null}}
+ *   masters.work_days  = derived 0..6 array (kept in sync server-side)
  *
- * Granularity is intentionally a single daily window (not per-day open/close) —
- * that is exactly what getSlots() supports today. Working days are a 0..6
- * weekday set (0=Sun … 6=Sat, matching Date.getUTCDay); booking treats an empty
- * set as "every day", so we seed Mon–Sat defaults (Sunday off).
+ * Owns its draft state (uncontrolled) and emits the serialized `{days}` string
+ * via `onSave` on Save — the caller persists it through salon.updateMaster /
+ * master.updateWorkHours (input field `workSchedule`). Legacy `{from,to}` rows
+ * hydrate transparently (see ~/lib/workHours → hydrateMasterSchedule).
  *
- * `disabled` (with an optional `notice`) renders the editor read-only — used on
- * the master dashboard when the salon-level policy is `salon_only`. `saveLabel`
- * overrides the button text (e.g. "Send for approval" under `master_approval`).
+ * `disabled` (with optional `notice`) renders read-only — used on the master
+ * dashboard under the `salon_only` policy. `saveLabel` overrides the button
+ * text (e.g. "Send for approval" under `master_approval`).
  */
 import { useMemo, useState } from "react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Plus, X } from "lucide-react";
 import { t, type Lang, type TranslationKey } from "~/lib/i18n";
+import { Select } from "~/components/ui/Select";
+import { Switch } from "~/components/ui/Switch";
+import { optionsWith } from "~/lib/timeOptions";
 import {
-  parseMasterHours,
-  parseMasterWorkDays,
-  serializeMasterHours,
-  serializeMasterWorkDays,
-  isValidMasterHours,
+  WEEKDAY_KEYS,
+  hydrateMasterSchedule,
+  serializeMasterSchedule,
+  validateMasterSchedule,
+  type MasterScheduleState,
+  type MasterDaySchedule,
+  type WeekdayKey,
 } from "~/lib/workHours";
 
-// Display order Mon..Sun, each mapped to its getUTCDay() index (Sunday = 0).
-const DAY_ORDER = [
-  { dow: 1, labelKey: "weekday.short.mon" },
-  { dow: 2, labelKey: "weekday.short.tue" },
-  { dow: 3, labelKey: "weekday.short.wed" },
-  { dow: 4, labelKey: "weekday.short.thu" },
-  { dow: 5, labelKey: "weekday.short.fri" },
-  { dow: 6, labelKey: "weekday.short.sat" },
-  { dow: 0, labelKey: "weekday.short.sun" },
-] as const satisfies ReadonlyArray<{ dow: number; labelKey: TranslationKey }>;
+const DAY_LABEL_KEY: Record<WeekdayKey, TranslationKey> = {
+  mon: "salon.publicProfile.day.mon",
+  tue: "salon.publicProfile.day.tue",
+  wed: "salon.publicProfile.day.wed",
+  thu: "salon.publicProfile.day.thu",
+  fri: "salon.publicProfile.day.fri",
+  sat: "salon.publicProfile.day.sat",
+  sun: "salon.publicProfile.day.sun",
+};
 
-const DEFAULT_FROM = 9;
-const DEFAULT_TO = 18;
-const DEFAULT_DOWS = [1, 2, 3, 4, 5, 6]; // Mon..Sat, Sun off — mirrors DEFAULT_WORK_HOURS
-
-function clampHour(raw: string): number {
-  const n = parseInt(raw, 10);
-  if (Number.isNaN(n)) return 0;
-  return Math.max(0, Math.min(24, n));
-}
+/** Restored when a day is switched from "off" back to "working". */
+const DEFAULT_DAY = { open: "09:00", close: "18:00" } as const;
+/** Seeded when a break is first added to a day. */
+const DEFAULT_BREAK = { start: "13:00", end: "14:00" } as const;
 
 export interface MasterScheduleEditorProps {
-  /** Raw stored value — JSON string, legacy `{from,to}`, or null. */
+  /** Raw stored value — per-day JSON string/object, legacy `{from,to}`, or null. */
   workHours: unknown;
-  /** Raw stored value — JSON string, number[], or null. */
+  /** Raw stored value — JSON string, number[], or null (legacy hydration only). */
   workDays: unknown;
   saving: boolean;
   saved?: boolean;
-  /** Read-only mode (e.g. salon_only policy) — inputs + Save are disabled. */
+  /** Read-only mode (e.g. salon_only policy) — inputs + Save are disabled/hidden. */
   disabled?: boolean;
   /** Banner shown above the editor (e.g. "Working hours are set by the salon"). */
   notice?: string | null;
   /** Overrides the Save button label (e.g. "Send for approval"). */
   saveLabel?: string;
   lang: Lang;
-  /** Receives the serialized `{from,to}` string + the serialized 0..6 day array. */
-  onSave: (workHours: string, workDays: string) => void;
+  /** Receives the serialized per-day `{"days":{…}}` schedule string. */
+  onSave: (workSchedule: string) => void;
   testIdPrefix?: string;
 }
 
@@ -81,41 +82,39 @@ export function MasterScheduleEditor({
   onSave,
   testIdPrefix = "master-schedule",
 }: MasterScheduleEditorProps) {
-  const initialHours = useMemo(() => parseMasterHours(workHours), [workHours]);
-  const initialDays = useMemo(() => parseMasterWorkDays(workDays), [workDays]);
-
-  const [from, setFrom] = useState<number>(initialHours?.from ?? DEFAULT_FROM);
-  const [to, setTo] = useState<number>(initialHours?.to ?? DEFAULT_TO);
-  const [dows, setDows] = useState<Set<number>>(
-    () => new Set(initialDays && initialDays.length > 0 ? initialDays : DEFAULT_DOWS),
+  const initial = useMemo(
+    () => hydrateMasterSchedule(workHours, workDays),
+    [workHours, workDays],
   );
+  const [state, setState] = useState<MasterScheduleState>(initial);
   const [error, setError] = useState<string | null>(null);
 
-  const toggleDay = (dow: number) => {
+  const setDay = (day: WeekdayKey, next: MasterDaySchedule) => {
     if (disabled) return;
-    setDows((prev) => {
-      const next = new Set(prev);
-      if (next.has(dow)) next.delete(dow);
-      else next.add(dow);
-      return next;
-    });
+    setState((prev) => ({ ...prev, [day]: next }));
   };
+
+  const validation = validateMasterSchedule(state);
 
   const handleSave = () => {
     if (disabled) return;
-    if (!isValidMasterHours(from, to)) {
-      setError(t("master.schedule.error.range", lang));
+    const v = validateMasterSchedule(state);
+    if (!v.ok) {
+      const key: TranslationKey =
+        v.reason === "range"
+          ? "master.schedule.error.range"
+          : v.reason === "break_range"
+            ? "master.schedule.error.breakRange"
+            : "master.schedule.error.breakOutside";
+      setError(t(key, lang));
       return;
     }
     setError(null);
-    onSave(serializeMasterHours(from, to), serializeMasterWorkDays([...dows]));
+    onSave(serializeMasterSchedule(state));
   };
 
-  const inputCls =
-    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-400 disabled:opacity-60 disabled:cursor-not-allowed dark:border-white/10 dark:bg-slate-800 dark:text-slate-100";
-
   return (
-    <div className="space-y-4 text-sm" data-testid={`${testIdPrefix}-editor`}>
+    <div className="space-y-3 text-sm" data-testid={`${testIdPrefix}-editor`}>
       {notice && (
         <div
           className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300"
@@ -128,65 +127,18 @@ export function MasterScheduleEditor({
         {t("master.schedule.editHint", lang)}
       </p>
 
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block">
-          <span className="mb-1 block text-[11px] font-medium text-slate-500">
-            {t("salon.workHoursFrom", lang)}
-          </span>
-          <input
-            type="number"
-            min={0}
-            max={24}
-            value={String(from)}
+      <div className="space-y-2">
+        {WEEKDAY_KEYS.map((day) => (
+          <DayRow
+            key={day}
+            day={day}
+            slot={state[day]}
             disabled={disabled}
-            onChange={(e) => setFrom(clampHour(e.target.value))}
-            className={inputCls}
-            data-testid={`${testIdPrefix}-from`}
+            lang={lang}
+            prefix={testIdPrefix}
+            onChange={(next) => setDay(day, next)}
           />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-[11px] font-medium text-slate-500">
-            {t("salon.workHoursTo", lang)}
-          </span>
-          <input
-            type="number"
-            min={0}
-            max={24}
-            value={String(to)}
-            disabled={disabled}
-            onChange={(e) => setTo(clampHour(e.target.value))}
-            className={inputCls}
-            data-testid={`${testIdPrefix}-to`}
-          />
-        </label>
-      </div>
-
-      <div>
-        <span className="mb-1.5 block text-[11px] font-medium text-slate-500">
-          {t("master.schedule.days", lang)}
-        </span>
-        <div className="flex flex-wrap gap-1.5">
-          {DAY_ORDER.map((d) => {
-            const on = dows.has(d.dow);
-            return (
-              <button
-                key={d.dow}
-                type="button"
-                onClick={() => toggleDay(d.dow)}
-                disabled={disabled}
-                aria-pressed={on}
-                data-testid={`${testIdPrefix}-day-${d.dow}`}
-                className={`h-9 w-9 rounded-full text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                  on
-                    ? "bg-brand-500 text-white shadow-sm"
-                    : "border border-slate-200 text-slate-500 hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
-                }`}
-              >
-                {t(d.labelKey, lang)}
-              </button>
-            );
-          })}
-        </div>
+        ))}
       </div>
 
       {error && (
@@ -208,7 +160,7 @@ export function MasterScheduleEditor({
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !validation.ok}
             className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
             data-testid={`${testIdPrefix}-save`}
           >
@@ -218,5 +170,153 @@ export function MasterScheduleEditor({
         </div>
       )}
     </div>
+  );
+}
+
+function DayRow({
+  day,
+  slot,
+  disabled,
+  lang,
+  prefix,
+  onChange,
+}: {
+  day: WeekdayKey;
+  slot: MasterDaySchedule;
+  disabled: boolean;
+  lang: Lang;
+  prefix: string;
+  onChange: (next: MasterDaySchedule) => void;
+}) {
+  const rangeInvalid = slot !== null && slot.close <= slot.open;
+  return (
+    <div
+      data-testid={`${prefix}-row-${day}`}
+      className="flex flex-wrap items-center gap-2"
+    >
+      <span className="w-20 shrink-0 text-xs font-medium text-slate-700 dark:text-slate-300">
+        {t(DAY_LABEL_KEY[day], lang)}
+      </span>
+      <Switch
+        size="sm"
+        checked={slot !== null}
+        disabled={disabled}
+        onChange={(on) => onChange(on ? { ...DEFAULT_DAY } : null)}
+        aria-label={t("salon.publicProfile.workingDay", lang)}
+        data-testid={`${prefix}-toggle-${day}`}
+      />
+      {slot === null ? (
+        <span className="flex-1 text-xs italic text-slate-500 dark:text-slate-400">
+          {t("salon.publicProfile.dayOff", lang)}
+        </span>
+      ) : (
+        <WorkingDayControls
+          slot={slot}
+          day={day}
+          disabled={disabled}
+          lang={lang}
+          prefix={prefix}
+          onChange={onChange}
+        />
+      )}
+      {rangeInvalid && (
+        <span
+          className="w-full pl-20 text-[11px] text-amber-500"
+          data-testid={`${prefix}-row-error-${day}`}
+        >
+          {t("master.schedule.error.range", lang)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function WorkingDayControls({
+  slot,
+  day,
+  disabled,
+  lang,
+  prefix,
+  onChange,
+}: {
+  slot: NonNullable<MasterDaySchedule>;
+  day: WeekdayKey;
+  disabled: boolean;
+  lang: Lang;
+  prefix: string;
+  onChange: (next: MasterDaySchedule) => void;
+}) {
+  const br = slot.break;
+  return (
+    <>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <Select
+          className="flex-1 min-w-0"
+          value={slot.open}
+          onChange={(v) => onChange({ ...slot, open: v })}
+          options={optionsWith(slot.open)}
+          disabled={disabled}
+          testIdPrefix={`${prefix}-open-${day}`}
+        />
+        <span className="shrink-0 text-xs text-slate-500">—</span>
+        <Select
+          className="flex-1 min-w-0"
+          value={slot.close}
+          onChange={(v) => onChange({ ...slot, close: v })}
+          options={optionsWith(slot.close)}
+          disabled={disabled}
+          testIdPrefix={`${prefix}-close-${day}`}
+        />
+      </div>
+
+      {/* Break sub-line — wraps to its own full-width row on mobile. */}
+      <div className="flex w-full basis-full items-center gap-1.5 pl-20">
+        {br ? (
+          <>
+            <span className="shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
+              {t("master.schedule.break", lang)}
+            </span>
+            <Select
+              className="flex-1 min-w-0"
+              value={br.start}
+              onChange={(v) => onChange({ ...slot, break: { start: v, end: br.end } })}
+              options={optionsWith(br.start)}
+              disabled={disabled}
+              testIdPrefix={`${prefix}-break-start-${day}`}
+            />
+            <span className="shrink-0 text-xs text-slate-500">—</span>
+            <Select
+              className="flex-1 min-w-0"
+              value={br.end}
+              onChange={(v) => onChange({ ...slot, break: { start: br.start, end: v } })}
+              options={optionsWith(br.end)}
+              disabled={disabled}
+              testIdPrefix={`${prefix}-break-end-${day}`}
+            />
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ open: slot.open, close: slot.close })}
+              aria-label={t("master.schedule.removeBreak", lang)}
+              data-testid={`${prefix}-rmbreak-${day}`}
+              className="shrink-0 rounded-md p-1 text-slate-400 transition hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange({ ...slot, break: { ...DEFAULT_BREAK } })}
+            data-testid={`${prefix}-addbreak-${day}`}
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-brand-600 transition hover:bg-brand-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-brand-300"
+          >
+            <Plus className="h-3 w-3" />
+            <span>{t("master.schedule.addBreak", lang)}</span>
+          </button>
+        )}
+      </div>
+    </>
   );
 }

@@ -258,6 +258,9 @@ export const appointments = sqliteTable("appointments", {
   // epoch MILLISECONDS, UTC — Warsaw wall-clock via warsawToUtcMs (~/lib/time);
   // NOT seconds. Mirrors the Worker contract. See BUG-01 / BUG-05.
   ts: integer("ts").notNull(),
+  /** Per-appointment duration override (minutes); null = use the service's
+   *  nominal duration. Set by drag-the-bottom-edge resize (migration 0106). */
+  duration: integer("duration"),
   status: text("status").notNull().default("pending"),
   masterId: integer("master_id"),
   userName: text("user_name"),
@@ -754,6 +757,32 @@ export const stripeEvents = sqliteTable("stripe_events", {
   processedAt: integer("processed_at"),
 }, (t) => [
   index("idx_stripe_events_type").on(t.type, t.receivedAt),
+]);
+
+/**
+ * Platform Stripe account ledger (migration 0107) — mirror of Stripe
+ * balance_transactions, synced by the Worker 15-min cron (syncStripeLedger in
+ * src/billing/ledgerSync.js). Source of truth for the multi-month real revenue
+ * / net / fee widgets in the system_admin Billing dashboard. Money fields are
+ * minor units (PLN grosze); `created` / `availableOn` are unix seconds.
+ * Platform-level — the platform's own Stripe account, no tenant scope.
+ */
+export const stripeLedger = sqliteTable("stripe_ledger", {
+  id: text("id").primaryKey(),
+  type: text("type"),
+  reportingCategory: text("reporting_category"),
+  amount: integer("amount").notNull().default(0),
+  fee: integer("fee").notNull().default(0),
+  net: integer("net").notNull().default(0),
+  currency: text("currency"),
+  source: text("source"),
+  created: integer("created").notNull().default(0),
+  availableOn: integer("available_on"),
+  description: text("description"),
+  syncedAt: integer("synced_at").notNull().default(0),
+}, (t) => [
+  index("idx_stripe_ledger_created").on(t.created),
+  index("idx_stripe_ledger_type_created").on(t.type, t.created),
 ]);
 
 /**

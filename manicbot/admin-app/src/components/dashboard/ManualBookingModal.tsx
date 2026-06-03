@@ -25,12 +25,14 @@ interface Props {
    *  picked. Optional — falls back to "" (no prefill) when not provided. */
   defaultDate?: string;
   defaultTime?: string;
+  /** Prefilled note — carries the GCal-style quick-create title in. */
+  defaultNote?: string;
   onClose: () => void;
   onCreated?: (appointmentId: string) => void;
 }
 
 const FIELD_BASE =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
 
 const LABEL =
   "mb-1 block text-xs font-medium text-slate-600 dark:text-white/70";
@@ -62,7 +64,7 @@ function formatDateForUser(s: string, lang: Lang): string {
  * Manual booking modal used on dashboard Overview / Appointments / Clients tabs.
  * Owner role: can pick any master. Master role: locked to their own chat_id.
  */
-export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, defaultTime, onClose, onCreated }: Props) {
+export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, defaultTime, defaultNote, onClose, onCreated }: Props) {
   const { lang } = useLang();
   // 0074 — `masterSelectValue` is the raw Select value ("", "random", or
   // a chat-id string). `resolvedMasterId` is the parsed numeric chat id
@@ -94,7 +96,7 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
   const [clientEmail, setClientEmail] = useState<string>("");
   const [clientTg, setClientTg] = useState<string>("");
   const [clientIg, setClientIg] = useState<string>("");
-  const [note, setNote] = useState<string>("");
+  const [note, setNote] = useState<string>(defaultNote ?? "");
   const [err, setErr] = useState<string | null>(null);
 
   const masters = api.salon.getMasters.useQuery({ tenantId });
@@ -474,9 +476,9 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
               className={
                 submitDisabled
                   ? "flex-1 rounded-lg bg-slate-200 py-2.5 text-sm font-semibold text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
-                  : "flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
+                  : "flex-1 rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90"
               }
-              style={submitDisabled ? undefined : { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+              style={submitDisabled ? undefined : { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
             >
               {create.isPending ? t("appointments.manual.creating", lang) : t("appointments.manual.create", lang)}
             </button>
@@ -689,7 +691,7 @@ function DatePopover({ value, onChange, lang }: { value: string; onChange: (v: s
           const base = "h-9 rounded-lg text-sm font-medium transition";
           let cls: string;
           if (isSel) {
-            cls = `${base} text-white shadow-[0_4px_12px_-2px_rgba(124,58,237,0.45)]`;
+            cls = `${base} text-white shadow-[0_4px_12px_-2px_rgba(209,70,56,0.45)]`;
           } else if (isPast) {
             cls = `${base} text-slate-300 cursor-not-allowed dark:text-white/20`;
           } else if (!cell.inMonth) {
@@ -706,7 +708,7 @@ function DatePopover({ value, onChange, lang }: { value: string; onChange: (v: s
               disabled={isPast}
               onClick={() => !isPast && pick(dt)}
               className={cls}
-              style={isSel ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+              style={isSel ? { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" } : undefined}
             >
               {dt.getDate()}
             </button>
@@ -724,7 +726,7 @@ function DatePopover({ value, onChange, lang }: { value: string; onChange: (v: s
         <button
           type="button"
           onClick={() => pick(today)}
-          className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-violet-400 dark:hover:text-violet-300"
+          className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-violet-400 dark:hover:text-brand-300"
         >
           {t("appointments.manual.today", lang)}
         </button>
@@ -850,7 +852,7 @@ function TimePopover({ value, onChange, lang }: { value: string; onChange: (v: s
                       ? "block w-full px-3 py-1.5 text-sm font-semibold text-white"
                       : "block w-full px-3 py-1.5 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
                   }
-                  style={sel ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+                  style={sel ? { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" } : undefined}
                 >
                   {pad2(h)}
                 </button>
@@ -874,7 +876,7 @@ function TimePopover({ value, onChange, lang }: { value: string; onChange: (v: s
                       ? "block w-full px-3 py-1.5 text-sm font-semibold text-white"
                       : "block w-full px-3 py-1.5 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
                   }
-                  style={sel ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
+                  style={sel ? { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" } : undefined}
                 >
                   {pad2(m)}
                 </button>
@@ -894,7 +896,7 @@ function TimePopover({ value, onChange, lang }: { value: string; onChange: (v: s
         <button
           type="button"
           onClick={pickNow}
-          className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-violet-400 dark:hover:text-violet-300"
+          className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-violet-400 dark:hover:text-brand-300"
         >
           {t("appointments.manual.now", lang)}
         </button>

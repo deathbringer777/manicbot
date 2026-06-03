@@ -46,7 +46,7 @@ const MANUAL_CHAT = -1_780_142_566; // synthetic negative id minted for manual c
 const BOOTSTRAP_SQL: string[] = [
   `CREATE TABLE appointments (
     id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, chat_id INTEGER NOT NULL, svc_id TEXT NOT NULL,
-    date TEXT NOT NULL, time TEXT NOT NULL, ts INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+    date TEXT NOT NULL, time TEXT NOT NULL, duration INTEGER, ts INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
     master_id INTEGER, user_name TEXT, user_phone TEXT, user_tg TEXT, confirmed_by INTEGER,
     counter_time TEXT, counter_comment TEXT, reject_comment TEXT, cancel_reason TEXT,
     cancelled INTEGER NOT NULL DEFAULT 0, cancelled_by TEXT, cancelled_at INTEGER,

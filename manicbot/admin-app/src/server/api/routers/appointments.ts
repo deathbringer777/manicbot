@@ -628,6 +628,10 @@ export const appointmentsRouter = createTRPCRouter({
       newDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       newTime: z.string().regex(/^\d{2}:\d{2}$/),
       newMasterId: z.number().int().optional(),
+      // Drag-the-bottom-edge resize: when present, overrides the stored
+      // duration (decoupled from the service nominal) AND sizes the conflict
+      // window. Omitted for a plain move.
+      newDurationMin: z.number().int().min(15).max(60 * 24).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -678,12 +682,16 @@ export const appointmentsRouter = createTRPCRouter({
         }
       }
 
-      // No-op short-circuit: if nothing actually changed, return early so
-      // we don't pay the conflict check + sync-reset cost.
+      // No-op short-circuit: if nothing actually changed, return early so we
+      // don't pay the conflict check + sync-reset cost. A duration-only change
+      // (resize in place) still counts as a real change.
+      const durationChanged =
+        input.newDurationMin != null && input.newDurationMin !== apt.duration;
       if (
         apt.date === input.newDate &&
         apt.time === input.newTime &&
-        apt.masterId === newMasterId
+        apt.masterId === newMasterId &&
+        !durationChanged
       ) {
         return { ok: true, appointmentId: apt.id, unchanged: true };
       }
@@ -702,7 +710,9 @@ export const appointmentsRouter = createTRPCRouter({
             eq(services.svcId, apt.svcId),
           ))
           .limit(1);
-        const durationMin = svc?.duration ?? 60;
+        // Resize overrides the conflict window; otherwise use the service's
+        // nominal duration (falling back to 60 when the service is missing).
+        const durationMin = input.newDurationMin ?? svc?.duration ?? 60;
 
         const busy = await slotsBusy({
           db: ctx.db,
@@ -735,6 +745,8 @@ export const appointmentsRouter = createTRPCRouter({
             time: input.newTime,
             ts: newTs,
             masterId: newMasterId,
+            // Persist a resized duration (decoupled from the service nominal).
+            ...(input.newDurationMin != null ? { duration: input.newDurationMin } : {}),
             // Re-queue Google Calendar sync — googleEventId stays so the
             // sync handler PATCHes the existing event instead of creating
             // a duplicate.

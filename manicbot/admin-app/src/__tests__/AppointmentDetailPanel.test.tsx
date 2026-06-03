@@ -260,8 +260,13 @@ describe("AppointmentDetailPanel", () => {
     it("Save enables after the date changes and fires update() with only the changed field", () => {
       renderPanel();
       fireEvent.click(screen.getByTestId("panel-edit"));
-      const dateInput = screen.getByTestId("panel-edit-date") as HTMLInputElement;
-      fireEvent.change(dateInput, { target: { value: "2026-05-20" } });
+      // DatePicker: open the popover and pick another day in the SAME month
+      // (Jan 2020 — the appointment's month) so no month navigation is needed.
+      fireEvent.click(screen.getByTestId("panel-edit-date-trigger"));
+      const day = screen
+        .getAllByTestId("panel-edit-date-day")
+        .find((d) => d.getAttribute("data-iso") === "2020-01-20");
+      fireEvent.click(day!);
 
       const save = screen.getByTestId("panel-edit-save") as HTMLButtonElement;
       expect(save.disabled).toBe(false);
@@ -272,7 +277,7 @@ describe("AppointmentDetailPanel", () => {
       // mutation skips its cross-tenant guards.
       expect(updateMutate.mock.calls[0]![0]).toEqual({
         id: "apt_42",
-        date: "2026-05-20",
+        date: "2020-01-20",
         time: undefined,
         masterId: undefined,
         serviceId: undefined,
@@ -282,7 +287,12 @@ describe("AppointmentDetailPanel", () => {
     it("Cancel reverts edits and returns to read mode (with the original snapshot)", () => {
       renderPanel();
       fireEvent.click(screen.getByTestId("panel-edit"));
-      fireEvent.change(screen.getByTestId("panel-edit-date"), { target: { value: "2026-09-09" } });
+      // Change the date via the picker (same month — Jan 2020).
+      fireEvent.click(screen.getByTestId("panel-edit-date-trigger"));
+      const day9 = screen
+        .getAllByTestId("panel-edit-date-day")
+        .find((d) => d.getAttribute("data-iso") === "2020-01-09");
+      fireEvent.click(day9!);
 
       fireEvent.click(screen.getByTestId("panel-edit-cancel"));
       // Back in read mode — edit-mode inputs are gone, read-mode quick
@@ -290,11 +300,12 @@ describe("AppointmentDetailPanel", () => {
       expect(screen.queryByTestId("panel-edit-date")).toBeNull();
       expect(screen.getByTestId("panel-done")).toBeTruthy();
 
-      // Re-enter edit mode — date input should show the ORIGINAL value, not
-      // the 2026-09-09 we typed earlier. This is the snapshot-revert contract.
+      // Re-enter edit mode — the picker should show the ORIGINAL value, not
+      // the 2020-01-09 we picked earlier. This is the snapshot-revert contract.
       fireEvent.click(screen.getByTestId("panel-edit"));
-      const dateAfterReopen = screen.getByTestId("panel-edit-date") as HTMLInputElement;
-      expect(dateAfterReopen.value).toBe("2020-01-15");
+      expect(
+        screen.getByTestId("panel-edit-date-trigger").getAttribute("data-value"),
+      ).toBe("2020-01-15");
     });
 
     it("surfaces 'slot_conflict' from the server as a localized inline error", () => {

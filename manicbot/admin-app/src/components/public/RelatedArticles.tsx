@@ -65,7 +65,7 @@ export function RelatedArticles({ articles }: { articles: BlogArticle[] }) {
                 <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-2 flex-1">
                   {article.excerpts[lang]}
                 </p>
-                <div className="mt-3 text-xs font-medium text-violet-600 dark:text-violet-400 group-hover:text-violet-500">
+                <div className="mt-3 text-xs font-medium text-violet-600 dark:text-violet-400 group-hover:text-brand-500">
                   {READ_MORE[lang]}
                 </div>
               </div>

@@ -127,7 +127,7 @@ function StampCardConfig({ tenantId }: { tenantId: string }) {
           onClick={submit}
           disabled={save.isPending}
           className="mt-4 w-full rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
         >
           {save.isPending ? t("stamp.saving", lang) : t("common.save", lang)}
         </button>
@@ -275,8 +275,8 @@ export function PromoCodesTab({ tenantId }: Props) {
           <button
             type="submit"
             disabled={create.isPending}
-            className="w-full rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90 disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+            className="w-full rounded-lg py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90 disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           >
             {create.isPending ? t("promo.creating", lang) : t("promo.create", lang)}
           </button>

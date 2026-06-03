@@ -18,6 +18,7 @@ import {
 import { api } from "~/trpc/react";
 import { t, type Lang } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
+import { DatePicker } from "~/components/ui/DatePicker";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { STATUS_STYLES } from "~/components/dashboard-ui/AptCard";
 import { ClientDetailModal } from "~/components/salon/tabs/clients/ClientDetailModal";
@@ -99,7 +100,7 @@ function channelLabel(tg: string | null | undefined): string {
 }
 
 const FIELD_BASE =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
 
 const LABEL =
   "mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50";
@@ -399,12 +400,11 @@ export function AppointmentDetailPanel({
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className={LABEL}>{t("salon.day.panel.date", lang)}</label>
-            <input
-              type="date"
+            <DatePicker
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className={FIELD_BASE}
-              data-testid="panel-edit-date"
+              onChange={setDate}
+              lang={lang}
+              testIdPrefix="panel-edit-date"
             />
           </div>
           <div>
@@ -539,12 +539,12 @@ export function AppointmentDetailPanel({
             className={
               !dirty || update.isPending
                 ? "flex-1 rounded-lg bg-slate-200 py-2 text-xs font-semibold text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
-                : "flex-1 rounded-lg py-2 text-xs font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
+                : "flex-1 rounded-lg py-2 text-xs font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90"
             }
             style={
               !dirty || update.isPending
                 ? undefined
-                : { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }
+                : { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }
             }
             data-testid="panel-edit-save"
           >
@@ -580,7 +580,8 @@ export function AppointmentDetailPanel({
             {cardBody}
           </div>
         </div>
-      ) : (
+      ) : confirmDelete ? null : (
+        // Delete confirm is full-screen — don't leave the read popover layered.
         <AnchoredPopover
           anchorRect={anchorRect ?? null}
           onClose={onClose}

@@ -51,6 +51,12 @@ export function canUse(ctx, feature) {
     return feature === 'booking';
   }
 
+  // #B-1 — entitlement is an ALLOWLIST. Only `active`/`trialing` reach the plan
+  // checks below. Any other status — incomplete, incomplete_expired, paused, or
+  // an unmapped/typo value — is NOT a paid subscription and must be denied,
+  // rather than falling through to full plan access (the previous behaviour).
+  if (status !== 'active' && status !== 'trialing') return false;
+
   // trialing or active — check plan limits
   const planField = FEATURE_PLAN_FIELD[feature];
   if (planField === undefined) return false; // unknown feature

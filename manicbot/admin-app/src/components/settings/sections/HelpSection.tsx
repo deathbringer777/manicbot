@@ -214,7 +214,7 @@ export function HelpSection() {
         {showTourReplay && (
           <>
             <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
-              <Map className="w-4 h-4 text-violet-500 dark:text-violet-400 shrink-0" />
+              <Map className="w-4 h-4 text-brand-500 dark:text-violet-400 shrink-0" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">{t("settings.tourReplay", lang)}</h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t("settings.tourReplayDesc", lang)}</p>

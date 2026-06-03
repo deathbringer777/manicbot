@@ -255,7 +255,7 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
           <div
             className="h-9 w-9 rounded-xl flex items-center justify-center text-white"
-            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
           >
             <Mail className="h-4 w-4" />
           </div>
@@ -278,7 +278,7 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
                     if (status.kind === "error") setStatus({ kind: "idle" });
                   }}
                   placeholder={labels.emailPh}
-                  className="w-full rounded-xl px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60"
+                  className="w-full rounded-xl px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/60"
                 />
               </div>
               <div>
@@ -287,7 +287,7 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder={`${labels.name} — ${labels.namePh}`}
-                  className="w-full rounded-xl px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60"
+                  className="w-full rounded-xl px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/60"
                 />
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{labels.hint}</p>
@@ -316,7 +316,7 @@ export function InviteByEmailModal({ tenantId, onClose }: InviteByEmailModalProp
                 }
                 disabled={!isValid || send.isPending}
                 className="flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
+                style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
               >
                 {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 {labels.submit}

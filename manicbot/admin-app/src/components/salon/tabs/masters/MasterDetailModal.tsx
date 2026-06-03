@@ -322,11 +322,11 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
     );
   };
 
-  const handleSaveSchedule = (workHours: string, workDays: string) => {
+  const handleSaveSchedule = (workSchedule: string) => {
     setErrorMsg(null);
     setScheduleSaved(false);
     updateMaster.mutate(
-      { tenantId, chatId, workHours, workDays },
+      { tenantId, chatId, workSchedule },
       {
         onSuccess: () => {
           setScheduleSaved(true);
@@ -379,7 +379,7 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
               aria-label={t("master.avatar.tooltip", lang)}
               title={t("master.avatar.tooltip", lang)}
               data-testid="master-detail-avatar-trigger"
-              className={`group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-purple-500/20 to-brand-500/20 text-2xl font-bold text-purple-400 ring-1 ring-purple-500/15 transition hover:ring-purple-500/40 focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${isHidden ? "opacity-50" : ""}`}
+              className={`group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-accent-500/20 to-brand-500/20 text-2xl font-bold text-accent-700 dark:text-accent-300 ring-1 ring-accent-500/15 transition hover:ring-accent-500/40 focus:outline-none focus:ring-2 focus:ring-accent-500/50 ${isHidden ? "opacity-50" : ""}`}
             >
               {m.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -397,7 +397,7 @@ export function MasterDetailModal({ tenantId, chatId, onClose, onNavigateToChann
                   {m.name ?? `#${m.chatId}`}
                 </h2>
                 {isWebAccount && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent-500/15 text-accent-700 dark:text-accent-300 border border-accent-500/20">
                     {t("master.webBadge", lang)}
                   </span>
                 )}
@@ -776,7 +776,7 @@ function SettingsMode({
   onVacationChange: (patch: Partial<{ vacationFrom: string; vacationUntil: string }>) => void;
   onSaveProfile: () => void;
   onSaveVacation: () => void;
-  onSaveSchedule: (workHours: string, workDays: string) => void;
+  onSaveSchedule: (workSchedule: string) => void;
   schedulePending?: React.ReactNode;
   onClearVacation: () => void;
   onExit: () => void;

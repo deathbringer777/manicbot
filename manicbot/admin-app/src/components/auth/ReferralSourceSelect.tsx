@@ -125,7 +125,7 @@ export function ReferralSourceSelect({ value, note, onChange, onNoteChange, copy
                   />
                   <span className="flex-1">{opt.label}</span>
                   {isSelected && (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-violet-500 dark:text-violet-300" />
+                    <Check className="h-3.5 w-3.5 shrink-0 text-brand-500 dark:text-violet-300" />
                   )}
                 </li>
               );

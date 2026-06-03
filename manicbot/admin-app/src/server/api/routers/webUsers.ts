@@ -44,6 +44,14 @@ const RL_RESET_MAX = 5;
  * 10 min is enough for legitimate retry but blocks mailbox-flooding abuse.
  */
 const RL_RESET_PER_EMAIL_MAX = 3;
+/**
+ * #S5-01 — per-email cap on the password-reset VERIFY (code-check) path. The
+ * pre-existing per-IP limit there is defeated by IP rotation, leaving the
+ * 6-digit code brute-forceable across its 1h TTL → account takeover. 5
+ * code-attempts per email per 10 min is ample for a legit user mistyping while
+ * making brute-force (≤30 guesses/hr vs 1e6 space) hopeless.
+ */
+const RL_RESET_VERIFY_PER_EMAIL_MAX = 5;
 const RL_EMAIL_CHANGE_MAX = 3; // max email change requests per IP per window
 
 /**
@@ -694,6 +702,18 @@ export const webUsersRouter = createTRPCRouter({
       }
 
       const email = input.email.toLowerCase().trim();
+      // #S5-01 — per-email cap on the verify path. The per-IP limit above does
+      // nothing against an attacker rotating IPs to brute-force the code for one
+      // target email. Counts every attempt (before the code compare) regardless
+      // of whether the email exists — identical generic handling preserves
+      // anti-enumeration.
+      const rlEmail = await checkRateLimit(ctx.db, email, "password_reset_complete_email", RL_RESET_VERIFY_PER_EMAIL_MAX, RL_WINDOW);
+      if (!rlEmail.allowed) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many attempts. Try again later.",
+        });
+      }
       const generic = new TRPCError({
         code: "BAD_REQUEST",
         message: "Invalid or expired reset code",

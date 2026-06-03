@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -47,6 +47,9 @@ const OPTIONAL_STEPS: Step[] = [
 const ALL_STEPS: Step[] = [...ESSENTIAL_STEPS, ...OPTIONAL_STEPS];
 
 const COLLAPSE_LS_KEY = "manicbot_onboarding_optional_collapsed";
+// Permanent dismiss of the "ready" bar. Only honored while the salon is
+// operational (4/4 essentials); cleared on regression so it resurfaces.
+const READY_DISMISS_LS_KEY = "manicbot_onboarding_ready_dismissed";
 
 function readUserCollapsePreference(): boolean | null {
   if (typeof localStorage === "undefined") return null;
@@ -59,6 +62,17 @@ function readUserCollapsePreference(): boolean | null {
 function writeUserCollapsePreference(collapsed: boolean) {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(COLLAPSE_LS_KEY, collapsed ? "1" : "0");
+}
+
+function readReadyDismissPreference(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  return localStorage.getItem(READY_DISMISS_LS_KEY) === "1";
+}
+
+function writeReadyDismissPreference(dismissed: boolean) {
+  if (typeof localStorage === "undefined") return;
+  if (dismissed) localStorage.setItem(READY_DISMISS_LS_KEY, "1");
+  else localStorage.removeItem(READY_DISMISS_LS_KEY);
 }
 
 export function OnboardingChecklist({ tenantId }: Props) {
@@ -87,10 +101,24 @@ export function OnboardingChecklist({ tenantId }: Props) {
   }, []);
   const optionalCollapsed = userPref !== null ? userPref : !autoOpen;
 
+  // Permanent dismiss of the "ready" bar (4/4 essentials). Honored only while
+  // operational; an essential regressing clears it so the checklist returns.
+  const [readyDismissed, setReadyDismissed] = useState(false);
+  useEffect(() => {
+    setReadyDismissed(readReadyDismissPreference());
+  }, []);
+  useEffect(() => {
+    if (!allEssentialsDone && readReadyDismissPreference()) {
+      writeReadyDismissPreference(false);
+      setReadyDismissed(false);
+    }
+  }, [allEssentialsDone]);
+
   const nextEssential = ESSENTIAL_STEPS.find((s) => !completed.has(s.id));
 
   if (isLoading || !data) return null;
   if (allDone) return null;
+  if (allEssentialsDone && readyDismissed) return null;
 
   const essentialProgress = essentialsDoneCount / ESSENTIAL_STEPS.length;
   const headlineKey = allEssentialsDone
@@ -102,6 +130,72 @@ export function OnboardingChecklist({ tenantId }: Props) {
     setUserPref(next);
     writeUserCollapsePreference(next);
   };
+
+  const dismissReady = () => {
+    writeReadyDismissPreference(true);
+    setReadyDismissed(true);
+  };
+
+  // Operational (4/4 essentials): collapse the big card into a slim, dismissible
+  // "ready" bar. The optional polish steps stay reachable behind the disclosure.
+  if (allEssentialsDone) {
+    const optionalDone = OPTIONAL_STEPS.reduce((n, s) => n + (completed.has(s.id) ? 1 : 0), 0);
+    return (
+      <div
+        data-testid="onboarding-checklist"
+        className="glass-card rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-cyan-500/5 p-3 animate-in fade-in slide-in-from-top-1 duration-300"
+      >
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            data-testid="onboarding-optional-toggle"
+            onClick={toggleOptional}
+            aria-expanded={!optionalCollapsed}
+            className="flex flex-1 items-center gap-2 text-left transition hover:opacity-80"
+          >
+            <span data-testid="onboarding-headline" className="text-sm font-semibold text-foreground">
+              {t("onboarding.checklist.headline.ready", lang)}
+            </span>
+            <span data-testid="onboarding-counter" className="font-mono text-xs text-muted-foreground">
+              {essentialsDoneCount}/{ESSENTIAL_STEPS.length}
+            </span>
+            <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="hidden sm:inline">{t("onboarding.checklist.tier.optional", lang)}</span>
+              <span className="font-mono text-[10px] opacity-70">
+                {optionalDone}/{OPTIONAL_STEPS.length}
+              </span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform ${optionalCollapsed ? "" : "rotate-180"}`}
+              />
+            </span>
+          </button>
+          <button
+            type="button"
+            data-testid="onboarding-dismiss"
+            onClick={dismissReady}
+            aria-label={t("onboarding.checklist.dismiss", lang)}
+            className="shrink-0 rounded-lg p-1 text-muted-foreground transition hover:bg-foreground/5 hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {!optionalCollapsed && (
+          <ul className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+            {OPTIONAL_STEPS.map((step) => (
+              <StepRow
+                key={step.id}
+                step={step}
+                done={completed.has(step.id)}
+                isNext={false}
+                lang={lang}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -129,7 +223,7 @@ export function OnboardingChecklist({ tenantId }: Props) {
           className="h-full rounded-full transition-all duration-500"
           style={{
             width: essentialProgress === 0 ? "4px" : `${essentialProgress * 100}%`,
-            background: "linear-gradient(135deg,#7c3aed,#06b6d4)",
+            background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))",
           }}
         />
       </div>
@@ -217,7 +311,7 @@ function StepRow({
             done
               ? "bg-emerald-500/20 text-emerald-400"
               : isNext
-              ? "border-2 border-violet-500 bg-violet-500/10 text-violet-500"
+              ? "border-2 border-violet-500 bg-violet-500/10 text-brand-500"
               : "border-2 border-foreground/25 bg-transparent text-transparent"
           }`}
         >
@@ -234,8 +328,8 @@ function StepRow({
           done
             ? "text-muted-foreground/60 line-through"
             : isNext
-            ? "font-semibold text-foreground hover:text-violet-600 dark:hover:text-violet-300"
-            : "text-foreground/80 hover:text-violet-600 dark:hover:text-violet-300"
+            ? "font-semibold text-foreground hover:text-violet-600 dark:hover:text-brand-300"
+            : "text-foreground/80 hover:text-violet-600 dark:hover:text-brand-300"
         }`}
       >
         {t(step.labelKey, lang)}

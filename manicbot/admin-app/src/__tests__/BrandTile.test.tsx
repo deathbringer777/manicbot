@@ -160,7 +160,9 @@ describe("BrandTile — styling contract", () => {
   it("glyph tile uses theme-adaptive surface class", () => {
     renderWith({ role: "tenant_owner" });
     const glyph = screen.getByTestId("brand-tile-glyph");
-    expect(glyph.className).toContain("bg-[#f3f4f6]");
+    // Migrated from the #f3f4f6 literal to the semantic surface token (warm
+    // muted surface inside the authed scope).
+    expect(glyph.className).toContain("bg-surface-muted");
     expect(glyph.className).toContain("dark:bg-white/[0.06]");
   });
 });

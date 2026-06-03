@@ -283,7 +283,9 @@ describe("clientsRouter", () => {
       const { db, updates } = buildDb([]);
       const caller = createCaller(makeCtx(db) as never);
       await caller.delete({ tenantId: TENANT, chatId: 42 });
-      expect(updates).toHaveLength(1);
+      // delete now performs TWO updates: the users PII scrub + the linked
+      // marketing_contacts PII scrub (#D-2 — GDPR erasure completeness).
+      expect(updates).toHaveLength(2);
       const set = updates[0]!.set;
       expect(set.name).toBeNull();
       expect(set.phone).toBeNull();
@@ -294,6 +296,12 @@ describe("clientsRouter", () => {
       expect(set.tags).toBeNull();
       expect(set.dob).toBeNull();
       expect(set.deletedAt).toBeGreaterThan(0);
+      // #D-2 — the linked marketing_contacts row is scrubbed + unsubscribed.
+      const mset = updates[1]!.set;
+      expect(mset.name).toBeNull();
+      expect(mset.email).toBeNull();
+      expect(mset.phone).toBeNull();
+      expect(mset.unsubscribed).toBe(1);
     });
   });
 

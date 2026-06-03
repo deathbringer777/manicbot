@@ -1323,9 +1323,12 @@ export async function onMsg(ctx, msg) {
       tenant.salon.name = val;
       tenant.name = val;
     } else if (st.step === STEP.EDIT_SALON_PHONE) {
-      tenant.salon.phone = txt.trim().slice(0, 30);
+      // #X-02 — strip HTML tags (mirror EDIT_SALON_NAME): these fields are
+      // rendered into bot replies with parseMode:'HTML' and into the embed
+      // widget, so a raw `<b onmouseover=...>` would otherwise reach the sink.
+      tenant.salon.phone = txt.replace(/<[^>]*>/g, '').trim().slice(0, 30);
     } else if (st.step === STEP.EDIT_SALON_ADDR) {
-      tenant.salon.address = txt.trim().slice(0, 200);
+      tenant.salon.address = txt.replace(/<[^>]*>/g, '').trim().slice(0, 200);
     } else if (st.step === STEP.EDIT_SALON_HOURS_FROM) {
       const m = txt.match(/^(\d{1,2})\s*[-–]\s*(\d{1,2})$/);
       if (!m) return send(ctx, cid, t(lg, 'adm_settings_enter_hours'));

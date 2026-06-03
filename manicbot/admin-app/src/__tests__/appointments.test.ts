@@ -530,6 +530,99 @@ describe("appointmentsRouter", () => {
       expect(vals.time).toBe("15:00");
       expect(vals.masterId).toBeNull();
     });
+
+    // ── resize — drag the bottom edge to change duration (Q1: appointments
+    //   get a custom stored duration decoupled from the service nominal).
+    describe("resize via newDurationMin", () => {
+      const sizedApt = { ...baseApt, duration: 60 };
+
+      it("writes the new duration and uses it for the conflict window", async () => {
+        const dbMock = createDbMock([
+          [sizedApt],
+          [{ svcId: "manicure", duration: 60 }],
+        ]);
+        const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+        const res = await caller.rescheduleAppointment({
+          tenantId: "t_demo",
+          appointmentId: "apt_1",
+          newDate: sizedApt.date,
+          newTime: sizedApt.time,
+          newMasterId: sizedApt.masterId,
+          newDurationMin: 90,
+        });
+
+        expect(res.ok).toBe(true);
+        expect(res.unchanged).toBe(false);
+        // Conflict window uses the NEW duration, not the service's nominal 60.
+        expect(slotsBusyMock).toHaveBeenCalledWith(
+          expect.objectContaining({ durationMin: 90 }),
+        );
+        // The new duration is persisted (decoupled from the service).
+        expect(dbMock.updateCalls[0]?.values.duration).toBe(90);
+      });
+
+      it("treats a duration-only change as a real change (not a no-op)", async () => {
+        const dbMock = createDbMock([
+          [sizedApt],
+          [{ svcId: "manicure", duration: 60 }],
+        ]);
+        const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+        const res = await caller.rescheduleAppointment({
+          tenantId: "t_demo",
+          appointmentId: "apt_1",
+          newDate: sizedApt.date,
+          newTime: sizedApt.time,
+          newMasterId: sizedApt.masterId,
+          newDurationMin: 120,
+        });
+
+        expect(res.unchanged).toBe(false);
+        expect(dbMock.updateCalls).toHaveLength(1);
+      });
+
+      it("does NOT write duration when newDurationMin is omitted (plain move)", async () => {
+        const dbMock = createDbMock([
+          [sizedApt],
+          [{ svcId: "manicure", duration: 60 }],
+        ]);
+        const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+        await caller.rescheduleAppointment({
+          tenantId: "t_demo",
+          appointmentId: "apt_1",
+          newDate: "2026-05-21",
+          newTime: "10:30",
+        });
+
+        expect(dbMock.updateCalls[0]?.values.duration).toBeUndefined();
+      });
+
+      it("rejects a resize that overlaps the next booking (CONFLICT, no UPDATE)", async () => {
+        slotsBusyMock.mockResolvedValueOnce({
+          busy: true,
+          conflict: { kind: "appointment", id: "apt_next" },
+        });
+        const dbMock = createDbMock([
+          [sizedApt],
+          [{ svcId: "manicure", duration: 60 }],
+        ]);
+        const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+        await expect(
+          caller.rescheduleAppointment({
+            tenantId: "t_demo",
+            appointmentId: "apt_1",
+            newDate: sizedApt.date,
+            newTime: sizedApt.time,
+            newMasterId: sizedApt.masterId,
+            newDurationMin: 180,
+          }),
+        ).rejects.toMatchObject({ code: "CONFLICT", message: "slot_conflict" });
+        expect(dbMock.updateCalls).toHaveLength(0);
+      });
+    });
   });
 
   // ── update — tenant-scoped explicit save (reschedule + change master /

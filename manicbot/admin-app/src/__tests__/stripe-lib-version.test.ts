@@ -25,6 +25,10 @@ import {
   ensureCoupon,
   applyCouponToSubscription,
   cancelSubscriptionAtPeriodEnd,
+  getBalance,
+  listRecentCharges,
+  listPayouts,
+  listDisputes,
 } from "~/server/lib/stripe";
 
 const PINNED = "2024-06-20";
@@ -126,6 +130,26 @@ describe("admin-app stripe.ts — Stripe-Version pin", () => {
 
     it("cancelSubscriptionAtPeriodEnd", async () => {
       await cancelSubscriptionAtPeriodEnd(KEY, "sub_1");
+      expect(headersOf(fetchMock.mock.calls[0]!)["Stripe-Version"]).toBe(PINNED);
+    });
+
+    it("getBalance", async () => {
+      await getBalance(KEY);
+      expect(headersOf(fetchMock.mock.calls[0]!)["Stripe-Version"]).toBe(PINNED);
+    });
+
+    it("listRecentCharges", async () => {
+      await listRecentCharges(KEY, { limit: 5 });
+      expect(headersOf(fetchMock.mock.calls[0]!)["Stripe-Version"]).toBe(PINNED);
+    });
+
+    it("listPayouts", async () => {
+      await listPayouts(KEY);
+      expect(headersOf(fetchMock.mock.calls[0]!)["Stripe-Version"]).toBe(PINNED);
+    });
+
+    it("listDisputes", async () => {
+      await listDisputes(KEY);
       expect(headersOf(fetchMock.mock.calls[0]!)["Stripe-Version"]).toBe(PINNED);
     });
   });

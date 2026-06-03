@@ -404,3 +404,55 @@ describe("salon.updateMaster — schedule (workHours + workDays)", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
+
+describe("salon.updateMaster — per-day schedule (workSchedule + breaks)", () => {
+  it("persists the per-day {days} JSON and derives work_days from enabled days", async () => {
+    const { db, updateCalls } = createDbMock([
+      [{ origin: "salon_created", allowDelegation: 0 }],
+    ]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    const workSchedule = JSON.stringify({
+      days: {
+        mon: { open: "09:00", close: "18:00", break: { start: "13:00", end: "14:00" } },
+        tue: { open: "10:00", close: "16:00" },
+        wed: null, thu: null, fri: null, sat: null, sun: null,
+      },
+    });
+    await caller.updateMaster({ tenantId: "t_alpha", chatId: 10_000_000_001, workSchedule });
+    const values = updateCalls.at(-1)!.values as { workHours: string; workDays: string };
+    expect(JSON.parse(values.workHours)).toEqual({
+      days: {
+        mon: { open: "09:00", close: "18:00", break: { start: "13:00", end: "14:00" } },
+        tue: { open: "10:00", close: "16:00" },
+        wed: null, thu: null, fri: null, sat: null, sun: null,
+      },
+    });
+    expect(values.workDays).toBe("[1,2]");
+  });
+
+  it("rejects a break outside working hours", async () => {
+    const { db } = createDbMock([
+      [{ origin: "salon_created", allowDelegation: 0 }],
+    ]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    const bad = JSON.stringify({
+      days: { mon: { open: "09:00", close: "12:00", break: { start: "13:00", end: "14:00" } }, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null },
+    });
+    await expect(
+      caller.updateMaster({ tenantId: "t_alpha", chatId: 10_000_000_001, workSchedule: bad }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("rejects a malformed workSchedule that is not the {days} shape", async () => {
+    const { db } = createDbMock([
+      [{ origin: "salon_created", allowDelegation: 0 }],
+    ]);
+    const ctx = makeTenantOwnerCtx(db, "t_alpha");
+    const caller = createCaller(ctx as never);
+    await expect(
+      caller.updateMaster({ tenantId: "t_alpha", chatId: 10_000_000_001, workSchedule: '{"from":9,"to":18}' }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+});

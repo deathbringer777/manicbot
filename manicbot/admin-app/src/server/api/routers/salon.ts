@@ -11,6 +11,7 @@ import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/serv
 import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
+import { isHttpsUrl } from "~/server/lib/url";
 import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt, inArray, getTableColumns } from "drizzle-orm";
 import { appointmentNameColumns, foldAppointmentNames } from "~/server/api/appointmentNames";
 import {
@@ -1075,7 +1076,14 @@ export const salonRouter = createTRPCRouter({
       // `/chat/init` and `publicSalon.getProfileForChat` both gate on
       // this column (not `publicActive`). Default for new tenants is 1.
       chatEnabled: z.number().min(0).max(1).optional(),
-      photos: z.array(z.string()).optional(),
+      // U1/U2: every gallery entry must be https-only. `z.string()` alone (or
+      // `.url()`) accepts `javascript:` / `data:` / `vbscript:`, which are
+      // JSON-stringified verbatim into tenants.photos and reflected by every
+      // publicSalon read into the public gallery `<img src>`. Reuses the shared
+      // `isHttpsUrl` refinement (same guard the support router applies).
+      photos: z
+        .array(z.string().max(2048).refine(isHttpsUrl, { message: "URL must start with https://" }))
+        .optional(),
       // Restrict to https-only URLs — `z.string().url()` alone permits
       // `javascript:` / `data:` schemes (WHATWG URL parses them). These fields
       // flow into og:image, JSON-LD and `<img src>`; even where the browser

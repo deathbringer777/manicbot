@@ -16,9 +16,16 @@
  *     flow into og:image and JSON-LD; the moment any future PR renders one
  *     as `<a href>` the validation gap becomes a stored XSS.
  *
+ *   • `photos[]` entries with schemes other than `https://` (U1/U2) — the
+ *     gallery array was `z.array(z.string())` with no per-element guard, so a
+ *     crafted tRPC POST could store `javascript:` / `data:` / `vbscript:` URLs
+ *     in `tenants.photos`. Those JSON-parsed strings are reflected by every
+ *     `publicSalon` read (search cards, profile, chat) into the public gallery
+ *     `<img src>`. A single bad entry must reject the whole mutation.
+ *
  * Pre-fix: instagramUrl was `z.string().max(300)` only; logo/coverPhoto
- * were `z.string().url()`. This test fails on those laxer schemas and
- * passes once the regex constraints are tightened.
+ * were `z.string().url()`; photos was `z.array(z.string())`. This test fails
+ * on those laxer schemas and passes once the scheme guards are tightened.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -111,6 +118,47 @@ describe("salon.updateSalonProfile — URL hardening (security)", () => {
       const { caller } = makeCallerForTenant();
       await expect(
         caller.updateSalonProfile({ tenantId: "t_owner", logo: "", coverPhoto: "" } as never),
+      ).resolves.toBeTruthy();
+    });
+  });
+
+  describe("photos[] gallery (U1/U2)", () => {
+    // A single dangerous entry must fail the whole array — the gallery is
+    // JSON-stringified verbatim into tenants.photos, so a partial accept would
+    // still persist the malicious URL.
+    it.each([
+      "javascript:alert(1)",
+      "JaVaScRiPt:alert(1)",                                  // case-obfuscated
+      "data:image/svg+xml;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+      "vbscript:msgbox(1)",
+      "http://example.com/p.png",                             // bare http
+      " javascript:alert(1)",                                 // leading whitespace
+    ])("rejects a gallery containing %j", async (badUrl) => {
+      const { caller } = makeCallerForTenant();
+      await expect(
+        caller.updateSalonProfile({
+          tenantId: "t_owner",
+          // mix a legit URL with the bad one to prove per-element validation
+          photos: ["https://cdn.example.com/ok.png", badUrl],
+        } as never),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
+    it("accepts an all-https gallery", async () => {
+      const { caller, updateCalls } = makeCallerForTenant();
+      await expect(
+        caller.updateSalonProfile({
+          tenantId: "t_owner",
+          photos: ["https://cdn.example.com/a.jpg", "https://cdn.example.com/b.jpg"],
+        } as never),
+      ).resolves.toBeTruthy();
+      expect(updateCalls.length).toBeGreaterThan(0);
+    });
+
+    it("accepts an empty gallery (clearing all photos)", async () => {
+      const { caller } = makeCallerForTenant();
+      await expect(
+        caller.updateSalonProfile({ tenantId: "t_owner", photos: [] } as never),
       ).resolves.toBeTruthy();
     });
   });

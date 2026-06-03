@@ -118,6 +118,17 @@ describe('slot conflict — getSlots() overlap behavior (P0)', () => {
     expect(slots).toContain('11:30');
   });
 
+  it('a booking with a corrupt (non-numeric) time is handled gracefully', async () => {
+    // Contract: a corrupt row must never crash slot generation nor silently
+    // mask the whole day. The Number.isFinite guard makes this explicit.
+    insertApt(db, { id: 'a_bad', svcId: 'classic', date: FUTURE_DATE, time: 'xx:yy', masterId: 100 });
+    const slots = await getSlots(ctx, FUTURE_DATE, 'classic', 100);
+    expect(Array.isArray(slots)).toBe(true);
+    // The corrupt booking is ignored, so normal slots stay available.
+    expect(slots).toContain('10:00');
+    expect(slots).toContain('11:00');
+  });
+
   it('multiple bookings on same master combine to block multiple slots', async () => {
     insertApt(db, { id: 'a1', svcId: 'classic', date: FUTURE_DATE, time: '10:00', masterId: 100 });
     insertApt(db, { id: 'a2', svcId: 'classic', date: FUTURE_DATE, time: '14:00', masterId: 100 });

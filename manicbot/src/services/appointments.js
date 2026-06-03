@@ -491,6 +491,9 @@ export async function checkSlotConflict(ctx, masterId, date, time, svcId) {
     const bs = svcMap.get(a.svcId);
     if (!bs) continue;
     const [ah, am] = String(a.time).split(':').map(Number);
+    // Skip bookings with a malformed time — a NaN window would silently never
+    // overlap, masking a real conflict against a corrupt row (mirrors line ~483).
+    if (!Number.isFinite(ah) || !Number.isFinite(am)) continue;
     const as = ah + am / 60;
     const ae = as + bs.dur / 60;
     // Strict overlap: candidate starts before booked ends AND candidate ends after booked starts
@@ -547,6 +550,8 @@ export async function getSlots(ctx, date, svcId, masterId = null) {
         const bs = svcMap.get(a.svcId);
         if (!bs) continue;
         const [ah, am] = a.time.split(':').map(Number);
+        // Malformed booked time ⇒ skip rather than treat the slot as free.
+        if (!Number.isFinite(ah) || !Number.isFinite(am)) continue;
         const as = ah + am / 60, ae = as + bs.dur / 60;
         if (ss < ae && se > as) { ok = false; break; }
       }

@@ -93,6 +93,14 @@ jobs:
         run: npm ci --legacy-peer-deps
         working-directory: manicbot
 
+      # Worker backend ships as plain JS with no TypeScript typecheck behind it,
+      # so ESLint is the only static gate on shipping Worker code. Fails only on
+      # real defects (undeclared vars, unreachable code, dupe keys); pre-existing
+      # style warnings are surfaced but non-blocking. See manicbot/eslint.config.mjs.
+      - name: Lint (Worker — ESLint)
+        run: npm run lint
+        working-directory: manicbot
+
       - name: Run tests
         run: npm test
         working-directory: manicbot

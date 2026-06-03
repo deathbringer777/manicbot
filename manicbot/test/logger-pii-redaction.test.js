@@ -48,6 +48,21 @@ describe('logger — PII redaction', () => {
     expect(entry.key).toContain('[stripe_key]');
   });
 
+  it('redacts Meta (Facebook) access tokens embedded in free text — EAA prefix', () => {
+    // Meta echoes the token back in "Malformed access token <token>" errors; we must not log it raw.
+    log.error('channels.ig', new Error('boom'), { status: 'Malformed access token EAAfakeTokenABCdef0123456789ghijkl' });
+    const entry = JSON.parse(consoleErrors[0]);
+    expect(entry.status).not.toContain('EAAfakeTokenABCdef0123456789ghijkl');
+    expect(entry.status).toContain('[meta_token]');
+  });
+
+  it('redacts Instagram access tokens — IGAA prefix', () => {
+    log.info('test', { msg: 'using IGAAfakeTokenABCdef0123456789ghijklmnop now' });
+    const entry = JSON.parse(consoleLogs[0]);
+    expect(entry.msg).not.toContain('IGAAfakeTokenABCdef0123456789ghijklmnop');
+    expect(entry.msg).toContain('[meta_token]');
+  });
+
   it('redacts known sensitive key names entirely', () => {
     log.info('test', { password: 'super-secret-123', token: 'abc123', secret: 'xyz' });
     const entry = JSON.parse(consoleLogs[0]);

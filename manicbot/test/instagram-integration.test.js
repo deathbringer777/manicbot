@@ -140,6 +140,17 @@ describe('InstagramAdapter.send()', () => {
     expect(body.message.text).toContain('https://files.test/doc.pdf');
   });
 
+  it('sendDocument drops a non-https (http://) link — #329 https-only', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message_id: 'mid' }), { status: 200 }),
+    );
+    const adapter = makeIGAdapter('pg_1', 'tok_1');
+    await adapter.sendDocument('user1', 'http://insecure.test/doc.pdf', 'doc.pdf', 'Your receipt');
+    const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    expect(body.message.text).toContain('Your receipt');            // caption still delivered
+    expect(body.message.text).not.toContain('http://insecure.test'); // insecure link dropped
+  });
+
   it('answerCallback is a no-op', async () => {
     const adapter = makeIGAdapter('pg_1', 'tok_1');
     const res = await adapter.answerCallback('cb_id', 'text');

@@ -215,8 +215,8 @@ export class WhatsAppAdapter {
    * @param {string} caption
    */
   async sendDocument(userId, content, filename, caption) {
-    // If content looks like a URL, use document message; otherwise send as text link
-    if (typeof content === 'string' && content.startsWith('http')) {
+    // If content is an https URL, use a document message; http:// / non-URL falls back to a text link (#329 https-only)
+    if (typeof content === 'string' && content.startsWith('https://')) {
       const body = {
         messaging_product: 'whatsapp',
         to: userId,

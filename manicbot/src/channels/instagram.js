@@ -251,8 +251,8 @@ export class InstagramAdapter {
    */
   async sendDocument(userId, content, filename, caption) {
     const text = caption ? `📎 ${caption}` : `📎 ${filename}`;
-    // If it's a URL, include it
-    const link = typeof content === 'string' && content.startsWith('http') ? `\n${content}` : '';
+    // If it's an https URL, include it (http:// is dropped — #329 https-only for attachment links)
+    const link = typeof content === 'string' && content.startsWith('https://') ? `\n${content}` : '';
     return this.send(userId, { text: text + link });
   }
 

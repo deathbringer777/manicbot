@@ -3,7 +3,7 @@
  *
  * Features:
  *  - JSON-structured output (picks up cleanly by Cloudflare Logpush)
- *  - PII redaction: scrubs emails, phone numbers, bot tokens, passwords,
+ *  - PII redaction: scrubs emails, phone numbers, bot tokens, Meta access tokens, passwords,
  *    Stripe keys, tenant IDs in sensitive contexts, and IP addresses.
  *  - Stack-trace truncation (300 chars) to avoid logpush bloat
  *  - No external deps
@@ -32,14 +32,18 @@ const EMAIL_RE = /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g;
 const PHONE_RE = /\+?[0-9]{7,15}/g;
 const BOT_TOKEN_RE = /\d{8,12}:[A-Za-z0-9_-]{35}/g;
 const STRIPE_KEY_RE = /(sk|pk|rk)_(live|test)_[A-Za-z0-9]{20,}/g;
+// Meta (Facebook/Instagram) Graph access tokens. Meta echoes the token back in
+// "Malformed access token <token>" errors, so it can leak into free-text log values.
+const META_TOKEN_RE = /\b(?:EAA|IGAA)[A-Za-z0-9_-]{20,}/g;
 
 function redactValue(val) {
   if (typeof val === 'string') {
-    // Order matters: bot tokens (digits:base64) and Stripe keys must be replaced
-    // BEFORE the generic phone regex matches their digit prefix.
+    // Order matters: structured tokens/keys (which contain digit runs) must be
+    // replaced BEFORE the generic phone regex matches their digit prefix.
     return val
       .replace(BOT_TOKEN_RE, '[bot_token]')
       .replace(STRIPE_KEY_RE, '[stripe_key]')
+      .replace(META_TOKEN_RE, '[meta_token]')
       .replace(EMAIL_RE, '[email]')
       .replace(PHONE_RE, '[phone]');
   }

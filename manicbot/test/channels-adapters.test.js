@@ -5,7 +5,7 @@
  *  - whatsapp.js (WhatsAppAdapter.normalize, htmlToWhatsApp, _buildInteractive)
  *  - instagram.js (InstagramAdapter.normalize, htmlToPlainText)
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { makeInbound, makeOutbound } from '../src/channels/types.js';
 import { TelegramAdapter } from '../src/channels/telegram.js';
 import { WhatsAppAdapter } from '../src/channels/whatsapp.js';
@@ -322,6 +322,32 @@ function makeIGAdapter(pageId = 'pg_123', token = 'ig_token', instagramIgnoreSen
     ...(instagramIgnoreSenderIds !== undefined ? { instagramIgnoreSenderIds } : {}),
   });
 }
+
+describe('WhatsAppAdapter.sendDocument', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sends a document message for an https URL', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ messages: [{ id: 'wamid' }] }), { status: 200 }),
+    );
+    const adapter = makeWAAdapter();
+    await adapter.sendDocument('user1', 'https://files.test/doc.pdf', 'doc.pdf', 'Receipt');
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.type).toBe('document');
+    expect(body.document.link).toBe('https://files.test/doc.pdf');
+  });
+
+  it('does NOT send a non-https (http://) link as a document — #329 https-only', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ messages: [{ id: 'wamid' }] }), { status: 200 }),
+    );
+    const adapter = makeWAAdapter();
+    await adapter.sendDocument('user1', 'http://insecure.test/doc.pdf', 'doc.pdf', 'Receipt');
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.type).not.toBe('document');                          // falls back to text
+    expect(JSON.stringify(body)).not.toContain('http://insecure.test'); // insecure link not forwarded
+  });
+});
 
 describe('InstagramAdapter.normalize', () => {
   const adapter = makeIGAdapter();

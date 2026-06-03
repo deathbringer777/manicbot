@@ -50,6 +50,7 @@ import { platformConfigRouter } from "~/server/api/routers/platformConfig";
 import { blogRouter } from "~/server/api/routers/blog";
 import { platformCustomersRouter } from "~/server/api/routers/platformCustomers";
 import { analyticsEventsRouter } from "~/server/api/routers/analyticsEvents";
+import { adminBotsRouter } from "~/server/api/routers/adminBots";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -103,6 +104,7 @@ export const appRouter = createTRPCRouter({
   blog: blogRouter,
   platformCustomers: platformCustomersRouter,
   analyticsEvents: analyticsEventsRouter,
+  adminBots: adminBotsRouter,
 });
 
 export type AppRouter = typeof appRouter;

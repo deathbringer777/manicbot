@@ -1175,12 +1175,16 @@ export async function tryAdminKeyRoutes(request, env, url) {
     const ec = envCtx(env);
     if (!ec.db) return Response.json({ error: 'DB not bound' }, { status: 500 });
     const baseUrl = (env.APP_BASE_URL || url.origin).replace(/\/$/, '');
+    // Optional ?botId= → re-register just that one bot (the per-row button in
+    // the admin-app Bots page). Omitted → re-register every bot (original).
+    const onlyBotId = url.searchParams.get('botId');
     const results = [];
     try {
       const tenantIds = await listTenantIds(ec);
       for (const tenantId of tenantIds) {
         const botIds = await getBotIdsByTenantId(ec, tenantId);
         for (const botId of botIds) {
+          if (onlyBotId && botId !== onlyBotId) continue;
           const bot = await getBot(ec, botId);
           const token = await getBotToken(ec, botId, env.BOT_ENCRYPTION_KEY || null);
           if (!token) { results.push({ botId, tenantId, error: 'no token' }); continue; }
@@ -1205,6 +1209,61 @@ export async function tryAdminKeyRoutes(request, env, url) {
       return Response.json({ error: 'Reset failed', code: 'RESET_WEBHOOKS_ERROR' }, { status: 500 });
     }
     return Response.json({ ok: true, count: results.length, results });
+  }
+
+  // GET /admin/bots-status — God Mode: live Telegram webhook status for every
+  // bot. Backs the admin-app "Bots" page so a silently-unregistered webhook
+  // (the failure that makes bots go dark) is visible at a glance. Auth: Bearer
+  // ADMIN_KEY. Read-only: getWebhookInfo per bot, in parallel. The response
+  // carries webhook metadata ONLY — never the bot token.
+  if (url.pathname === '/admin/bots-status') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    const ec = envCtx(env);
+    if (!ec.db) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    const bots = [];
+    try {
+      // tenant-scan-ignore: God Mode platform-wide bot status (ADMIN_KEY-gated, cross-tenant by design)
+      const tenantIds = await listTenantIds(ec);
+      const pairs = [];
+      for (const tenantId of tenantIds) {
+        const botIds = await getBotIdsByTenantId(ec, tenantId);
+        for (const botId of botIds) pairs.push({ tenantId, botId });
+      }
+      await Promise.all(pairs.map(async ({ tenantId, botId }) => {
+        const bot = await getBot(ec, botId);
+        const token = await getBotToken(ec, botId, env.BOT_ENCRYPTION_KEY || null);
+        let webhook;
+        if (!token) {
+          webhook = { ok: false, set: false, error: 'no_token' };
+        } else {
+          try {
+            const r = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`, { signal: AbortSignal.timeout(8000) });
+            const data = await r.json().catch(() => ({}));
+            if (data && data.ok && data.result) {
+              const info = data.result;
+              webhook = {
+                ok: true,
+                set: !!info.url,
+                url: info.url || '',
+                pending: info.pending_update_count || 0,
+                lastErrorDate: info.last_error_date || null,
+                lastErrorMessage: info.last_error_message || null,
+              };
+            } else {
+              webhook = { ok: false, set: false, error: (data && data.description) || 'getWebhookInfo_failed' };
+            }
+          } catch (e) {
+            webhook = { ok: false, set: false, error: e?.message || 'fetch_failed' };
+          }
+        }
+        bots.push({ botId, tenantId, username: bot?.botUsername || null, active: bot?.active ?? false, webhook });
+      }));
+    } catch (e) {
+      log.error('http.adminKey', e instanceof Error ? e : new Error(String(e?.message)), { action: 'bots_status' });
+      return Response.json({ error: 'bots_status_failed', code: 'BOTS_STATUS_ERROR' }, { status: 500 });
+    }
+    bots.sort((a, b) => String(a.tenantId).localeCompare(String(b.tenantId)) || String(a.botId).localeCompare(String(b.botId)));
+    return Response.json({ ok: true, count: bots.length, bots });
   }
 
   // POST /admin/web-user?key=ADMIN_KEY — create or update a web (email/password) user for the admin-app

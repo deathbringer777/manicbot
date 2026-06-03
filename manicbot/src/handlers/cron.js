@@ -530,6 +530,32 @@ export async function phaseReminders(ctx, now, w) {
     langMap.set(cid, (await getLang(ctx, cid)) || 'ru');
   }));
 
+  // Pre-load non-telegram channel identities for all unique chat IDs in one
+  // (chunked) query to avoid an N+1 per-appointment DB round-trip inside the
+  // loop below. Keys are normalized to String because appointments.chat_id and
+  // channel_identities.internal_user_id can differ in SQLite type affinity.
+  const identityMap = new Map();
+  if (ctx.db && ctx.tenantId && chatIds.length) {
+    const CHUNK = 100; // stay well under the SQLite bound-parameter limit
+    for (let i = 0; i < chatIds.length; i += CHUNK) {
+      const slice = chatIds.slice(i, i + CHUNK);
+      const placeholders = slice.map(() => '?').join(', ');
+      const idRows = await dbAll(ctx,
+        `SELECT internal_user_id, channel_type, channel_user_id
+           FROM channel_identities
+          WHERE tenant_id = ? AND channel_type != 'telegram'
+            AND internal_user_id IN (${placeholders})`,
+        ctx.tenantId, ...slice,
+      );
+      for (const r of idRows) {
+        const key = String(r.internal_user_id);
+        const list = identityMap.get(key) || [];
+        list.push({ channel_type: r.channel_type, channel_user_id: r.channel_user_id });
+        identityMap.set(key, list);
+      }
+    }
+  }
+
   for (const row of apts) {
     try {
       const diffH = (row.ts - now) / 3600000;
@@ -552,10 +578,7 @@ export async function phaseReminders(ctx, now, w) {
       // Check if client has a non-Telegram channel identity
       let sent = false;
       if (ctx.db && ctx.tenantId) {
-        const identities = await dbAll(ctx,
-          "SELECT channel_type, channel_user_id FROM channel_identities WHERE tenant_id = ? AND internal_user_id = ? AND channel_type != 'telegram'",
-          ctx.tenantId, row.chat_id,
-        );
+        const identities = identityMap.get(String(row.chat_id)) || [];
         for (const identity of identities) {
           if (identity.channel_type === 'whatsapp' && canUse(ctx, 'whatsapp')) {
             const withinWindow = await isWithinMessageWindow(ctx, 'whatsapp', identity.channel_user_id);

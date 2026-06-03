@@ -200,12 +200,13 @@ export async function upsertClientConvThreadForInbound(ctx, params) {
     );
 
     // Touch the thread for inbox ordering.
-    // tenant-scan-ignore: threadId resolved for this tenant earlier in this upsert; the thread_messages INSERT above is tenant-stamped (authorize-then-act).
+    // threadId resolved for this tenant earlier in this upsert (authorize-then-act);
+    // the tenant_id predicate below is defense-in-depth against a future regression.
     await dbRunSafe(ctx,
       `UPDATE threads
           SET last_message_at = ?, last_message_preview = ?, archived = 0
-        WHERE id = ?`,
-      now, previewBody(messageBody), threadId,
+        WHERE id = ? AND tenant_id = ?`,
+      now, previewBody(messageBody), threadId, params.tenantId,
     );
 
     return { threadId, messageId };
@@ -248,12 +249,13 @@ export async function appendOutboundStaffMessage(ctx, params) {
       params.body, null, 0, params.externalMsgId, params.replyToMessageId ?? null,
       now, null, null,
     );
-    // tenant-scan-ignore: caller verifies the thread belongs to the tenant (documented contract); the thread_messages INSERT above is tenant-stamped, this touch keys by that threadId.
+    // caller verifies the thread belongs to the tenant (documented contract);
+    // the tenant_id predicate below is defense-in-depth against a future regression.
     await dbRunSafe(ctx,
       `UPDATE threads
           SET last_message_at = ?, last_message_preview = ?
-        WHERE id = ?`,
-      now, previewBody(params.body), params.threadId,
+        WHERE id = ? AND tenant_id = ?`,
+      now, previewBody(params.body), params.threadId, params.tenantId,
     );
     return { messageId };
   } catch (e) {

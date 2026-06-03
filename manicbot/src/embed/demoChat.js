@@ -116,6 +116,13 @@ export function sanitizeBotHtml(html, parseMode) {
 
 export const DEMO_CHAT_SRC = `
 (function () {
+  // esbuild (wrangler's bundler, keepNames:true) rewrites inner named helpers
+  // to "function esc2(){}; __name(esc2,'esc')" and that __name call travels with
+  // any function we inline below via .toString(). __name is defined in the Worker
+  // MODULE scope, not in this browser IIFE, so it would throw "__name is not
+  // defined" on the first bot bubble. Shim it as identity to keep inlined
+  // sanitizers self-contained. See test/embed-sanitize-bothtml.test.js.
+  var __name = function (fn) { return fn; };
   // document.currentScript is null for async/defer scripts — fall back to
   // finding any <script> whose src contains our known path segment.
   var scriptEl = document.currentScript ||

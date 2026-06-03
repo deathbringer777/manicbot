@@ -1,5 +1,8 @@
 import { resolveTenantFromBotId, buildTenantCtx, buildLegacyCtx, isMigrationDone } from '../tenant/resolver.js';
 import { envCtx } from './envCtx.js';
+import { buildAdminBotCtx, adminBotId } from '../adminbot/ctx.js';
+import { getTenantIdByBotId } from '../tenant/storage.js';
+import { log } from '../utils/logger.js';
 
 /**
  * P2-3 — Legacy single-bot ctx (env BOT_TOKEN + WEBHOOK_SECRET) is now opt-in.
@@ -22,6 +25,21 @@ export async function getCtx(env, url, request) {
   const webhookBotMatch = url.pathname.match(/^\/webhook\/([^/]+)$/);
   if (request.method === 'POST' && webhookBotMatch) {
     const seg = webhookBotMatch[1];
+    // Admin/ops bot interception (system_admin) — MUST run before tenant
+    // resolution so the tenant-less admin ctx is used. Enabled only when the
+    // admin webhook secret is configured. HIJACK GUARD: if this botId is a
+    // registered client bot, refuse to treat it as the admin bot and fall
+    // through to normal tenant resolution (never steal a salon's updates).
+    const adminId = adminBotId(env);
+    if (adminId && seg === adminId && env.ADMIN_WEBHOOK_SECRET) {
+      const clientTenant = ec.db ? await getTenantIdByBotId(ec, seg) : null;
+      if (clientTenant) {
+        log.error('http.resolveCtx', new Error('admin botId collides with a registered client bot — admin bot disabled for this id'), { botId: seg, tenantId: clientTenant });
+      } else {
+        const adminCtx = buildAdminBotCtx(env);
+        if (adminCtx) return adminCtx;
+      }
+    }
     // Meta WhatsApp / Instagram — not Telegram bot ids (see tryMetaWebhooks, tryTelegramWebhook)
     if (seg !== 'wa' && seg !== 'ig') {
       const resolved = await resolveTenantFromBotId(ec, seg, env.BOT_ENCRYPTION_KEY || null);

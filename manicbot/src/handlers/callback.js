@@ -127,6 +127,11 @@ async function showGoogleCalendarPanel(
 
 export async function onCb(ctx, cb) {
   if (!cb?.message?.chat?.id || !cb?.from || !cb?.data) return;
+  // Platform admin/ops bot runs an entirely separate, owner-only pipeline.
+  if (ctx.isAdminBot) {
+    const { onAdminCb } = await import('../adminbot/handler.js');
+    return onAdminCb(ctx, cb);
+  }
   if (cb.message.chat.type !== 'private') return;
 
   const cid = cb.message.chat.id;

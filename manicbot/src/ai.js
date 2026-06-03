@@ -673,3 +673,68 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
   }
   return null;
 }
+
+/**
+ * Shared Workers AI invocation core. Given a fully-built system prompt and a
+ * user message, run the same model fallback chain the customer path uses (REST
+ * first, then the AI binding) and return the model's text reply, or null.
+ *
+ * Unlike `runWorkersAI`, the caller owns the system prompt verbatim (persona +
+ * instructions) — this is what lets the admin/ops bot drive the same model core
+ * with a completely different role. User input and history are sanitized here
+ * (prompt-injection neutralization) exactly as the customer path does. There is
+ * NO per-tenant budget gate: the admin/ops bot is tenant-less; callers that
+ * need budgeting use `runWorkersAI`.
+ *
+ * @param {any} ctx
+ * @param {string} systemPrompt - full system prompt, used verbatim
+ * @param {string} userText - latest user message (sanitized inside)
+ * @param {Array<{role:string,content:string}>} [history] - prior turns (sanitized inside)
+ * @returns {Promise<string|null>}
+ */
+export async function callModel(ctx, systemPrompt, userText, history = []) {
+  const cleanUser = sanitizeUserInput(String(userText || '').slice(0, 500));
+  if (!cleanUser || cleanUser.length < 2) return null;
+  const safeHistory = (Array.isArray(history) ? history : []).map(m => ({
+    role: m.role === 'user' ? 'user' : 'assistant',
+    content: sanitizeHistoryContent(m.content),
+  }));
+  const models = [AI_MODEL, AI_MODEL_FALLBACK, AI_MODEL_FALLBACK2];
+
+  // REST path (preferred — explicit account token).
+  const token = ctx.WORKERS_AI_API_TOKEN;
+  const accountId = ctx.CLOUDFLARE_ACCOUNT_ID;
+  if (token && accountId) {
+    let prompt = systemPrompt + '\n\n';
+    for (const m of safeHistory) {
+      prompt += `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}\n\n`;
+    }
+    prompt += `User: ${cleanUser}`;
+    const promptBody = { prompt: prompt.slice(0, 6000), max_tokens: AI_MAX_TOKENS };
+    for (const modelId of models) {
+      try {
+        const text = await runWorkersAIViaRESTOne(ctx, accountId, token, modelId, promptBody);
+        if (text) return text;
+      } catch (e) {
+        log.error('ai.callModel.rest', e instanceof Error ? e : new Error(String(e.message)), { modelId });
+      }
+    }
+  }
+
+  // Binding fallback.
+  if (ctx.AI) {
+    const messages = [{ role: 'system', content: systemPrompt }, ...safeHistory, { role: 'user', content: cleanUser }];
+    const messagesPayload = { messages, max_tokens: AI_MAX_TOKENS };
+    const aiTimeout = () => new Promise((_, reject) => setTimeout(() => reject(new Error('AI binding timeout')), AI_TIMEOUT_MS));
+    for (const modelId of models) {
+      try {
+        const out = await Promise.race([ctx.AI.run(modelId, messagesPayload), aiTimeout()]);
+        const text = parseAIResponse(out);
+        if (text) return text.slice(0, 1000);
+      } catch (e) {
+        log.error('ai.callModel.binding', e instanceof Error ? e : new Error(String(e.message)), { modelId });
+      }
+    }
+  }
+  return null;
+}

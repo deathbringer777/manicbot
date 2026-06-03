@@ -244,6 +244,11 @@ async function handleAIChat(ctx, cid, txt, lg, realRole, from, opts = {}) {
 
 export async function onMsg(ctx, msg) {
   if (!msg?.chat?.id || !msg?.from) return;
+  // Platform admin/ops bot runs an entirely separate, owner-only pipeline.
+  if (ctx.isAdminBot) {
+    const { onAdminMsg } = await import('../adminbot/handler.js');
+    return onAdminMsg(ctx, msg);
+  }
   if (msg.chat.type !== 'private') return;
 
   const cid = msg.chat.id;

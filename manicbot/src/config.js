@@ -147,6 +147,26 @@ export const CB = {
   ADM_ALL_APTS:   'adm:aa',   // all appointments (no filter)
   ADM_ALL_APTS_M: 'adm:aam:', // filtered by master: adm:aam:{masterId}
   ADM_RENAME_M:   'adm:rnm:', // rename master: adm:rnm:{chatId}
+  // ── Platform admin/ops bot (system_admin only; reached via the admin bot) ──
+  // Short 'ab:' prefixes keep callback_data well under Telegram's 64-byte cap.
+  ADMINBOT_MAIN:            'ab',
+  ADMINBOT_STATS:           'ab:st',
+  ADMINBOT_SIGNUPS:         'ab:su',
+  ADMINBOT_APPTS:           'ab:ap',
+  ADMINBOT_MRR:             'ab:mrr',
+  ADMINBOT_ERRORS:          'ab:er',
+  ADMINBOT_BOT_HEALTH:      'ab:bh',
+  ADMINBOT_AI_USAGE:        'ab:ai',
+  ADMINBOT_TENANT_PROMPT:   'ab:tq',
+  ADMINBOT_OPS_MENU:        'ab:ops',
+  ADMINBOT_OPS_RESET_WH:    'ab:ops:rwh',
+  ADMINBOT_OPS_TEST_NOTIFY: 'ab:ops:tn',
+  ADMINBOT_OPS_MKT_TICK:    'ab:ops:mt',
+  // Confirm step uses a DISTINCT prefix ('ab:ok:') so a mis-tap on the prompt
+  // can never be decoded as a confirmed mutation.
+  ADMINBOT_CONFIRM_RESET_WH:    'ab:ok:rwh',
+  ADMINBOT_CONFIRM_TEST_NOTIFY: 'ab:ok:tn',
+  ADMINBOT_CONFIRM_MKT_TICK:    'ab:ok:mt',
 };
 
 export const STEP = {
@@ -195,6 +215,8 @@ export const STEP = {
   // Google Calendar
   SET_CALENDAR_ID:      'set_calendar_id',
   RENAME_MASTER:        'rename_master',
+  // Platform admin/ops bot — awaiting a tenant name/slug after the 🔎 button
+  ADMINBOT_TENANT_QUERY: 'adminbot_tenant_query',
 };
 
 export const TIMEZONE = 'Europe/Warsaw';

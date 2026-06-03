@@ -4,6 +4,7 @@ import {
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Star, BarChart3, ArrowLeftRight, Inbox,
   Puzzle, Megaphone, AlertOctagon, Plug, BookOpen, UsersRound, TrendingUp, Ticket,
+  Bot,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -47,6 +48,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   // ── God Mode ──
   { id: "god.dashboard",     href: "/dashboard",          icon: Home,            labelKey: "Dashboard",        roles: ["system_admin"], group: "overview" },
   { id: "god.tenants",       href: "/tenants",            icon: Building2,       labelKey: "Tenants",          roles: ["system_admin"], group: "management" },
+  { id: "god.bots",          href: "/bots",               icon: Bot,             labelKey: "Bots",             roles: ["system_admin"], group: "management" },
   { id: "god.users",         href: "/users",              icon: Users,           labelKey: "Users",            roles: ["system_admin"], group: "management" },
   { id: "god.appointments",  href: "/appointments",       icon: CalendarDays,    labelKey: "Appointments",     roles: ["system_admin"], group: "management" },
   { id: "god.messages",      href: "/messages",            icon: MessageSquare,   labelKey: "Inbox",            roles: ["system_admin"], group: "management" },

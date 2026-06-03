@@ -9,6 +9,7 @@ export const NAV_LABELS: Record<string, Record<string, string>> = {
     "Dashboard": "Домой",
     "Users": "Пользователи",
     "Tenants": "Салоны",
+    "Bots": "Боты",
     "Appointments": "Записи",
     "Inbox": "Входящие",
     "Platform tickets": "Тикеты платформы",

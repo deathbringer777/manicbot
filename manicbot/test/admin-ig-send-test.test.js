@@ -17,7 +17,7 @@ vi.mock('../src/utils/events.js', () => ({ logEvent: vi.fn(async () => {}) }));
 vi.mock('../src/utils/audit.js', () => ({ audit: vi.fn(async () => {}) }));
 
 vi.mock('../src/channels/token-manager.js', () => ({
-  getDecryptedToken: vi.fn(async (_ctx, _id, key) => key ? 'EAA_test_decrypted' : null),
+  getDecryptedToken: vi.fn(async (_ctx, _tenantId, _id, key) => key ? 'EAA_test_decrypted' : null),
 }));
 
 vi.mock('../src/utils/db.js', () => ({

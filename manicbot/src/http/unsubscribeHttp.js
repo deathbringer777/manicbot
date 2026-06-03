@@ -125,6 +125,7 @@ export async function handleUnsubscribeRequest(request, token, env) {
   // ── Primary: marketing_contacts (per-tenant CRM) ─────────────────────
   let contact = null;
   try {
+    // tenant-scan-ignore: public unsubscribe — contact located by an unguessable per-contact unsubscribe_token (capability token; cross-tenant by design).
     contact = await dbGet(
       ctx,
       `SELECT id, locale, unsubscribed FROM marketing_contacts WHERE unsubscribe_token = ? LIMIT 1`,
@@ -140,6 +141,7 @@ export async function handleUnsubscribeRequest(request, token, env) {
       const ua = (request.headers.get('user-agent') || '').slice(0, 500);
       const now = Math.floor(Date.now() / 1000);
       try {
+        // tenant-scan-ignore: contact resolved above by the capability unsubscribe_token; update keyed by that row's id (authorize-then-act).
         await dbRun(
           ctx,
           `UPDATE marketing_contacts

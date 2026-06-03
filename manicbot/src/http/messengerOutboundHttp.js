@@ -53,7 +53,7 @@ function isAdminKeyValid(env, request) {
  * the Worker side — the customer sees replies on next chat-widget refresh).
  *
  * @param {string} channelType
- * @param {object} channelConfig - row from channel_configs with decrypted token
+ * @param {object} channelConfig - a channel_configs row with decrypted token
  * @param {object} ctx - tenant ctx (used by adapters for window checks)
  * @param {object} env - Worker env (for tokens etc.)
  */

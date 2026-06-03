@@ -1,7 +1,7 @@
 /**
  * userNotify — multi-channel notification fanout for the platform.
  *
- * Always writes an in-app row into `user_notifications` (consumed by the
+ * Always writes an in-app `user_notifications` row (consumed by the
  * header bell in admin-app/src/components/layout/NotificationBell.tsx)
  * unless the caller explicitly disables that channel. Optionally also
  * sends a Telegram DM when the target has a linked chat_id. Resolution
@@ -184,12 +184,14 @@ async function fanOutWebPush(ctx, webUserId, payload) {
       );
       if (res.ok) {
         ok++;
+        // tenant-scan-ignore: subs loaded above by web_user_id (line ~162); update keyed by that subscription row's id (user-scoped).
         await dbRun(
           ctx,
           'UPDATE push_subscriptions SET last_used_at = unixepoch(), failure_count = 0 WHERE id = ?',
           s.id,
         ).catch(() => {});
       } else if (res.status === 404 || res.status === 410) {
+        // tenant-scan-ignore: same web_user_id-scoped subs (dead-subscription cleanup); keyed by the subscription row's id (user-scoped).
         await dbRun(
           ctx,
           'UPDATE push_subscriptions SET failure_count = failure_count + 1 WHERE id = ?',

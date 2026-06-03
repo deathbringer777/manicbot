@@ -105,6 +105,7 @@ async function setInstallationBillingState(ctx, metaTenantId, customerId, slug, 
     values.push(extra.paymentIntentId);
   }
   values.push(row.id);
+  // tenant-scan-ignore: signature-verified Stripe webhook; row.id resolved above from the event's plugin/customer mapping, update keyed by that PK (authorize-then-act).
   await dbRun(ctx,
     `UPDATE plugin_installations SET ${assignments.join(', ')} WHERE id = ?`,
     ...values,

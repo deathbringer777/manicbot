@@ -166,6 +166,7 @@ async function ensureGoogleCalendarSchema(ctx) {
   try { await dbRun(ctx, 'ALTER TABLE google_busy_blocks ADD COLUMN location TEXT'); } catch {}
   try { await dbRun(ctx, 'ALTER TABLE google_busy_blocks ADD COLUMN creator TEXT'); } catch {}
   // Cascade-delete trigger: clean up busy blocks when an integration is removed
+  // tenant-scan-ignore: DDL trigger body — cascade-deletes busy_blocks for the integration row being deleted (keyed by OLD.id).
   await dbRun(ctx, `
     CREATE TRIGGER IF NOT EXISTS trg_gcal_integration_delete
     AFTER DELETE ON google_integrations
@@ -307,6 +308,7 @@ async function refreshAccessToken(ctx, integration) {
       if (data.error === 'invalid_grant') {
         try {
           const { dbRun } = await import('../utils/db.js');
+          // tenant-scan-ignore: integration already resolved/loaded by the caller; disable-on-invalid-grant keyed by integration.id (authorize-then-act).
           await dbRun(ctx,
             `UPDATE google_integrations
              SET sync_enabled = 0, last_sync_status = 'disabled_invalid_grant',
@@ -629,6 +631,7 @@ export async function getGoogleIntegration(ctx, { scope = 'tenant', masterChatId
 export async function getGoogleIntegrationById(ctx, integrationId) {
   await ensureGoogleCalendarSchema(ctx);
   if (!ctx?.db || !integrationId) return null;
+  // tenant-scan-ignore: by-id integration resolver (D4 audited) — callers are the Google webhook (validated by watch-channel-id match, line ~1042) and tenant-scoped appointment flows; the webhook discovers the tenant FROM the integration so it cannot pre-scope.
   const row = await dbGet(ctx, 'SELECT * FROM google_integrations WHERE id = ?', integrationId);
   return rowToIntegration(row);
 }
@@ -1123,6 +1126,7 @@ export async function loadExternalBusyBlocks(ctx, date, masterId = null) {
   const result = [];
   const seen = new Set();
   for (const integration of integrations) {
+    // tenant-scan-ignore: integrations resolved for this tenant above (loadExternalBusyBlocks guards ctx.tenantId); busy_blocks keyed by those integration_ids (authorize-then-act).
     const rows = await dbAll(ctx,
       'SELECT * FROM google_busy_blocks WHERE integration_id = ? AND start_ts < ? AND end_ts > ?',
       integration.id, endTs, startTs,

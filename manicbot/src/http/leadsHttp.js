@@ -102,6 +102,7 @@ export async function tryLeadRoutes(request, env, url) {
       // is granted only via newsletter double-opt-in or an explicit owner/booking
       // opt-in, each logged in marketing_consent_log. ON CONFLICT does NOT touch
       // consent — a repeat lead must never silently (re)grant or revoke it. MKT-01.
+      // tenant-scan-ignore: platform landing-lead capture — marketing_contacts row is platform-level (no tenant), keyed by email; not a tenant CRM write. MKT-01.
       await dbRun(ec, `
         INSERT INTO marketing_contacts (email, name, phone, source, first_seen_at, last_seen_at, lead_count, consent_email, consent_sms)
         VALUES (?, ?, ?, 'landing', ?, ?, 1, 0, 0)

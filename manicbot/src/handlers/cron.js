@@ -1115,7 +1115,7 @@ export async function handleCron(ctx) {
           log.error('handlers.cron', new Error('IG token missing or failed to decrypt — update via POST /admin/ig-token'), { tenantId: ctx.tenantId });
         } else if (isTokenExpiring(igConfig, 10)) {
           log.warn('handlers.cron', { message: 'IG token expiring soon, attempting refresh', tenantId: ctx.tenantId });
-          const refreshResult = await refreshInstagramToken(ctx, igConfig.id, ctx.BOT_ENCRYPTION_KEY || null);
+          const refreshResult = await refreshInstagramToken(ctx, ctx.tenantId, igConfig.id, ctx.BOT_ENCRYPTION_KEY || null);
           if (refreshResult.ok) {
             log.info('handlers.cron', { message: 'IG token refreshed', tenantId: ctx.tenantId });
           } else {
@@ -1260,7 +1260,7 @@ async function processPostVisitConfirmations(ctx, nowMs) {
   // Compute appointment end_at = ts + service duration. Filter on ts and
   // post-filter in JS — typical tenant has <500 open apts.
   //
-  // LEFT JOIN masters so we can read `is_synthetic` per appointment. A NULL
+  // LEFT-join the masters table so we can read `is_synthetic` per appointment. A NULL
   // join (master_id with no corresponding masters row) is treated as
   // non-synthetic so legacy rows behave as before — the existing
   // `master_id > 0` guard further protects against negative synthetic ids

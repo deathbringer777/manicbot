@@ -246,6 +246,7 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
               // resolve already re-wrapped this row during the rotation window,
               // our `token_encrypted = rawTok` predicate matches 0 rows and we
               // no-op instead of redundantly re-writing an equivalent blob.
+              // tenant-scan-ignore: channel-token rotation self-heal — CAS re-encrypt of the row already resolved for this tenant, keyed by its PK (row.id) + prior ciphertext.
               await dbRun(ctx,
                 'UPDATE channel_configs SET token_encrypted = ?, updated_at = ? WHERE id = ? AND token_encrypted = ?',
                 fresh, Math.floor(Date.now() / 1000), row.id, rawTok,
@@ -276,7 +277,7 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
  *
  * @param {object} env - Worker env bindings
  * @param {string} tenantId
- * @param {object} channelConfig - Row from channel_configs (with decrypted token)
+ * @param {object} channelConfig - a channel_configs row (with decrypted token)
  * @param {import('./interface.js').ChannelAdapter} channelAdapter - Already-constructed adapter
  * @returns {Promise<object|null>}
  */

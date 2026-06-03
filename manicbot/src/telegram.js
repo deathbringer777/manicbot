@@ -96,6 +96,13 @@ function logMetaAdapterResult(p, op, channelType) {
 // ── Telegram API (original, used for TG channel) ────────────────────────────
 
 async function tgApi(ctx, method, body) {
+  // #audit-9 — fail closed without a resolved bot token. ctx.TG is null for a
+  // botless tenant context; `${ctx.TG}/${method}` would fetch "null/sendMessage",
+  // throw, and get swallowed — wasting a request and logging noise.
+  if (!ctx?.TG) {
+    log.error('telegram.api', new Error('tgApi called without ctx.TG (no bot token)'), { method });
+    return { ok: false, description: 'no_bot_token' };
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
   try {

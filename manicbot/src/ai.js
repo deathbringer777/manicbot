@@ -320,6 +320,7 @@ export function parseAIActions(aiReply) {
 const ROLE_CLIENT = 'client';
 const ROLE_MASTER = 'master';
 const ROLE_OWNER = 'tenant_owner';
+const ROLE_MANAGER = 'tenant_manager';
 const ROLE_SUPPORT = 'support';
 const ROLE_SYSADMIN = 'system_admin';
 
@@ -339,8 +340,10 @@ const PLATFORM_READ_TAGS = ['SYSADM_PANEL', 'TENANT_LIST', 'SUPPORT_LIST'];
 export const AI_TAG_ROLES = (() => {
   const m = {};
   const grant = (tag, ...roles) => { (m[tag] ||= new Set()); for (const r of roles) m[tag].add(r); };
-  // Client surface — available to everyone authenticated.
-  for (const tag of CLIENT_TAGS) grant(tag, ROLE_CLIENT, ROLE_MASTER, ROLE_OWNER, ROLE_SUPPORT, ROLE_SYSADMIN);
+  // Client surface — available to everyone authenticated. tenant_manager is
+  // included: pre-#334 the client tags ran unconditionally for every role, and
+  // dropping the manager here dark-screened the bot for that role (#334 regression).
+  for (const tag of CLIENT_TAGS) grant(tag, ROLE_CLIENT, ROLE_MASTER, ROLE_OWNER, ROLE_MANAGER, ROLE_SUPPORT, ROLE_SYSADMIN);
   // BILLING: owner/master/system_admin/support.
   grant('BILLING', ROLE_OWNER, ROLE_MASTER, ROLE_SYSADMIN, ROLE_SUPPORT);
   // BOOK_FOR_CLIENT: owner/master/system_admin.

@@ -66,3 +66,28 @@ export function isAdminAppPath(pathname) {
   }
   return false;
 }
+
+/**
+ * Permanent public redirects, applied by the Worker BEFORE the admin-app
+ * proxy dispatch.
+ *
+ * `/salons` (the bare directory index) has no owner: the admin-app only
+ * implements the dynamic `salons/[city]` segment (there is no
+ * `salons/page.tsx`), so a direct hit on bare `/salons` proxies to Pages and
+ * returns the Next.js 404. Every internal link / sitemap / robots / llms.txt
+ * reference targets `/salons/{city-slug}` (which works) — nothing links to
+ * the bare index. `/search` is the canonical full-catalog index (the city
+ * page even breadcrumbs "Salony" → `/search`), so we 301 bare `/salons`
+ * there. City pages `/salons/{slug}` are NOT matched here and keep proxying.
+ *
+ * 301 (permanent) so search engines consolidate ranking signal onto
+ * `/search`; the path is GET-only directory canonicalization.
+ *
+ * @param {string} pathname URL pathname (e.g. /salons)
+ * @returns {{ to: string, status: number } | null} redirect target, or null
+ */
+export function publicRedirectFor(pathname) {
+  if (typeof pathname !== 'string') return null;
+  if (pathname === '/salons') return { to: '/search', status: 301 };
+  return null;
+}

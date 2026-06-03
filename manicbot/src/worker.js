@@ -35,7 +35,7 @@ import { tryUpload } from './http/uploadHttp.js';
 import { tryChatWeb } from './http/chatWebHttp.js';
 import { tryEmbed } from './http/embedHttp.js';
 import { tryDemoPage } from './http/demoPageHttp.js';
-import { isAdminAppPath } from './http/adminAppProxy.js';
+import { isAdminAppPath, publicRedirectFor } from './http/adminAppProxy.js';
 import { handleTrackRequest } from './http/trackHttp.js';
 import { handleSubscribeRequest } from './http/subscribeHttp.js';
 import { handleUnsubscribeRequest } from './http/unsubscribeHttp.js';
@@ -342,6 +342,24 @@ export default {
       return addSecurityHeaders(
         generateLlmsTxtResponse(url.origin, { headOnly: request.method === 'HEAD' }),
       );
+    }
+
+    // Permanent public redirects (must run BEFORE the admin-app proxy).
+    // T08: bare `/salons` has no admin-app index route (only salons/[city]),
+    // so proxying it returns the Next.js 404. 301 it to the canonical catalog
+    // index `/search`. City pages `/salons/{slug}` are not matched here and
+    // fall through to the proxy below. GET/HEAD only — never redirect away a
+    // POST body.
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      const redirect = publicRedirectFor(url.pathname);
+      if (redirect) {
+        return addSecurityHeaders(
+          new Response(null, {
+            status: redirect.status,
+            headers: { Location: new URL(redirect.to, url.origin).toString() },
+          }),
+        );
+      }
     }
 
     // Admin-app routes → proxy to Cloudflare Pages (see isAdminAppPath).

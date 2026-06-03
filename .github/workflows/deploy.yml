@@ -41,10 +41,12 @@ jobs:
       # reverted — a naive full-history scan re-flags pre-existing false
       # positives (env-var NAME identifiers in a few demo/config files) that the
       # action's push-delta scan never re-flags. A proper redo must scope to the
-      # push range or extend .gitleaksignore. The Node-20 deprecation below is a
-      # warning, not a hard failure; bump when upstream ships a node24 build.
+      # push range or extend .gitleaksignore. Bumped v2 -> v3 on 2026-06-03:
+      # v3 runs on node24, clearing the Node-20 deprecation (GitHub defaults to
+      # node24 on 2026-06-02, removes node20 on 2026-09-16). Drop-in upgrade —
+      # no input/env/output changes from v2.
       - name: Gitleaks — detect secrets in history
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

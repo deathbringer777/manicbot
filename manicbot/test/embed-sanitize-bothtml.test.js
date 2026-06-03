@@ -14,7 +14,27 @@
  * rebuilt with a single sanitized href only.
  */
 import { describe, it, expect } from 'vitest';
-import { sanitizeBotHtml } from '../src/embed/demoChat.js';
+import { sanitizeBotHtml, DEMO_CHAT_SRC } from '../src/embed/demoChat.js';
+
+describe('embed IIFE self-containment — esbuild keep-names __name shim', () => {
+  // wrangler bundles the Worker with esbuild keepNames:true. That rewrites an
+  // inner `function esc(){}` to `function esc2(){}; __name(esc2,"esc")`, and
+  // that __name call rides along when sanitizeBotHtml is inlined into the
+  // browser IIFE via `.toString()`. esbuild defines __name in the Worker module
+  // scope — NOT inside the served IIFE — so without a shim the widget throws
+  // "ReferenceError: __name is not defined" on the first bot-bubble render.
+  // The exported-function unit tests above never exercise the inlined string,
+  // which is why the break shipped. This guards the inlined surface directly.
+  it('defines a __name shim inside the served IIFE', () => {
+    expect(DEMO_CHAT_SRC).toMatch(/\bvar __name\s*=/);
+  });
+
+  it('keeps every __name() reference backed by a definition', () => {
+    if (/__name\s*\(/.test(DEMO_CHAT_SRC)) {
+      expect(DEMO_CHAT_SRC).toMatch(/\bvar __name\s*=/);
+    }
+  });
+});
 
 describe('#X-01 — sanitizeBotHtml drops attributes on allowlisted tags', () => {
   it('strips an on* event handler from a formatting tag', () => {

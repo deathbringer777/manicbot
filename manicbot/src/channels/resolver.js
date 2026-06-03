@@ -15,6 +15,25 @@ import { getTenant, getBot, getBotIdsByTenantId, getBotToken } from '../tenant/s
 // #S6: must match the label used in token-manager.js so encrypt/decrypt agree.
 const CHANNEL_TOKEN_LABEL = 'channel-token-v1';
 
+/**
+ * Defensively parse a `channel_configs.config` TEXT column into a plain object.
+ * A corrupt/partial value must not crash the IG/WA webhook, cron health check,
+ * or outbound send hot path — getChannelConfig used a bare JSON.parse that threw
+ * and dark-screened channel resolution (#audit-5). Never throws; returns {} on
+ * null, non-JSON, or non-plain-object values.
+ * @param {string|null|undefined} raw
+ * @returns {Record<string, any>}
+ */
+export function parseConfigObject(raw) {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 /** @param {unknown} v */
 function channelIdString(v) {
   if (v == null || v === '') return null;
@@ -267,7 +286,7 @@ export async function getChannelConfig(ctx, tenantId, channelType, encKey = null
       }
     }
   }
-  const config = row.config ? JSON.parse(row.config) : {};
+  const config = parseConfigObject(row.config);
   return { ...row, token, config };
 }
 

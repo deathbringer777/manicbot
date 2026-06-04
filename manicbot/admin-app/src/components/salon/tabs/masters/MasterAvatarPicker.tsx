@@ -27,6 +27,7 @@ import {
 import {
   uploadAssetFile,
   validateUploadFile,
+  resizeImageClientSide,
   UPLOAD_ACCEPT_MIME,
 } from "~/lib/uploadAsset";
 import { AvatarCropper } from "~/components/ui/AvatarCropper";
@@ -79,11 +80,15 @@ export function MasterAvatarPicker({
     updateAvatar.mutate({ tenantId, chatId, avatarEmoji: null, avatarUrl: null });
   }
 
-  function handleFile(file: File) {
+  async function handleFile(file: File) {
     setError(null);
-    const v = validateUploadFile(file);
+    // Phone photos are often 5–12 MB and would trip the 2 MB guard before the
+    // cropper ever opened. Downscale on-device first (the avatar is cropped to
+    // 512px anyway), then validate the prepared file.
+    const prepared = await resizeImageClientSide(file, 1280);
+    const v = validateUploadFile(prepared);
     if (v) { setError(v); return; }
-    setPendingFile(file); // Cropper takes over from here.
+    setPendingFile(prepared); // Cropper takes over from here.
   }
 
   async function handleCropped(cropped: File) {

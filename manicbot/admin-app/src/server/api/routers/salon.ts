@@ -562,15 +562,38 @@ export const salonRouter = createTRPCRouter({
       return { svcId };
     }),
 
+  /**
+   * Smart delete. Appointment rows resolve their service NAME live from
+   * `services` at read time (see appointmentNames.ts), so hard-deleting a
+   * service that has bookings would degrade its history to a raw `svc_…` id.
+   * We therefore hard-delete ONLY when nothing references the service;
+   * otherwise we hide it (active=0, hidden=1) to preserve that history.
+   * Either way the dashboard list drops it — SalonDashboard filters out
+   * `hidden=1` rows — so the service disappears immediately from the operator's
+   * view. `hardDeleted` reports which path ran.
+   */
   deleteService: tenantOwnerProcedure
     .input(z.object({ tenantId: z.string(), svcId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      // Soft-delete: mark as hidden + inactive rather than removing data
-      await ctx.db.update(services).set({ active: 0, hidden: 1 }).where(
-        and(eq(services.tenantId, input.tenantId), eq(services.svcId, input.svcId))
+      const where = and(
+        eq(services.tenantId, input.tenantId),
+        eq(services.svcId, input.svcId),
       );
-      return { success: true };
+      const refRows = await ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(appointments)
+        .where(and(
+          eq(appointments.tenantId, input.tenantId),
+          eq(appointments.svcId, input.svcId),
+        ));
+      const hardDeleted = Number(refRows[0]?.count ?? 0) === 0;
+      if (hardDeleted) {
+        await ctx.db.delete(services).where(where);
+      } else {
+        await ctx.db.update(services).set({ active: 0, hidden: 1 }).where(where);
+      }
+      return { success: true, hardDeleted };
     }),
 
   // ── Service categories ──────────────────────────────────────────────────

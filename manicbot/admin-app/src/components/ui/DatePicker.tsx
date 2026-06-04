@@ -24,6 +24,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { type Lang, localeFor, t } from "~/lib/i18n";
@@ -133,6 +134,20 @@ export function DatePicker({
 }: Props) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+
+  // On phones the left-anchored popover overflows the right viewport edge when
+  // the trigger sits in a right-hand column (the Отпуск "По" field). Below the
+  // sm breakpoint we portal the calendar into a centered overlay instead.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const todayIsoStr = useMemo(() => todayIso(), []);
   const selectedDate = useMemo(() => parseIso(value), [value]);
@@ -162,7 +177,12 @@ export function DatePicker({
     if (!open) return;
     const onDoc = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node | null;
-      if (wrapRef.current && target && !wrapRef.current.contains(target)) setOpen(false);
+      if (!target) return;
+      // The mobile popover portals out of wrapRef, so also treat clicks inside
+      // the popover itself as "inside" (the scrim is the only outside surface).
+      if (wrapRef.current?.contains(target)) return;
+      if (popRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -265,12 +285,18 @@ export function DatePicker({
         />
       </button>
 
-      {open && (
+      {open && (() => {
+        const popover = (
         <div
           role="dialog"
           aria-label={triggerLabel || placeholder || "calendar"}
           data-testid={`${testIdPrefix}-popover`}
-          className="absolute left-0 top-full mt-1.5 z-50 w-[19rem] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-3 shadow-2xl shadow-black/20 dark:shadow-black/60 animate-[datepicker-fade-in_120ms_ease-out]"
+          ref={popRef}
+          className={
+            isMobile
+              ? "relative z-[1] w-[19rem] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-3 shadow-2xl shadow-black/20 dark:shadow-black/60"
+              : "absolute left-0 top-full mt-1.5 z-50 w-[19rem] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-3 shadow-2xl shadow-black/20 dark:shadow-black/60 animate-[datepicker-fade-in_120ms_ease-out]"
+          }
         >
           <div className="flex items-center justify-between gap-2 px-1 pb-2">
             <button
@@ -393,7 +419,22 @@ export function DatePicker({
             )}
           </div>
         </div>
-      )}
+        );
+        if (isMobile && typeof document !== "undefined") {
+          return createPortal(
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-slate-900/40"
+                aria-hidden
+                onClick={() => setOpen(false)}
+              />
+              {popover}
+            </div>,
+            document.body,
+          );
+        }
+        return popover;
+      })()}
 
       <style jsx>{`
         @keyframes datepicker-fade-in {

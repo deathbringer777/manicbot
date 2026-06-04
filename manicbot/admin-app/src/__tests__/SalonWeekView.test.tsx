@@ -381,12 +381,35 @@ describe("SalonWeekView", () => {
         "[data-testid='week-view-non-working']",
       );
       expect(bands.length).toBe(1);
-      // HOUR_HEIGHT(48) × TOTAL_HOURS(14) = 672px full-height band.
-      expect((bands[0] as HTMLElement).style.height).toBe("672px");
+      // The window now fits the salon hours (09:00–20:00) → 11h × 48px = 528px
+      // full-height band (was 672px under the old fixed 08:00–22:00 grid).
+      expect((bands[0] as HTMLElement).style.height).toBe("528px");
       expect(bands[0]!.getAttribute("style")).toContain("repeating-linear-gradient");
     });
 
-    it("shades before-open + after-close on a working day (09:00–20:00 in 08:00–22:00)", () => {
+    it("fits the grid to salon working hours — a 09:00 appointment sits at the very top", () => {
+      renderWithLang(
+        <SalonWeekView
+          date={new Date("2026-05-10T12:00:00")}
+          setDate={() => undefined}
+          apts={[apt({ id: 1, date: "2026-05-04", time: "09:00", duration: 60 })]}
+          masters={masters}
+          isLoading={false}
+          lang="en"
+          workHours={workHours}
+        />,
+        "en",
+      );
+      const ev = colByDay("2026-05-04").querySelector(
+        "[data-testid='week-view-event']",
+      ) as HTMLElement;
+      // Window starts at 09:00, so a 09:00 booking is flush with the top
+      // (it would have been 48px down under the old fixed 08:00 grid).
+      expect(ev.style.top).toBe("0px");
+      expect(ev.style.height).toBe("48px");
+    });
+
+    it("shows NO off-hours shading on a normal working day (window == working hours)", () => {
       renderWithLang(
         <SalonWeekView
           date={new Date("2026-05-10T12:00:00")}
@@ -399,15 +422,37 @@ describe("SalonWeekView", () => {
         />,
         "en",
       );
+      // Mon–Sat 09:00–20:00 with the window fitted to those exact hours leaves
+      // nothing to hatch — the previous fixed 08:00–22:00 grid always drew
+      // before-open + after-close bands here.
+      const bands = colByDay("2026-05-04").querySelectorAll(
+        "[data-testid='week-view-non-working']",
+      );
+      expect(bands.length).toBe(0);
+    });
+
+    it("widens the window for an out-of-hours appointment and shades the leftover off-hours", () => {
+      renderWithLang(
+        <SalonWeekView
+          date={new Date("2026-05-10T12:00:00")}
+          setDate={() => undefined}
+          // 21:00 booking on Monday pushes the close to 22:00 → window 09:00–22:00.
+          apts={[apt({ id: 1, date: "2026-05-04", time: "21:00", duration: 60 })]}
+          masters={masters}
+          isLoading={false}
+          lang="en"
+          workHours={workHours}
+        />,
+        "en",
+      );
       const bands = Array.from(
         colByDay("2026-05-04").querySelectorAll("[data-testid='week-view-non-working']"),
       ) as HTMLElement[];
-      expect(bands.length).toBe(2);
-      // Before 09:00 → from 08:00, 1h = 48px tall, anchored at top 0.
-      const before = bands.find((b) => b.style.top === "0px");
-      expect(before?.style.height).toBe("48px");
-      // After 20:00 → top = 12h = 576px, height = 672 − 576 = 96px.
-      const after = bands.find((b) => b.style.top === "576px");
+      // Monday closes at 20:00 inside a 09:00–22:00 window → one after-close band:
+      // top = (20−9)×48 = 528px, height = (22−20)×48 = 96px. No before-open band
+      // because the window opens exactly at 09:00.
+      expect(bands.length).toBe(1);
+      const after = bands.find((b) => b.style.top === "528px");
       expect(after?.style.height).toBe("96px");
     });
 
@@ -428,7 +473,8 @@ describe("SalonWeekView", () => {
         "[data-testid='week-view-non-working']",
       );
       expect(bands.length).toBe(1);
-      expect((bands[0] as HTMLElement).style.height).toBe("672px");
+      // Other days keep 09:00–20:00 → window 11h → 528px full band on Monday.
+      expect((bands[0] as HTMLElement).style.height).toBe("528px");
     });
   });
 });

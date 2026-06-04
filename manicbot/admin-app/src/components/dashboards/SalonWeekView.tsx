@@ -36,9 +36,20 @@ import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHours";
 
 const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row in Week)
-const HOUR_START = 8;
-const HOUR_END = 22;
-const TOTAL_HOURS = HOUR_END - HOUR_START;
+
+// The visible hour window is computed per-week from the salon's working hours
+// (see computeVisibleHourWindow). These are only the FALLBACK bounds, used when
+// no workHours are supplied (God-Mode / per-master callers), plus the floor for
+// how small the window may shrink.
+const DEFAULT_HOUR_START = 8; // 08:00
+const DEFAULT_HOUR_END = 22; // 22:00
+const MIN_WINDOW_HOURS = 6; // never collapse the grid to a cramped sliver
+
+// Softened diagonal gray for closed / blocked time. Deliberately lighter than a
+// solid fill so a week with legitimate days off reads as "lightly closed", not
+// "everything is unavailable". Shared by the working-hours overlay and blocks.
+const HATCH_BG =
+  "repeating-linear-gradient(45deg, rgba(100,116,139,0.10) 0 6px, rgba(100,116,139,0.03) 6px 14px)";
 
 const MASTER_PALETTE = [
   { bg: "rgba(124,58,237,0.18)", border: "rgba(124,58,237,0.55)", text: "#7c3aed" },
@@ -120,9 +131,9 @@ function parseHHMMToMinutes(hhmm: string | undefined): number {
   return Number(h ?? 0) * 60 + Number(m ?? 0);
 }
 
-function timeToTop(hhmm: string): number {
+function timeToTop(hhmm: string, hourStart: number): number {
   const minutes = parseHHMMToMinutes(hhmm);
-  const start = HOUR_START * 60;
+  const start = hourStart * 60;
   return ((minutes - start) / 60) * HOUR_HEIGHT;
 }
 
@@ -133,14 +144,23 @@ function durationToHeight(durationMin: number | null | undefined): number {
 
 /**
  * Gray-band rects (top/height in px) for a weekday's salon working hours,
- * clamped to the visible [HOUR_START, HOUR_END] window. `null` (day off) →
+ * clamped to the visible [hourStart, hourEnd] window. `null` (day off) →
  * one full-height band. Mirrors SalonDayView's per-master overlay geometry.
+ *
+ * Because the window is now fitted to the salon's working hours, a normal
+ * working day produces NO bands (open/close coincide with the window edges);
+ * bands only appear for days off or when an out-of-hours item widened the
+ * window past this day's open/close.
  */
-function nonWorkingBands(dh: DayHours): Array<{ top: number; height: number }> {
-  const totalH = TOTAL_HOURS * HOUR_HEIGHT;
+function nonWorkingBands(
+  dh: DayHours,
+  hourStart: number,
+  hourEnd: number,
+): Array<{ top: number; height: number }> {
+  const totalH = (hourEnd - hourStart) * HOUR_HEIGHT;
   if (dh === null) return [{ top: 0, height: totalH }];
-  const dayStart = HOUR_START * 60;
-  const dayEnd = HOUR_END * 60;
+  const dayStart = hourStart * 60;
+  const dayEnd = hourEnd * 60;
   const openMin = parseHHMMToMinutes(dh.open);
   const closeMin = parseHHMMToMinutes(dh.close);
   // Invalid range, or hours entirely outside the visible window → whole day off.
@@ -173,6 +193,77 @@ function weekDays(d: Date): Date[] {
   return out;
 }
 
+/**
+ * Pick the [start, end] hour window the week grid renders.
+ *
+ * Policy (tunable):
+ *   1. Base window = the salon's working hours — earliest open / latest close
+ *      across the seven visible weekdays. Without workHours (God-Mode / per-
+ *      master callers) fall back to the broad DEFAULT_HOUR_START..END so their
+ *      behaviour is unchanged.
+ *   2. Never clip real data: widen the window to cover any appointment or timed
+ *      block in the week that falls outside the base window. Full-day and
+ *      multi-day bands are skipped — they span 00:00–24:00 and would blow the
+ *      window back open to the whole day, defeating the point.
+ *   3. Snap to whole hours, clamp to [0, 24], and guarantee MIN_WINDOW_HOURS so
+ *      a single short appointment can't collapse the grid to a sliver.
+ *
+ * Fitting the window to working hours is what removes both reported problems:
+ * the morning is no longer scrolled away behind a fixed 08:00–22:00 grid, and a
+ * normal working day shows no off-hours hatching (the window edges ARE the
+ * open/close times).
+ */
+function computeVisibleHourWindow(
+  workHours: WorkHoursState | undefined,
+  apts: AptRow[],
+  blocks: DayViewBlock[] | undefined,
+  days: Date[],
+): { start: number; end: number } {
+  let openMin = DEFAULT_HOUR_START * 60;
+  let closeMin = DEFAULT_HOUR_END * 60;
+
+  if (workHours) {
+    let minOpen = Infinity;
+    let maxClose = -Infinity;
+    for (const key of WEEKDAY_KEYS) {
+      const dh = workHours[key];
+      if (!dh) continue;
+      minOpen = Math.min(minOpen, parseHHMMToMinutes(dh.open));
+      maxClose = Math.max(maxClose, parseHHMMToMinutes(dh.close));
+    }
+    // Only adopt the salon hours when they form a valid window; an all-days-off
+    // or malformed config falls through to the default bounds above.
+    if (minOpen < maxClose) {
+      openMin = minOpen;
+      closeMin = maxClose;
+    }
+  }
+
+  const dayIso = new Set(days.map(fmtIsoDate));
+  for (const a of apts) {
+    if (!dayIso.has(a.date)) continue;
+    const s = parseHHMMToMinutes(a.time);
+    openMin = Math.min(openMin, s);
+    closeMin = Math.max(closeMin, s + (typeof a.duration === "number" ? a.duration : 60));
+  }
+  for (const b of blocks ?? []) {
+    const isMultiDay = !!b.endDate && b.endDate !== b.date;
+    if (isMultiDay || b.durationMin >= 24 * 60) continue;
+    if (!dayIso.has(b.date)) continue;
+    const s = parseHHMMToMinutes(b.time);
+    openMin = Math.min(openMin, s);
+    closeMin = Math.max(closeMin, s + b.durationMin);
+  }
+
+  let start = Math.max(0, Math.floor(openMin / 60));
+  let end = Math.min(24, Math.ceil(closeMin / 60));
+  if (end - start < MIN_WINDOW_HOURS) {
+    end = Math.min(24, start + MIN_WINDOW_HOURS);
+    start = Math.max(0, end - MIN_WINDOW_HOURS);
+  }
+  return { start, end };
+}
+
 export function SalonWeekView({
   date,
   setDate,
@@ -202,21 +293,29 @@ export function SalonWeekView({
   // move / resize) so the grid scrolls under a finger; creation happens via
   // the "+ Запись" button instead. Desktop (mouse/trackpad) is unchanged.
   const isTouch = useCoarsePointer();
+  const days = useMemo(() => weekDays(date), [date]);
+  // Visible hour window — fitted to the salon's working hours, widened to cover
+  // any out-of-hours item. Computed BEFORE the drag hooks because they map a
+  // pointer's Y → time against [hourStart, hourEnd].
+  const { start: hourStart, end: hourEnd } = useMemo(
+    () => computeVisibleHourWindow(workHours, apts, blocks, days),
+    [workHours, apts, blocks, days],
+  );
+  const totalHours = hourEnd - hourStart;
   const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
     hourHeight: HOUR_HEIGHT,
-    hourStart: HOUR_START,
-    hourEnd: HOUR_END,
+    hourStart,
+    hourEnd,
     isTouch,
     onCommit: (c) => (c.kind === "block" ? onMoveBlock : onMoveAppointment)?.(c),
   });
   const { ghost: resizeGhost, resizingId, bindHandle: bindResize } = useDragToResize({
     hourHeight: HOUR_HEIGHT,
-    hourStart: HOUR_START,
-    hourEnd: HOUR_END,
+    hourStart,
+    hourEnd,
     isTouch,
     onResize: (c) => onResize?.(c),
   });
-  const days = useMemo(() => weekDays(date), [date]);
   const todayIso = fmtIsoDate(new Date());
   const weekHasToday = days.some((d) => fmtIsoDate(d) === todayIso);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -292,7 +391,7 @@ export function SalonWeekView({
     if (!weekHasToday || !scrollerRef.current) return;
     const now = new Date();
     const minutes = now.getHours() * 60 + now.getMinutes();
-    const top = ((minutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
+    const top = ((minutes - hourStart * 60) / 60) * HOUR_HEIGHT;
     const todayIdx = days.findIndex((d) => fmtIsoDate(d) === todayIso);
     const tid = window.setTimeout(() => {
       const el = scrollerRef.current;
@@ -305,7 +404,7 @@ export function SalonWeekView({
       }
     }, 100);
     return () => window.clearTimeout(tid);
-  }, [weekHasToday, days, todayIso, isMobile]);
+  }, [weekHasToday, days, todayIso, isMobile, hourStart]);
 
   // Current-time line.
   const [nowMinutes, setNowMinutes] = useState(() => {
@@ -320,12 +419,12 @@ export function SalonWeekView({
     }, 60_000);
     return () => window.clearInterval(interval);
   }, [weekHasToday]);
-  const currentTimeTop = ((nowMinutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
+  const currentTimeTop = ((nowMinutes - hourStart * 60) / 60) * HOUR_HEIGHT;
   // Show the now-line only when today is within the visible window.
   const currentTimeVisible =
     weekHasToday &&
-    nowMinutes >= HOUR_START * 60 &&
-    nowMinutes < HOUR_END * 60 &&
+    nowMinutes >= hourStart * 60 &&
+    nowMinutes < hourEnd * 60 &&
     visibleTodayColumnIndex >= 0;
 
   const locale =
@@ -429,7 +528,7 @@ export function SalonWeekView({
               when scrolled right). */}
           <div className="shrink-0 w-20 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10">
             <div className="h-12 border-b border-slate-200 dark:border-white/10" />
-            {Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i).map((h) => (
+            {Array.from({ length: totalHours }, (_, i) => hourStart + i).map((h) => (
               <div
                 key={h}
                 className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 text-right pr-1 sm:pr-2 border-b border-slate-200 dark:border-white/10"
@@ -492,9 +591,9 @@ export function SalonWeekView({
                     masterId={null}
                     isTouch={isTouch}
                     hourHeight={HOUR_HEIGHT}
-                    hourStart={HOUR_START}
-                    hourEnd={HOUR_END}
-                    totalHeight={TOTAL_HOURS * HOUR_HEIGHT}
+                    hourStart={hourStart}
+                    hourEnd={hourEnd}
+                    totalHeight={totalHours * HOUR_HEIGHT}
                     onCreateAt={
                       onCreateAt
                         ? (info) =>
@@ -515,7 +614,7 @@ export function SalonWeekView({
                         it; pointer-events-none keeps drag-to-create working. */}
                     {workHours && (() => {
                       const dh = workHours[WEEKDAY_KEYS[(day.getDay() + 6) % 7]!] ?? null;
-                      return nonWorkingBands(dh).map((b, bi) => (
+                      return nonWorkingBands(dh, hourStart, hourEnd).map((b, bi) => (
                         <div
                           key={`nw-${bi}`}
                           data-testid="week-view-non-working"
@@ -523,13 +622,12 @@ export function SalonWeekView({
                           style={{
                             top: b.top,
                             height: b.height,
-                            background:
-                              "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
+                            background: HATCH_BG,
                           }}
                         />
                       ));
                     })()}
-                    {Array.from({ length: TOTAL_HOURS }, (_, i) => i).map((i) => (
+                    {Array.from({ length: totalHours }, (_, i) => i).map((i) => (
                       <div key={`h-${i}`}>
                         {i > 0 && (
                           <div
@@ -547,7 +645,7 @@ export function SalonWeekView({
                     // Shared overlap lanes (appointments + single-day blocks)
                     // computed once per column above in `laneMap`.
                     return list.map((a) => {
-                      const top = timeToTop(a.time);
+                      const top = timeToTop(a.time, hourStart);
                       const height = durationToHeight(a.duration);
                       const placement = laneMap.get(laneKey("apt", a.id)) ?? { lane: 0, lanes: 1 };
                       // Width/offset within the column, in %, leaving a 4% gutter
@@ -650,7 +748,7 @@ export function SalonWeekView({
                         data-testid="week-view-draft-slot"
                         className="absolute left-1 right-1 rounded-lg border-2 border-dashed pointer-events-none"
                         style={{
-                          top: timeToTop(createSlot.time),
+                          top: timeToTop(createSlot.time, hourStart),
                           height: durationToHeight(createSlot.durationMin),
                           background: "rgba(124,58,237,0.18)",
                           borderColor: "rgba(124,58,237,0.7)",
@@ -706,9 +804,9 @@ export function SalonWeekView({
                         multi-day bands stay full-width background. */}
                     {dayBlocks.map((b) => {
                       const isMultiDay = !!b.endDate && b.endDate !== iso;
-                      const top = isMultiDay ? 0 : timeToTop(b.time);
+                      const top = isMultiDay ? 0 : timeToTop(b.time, hourStart);
                       const height = isMultiDay
-                        ? TOTAL_HOURS * HOUR_HEIGHT
+                        ? totalHours * HOUR_HEIGHT
                         : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
                       const placement = isMultiDay
                         ? null
@@ -754,8 +852,7 @@ export function SalonWeekView({
                             top,
                             height,
                             ...laneStyle,
-                            background:
-                              "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
+                            background: HATCH_BG,
                             borderColor: "rgba(100,116,139,0.6)",
                             color: "#475569",
                             ...(blockBusy ? { opacity: 0.4 } : {}),

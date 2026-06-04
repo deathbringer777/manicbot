@@ -323,17 +323,41 @@ describe("salonRouter", () => {
     });
   });
 
-  // ── deleteService ─────────────────────────────────────────────────────────
+  // ── deleteService (smart delete) ──────────────────────────────────────────
   describe("deleteService", () => {
-    it("soft-deletes: sets active=0 and hidden=1 instead of hard deleting", async () => {
-      const dbMock = createDbMock();
+    it("hard-deletes when the service has never been booked", async () => {
+      // Appointment-reference probe → 0 rows reference this svc_id.
+      const dbMock = createDbMock([[{ count: 0 }]]);
       const caller = ownerCaller(dbMock.db);
 
       const result = await caller.deleteService({ tenantId: TENANT, svcId: "svc_1" });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toEqual({ success: true, hardDeleted: true });
+      expect(dbMock.deleteCalls).toHaveLength(1);
+      expect(dbMock.deleteCalls[0]?.whereCalled).toBe(true);
+      expect(dbMock.updateCalls).toHaveLength(0);
+    });
+
+    it("soft-deletes (active=0, hidden=1) when appointments reference the service", async () => {
+      // Probe → 3 bookings reference this svc_id, so the row is kept (hidden)
+      // to preserve appointment-history name resolution (appointmentNames.ts).
+      const dbMock = createDbMock([[{ count: 3 }]]);
+      const caller = ownerCaller(dbMock.db);
+
+      const result = await caller.deleteService({ tenantId: TENANT, svcId: "svc_1" });
+
+      expect(result).toEqual({ success: true, hardDeleted: false });
       expect(dbMock.updateCalls[0]?.values).toEqual({ active: 0, hidden: 1 });
       expect(dbMock.deleteCalls).toHaveLength(0);
+    });
+
+    it("enforces the tenant guard before touching data", async () => {
+      const dbMock = createDbMock([[{ count: 0 }]]);
+      const caller = ownerCaller(dbMock.db);
+
+      await caller.deleteService({ tenantId: TENANT, svcId: "svc_1" });
+
+      expect(assertTenantOwner).toHaveBeenCalledWith(expect.anything(), TENANT);
     });
   });
 

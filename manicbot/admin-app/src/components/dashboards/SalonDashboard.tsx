@@ -2456,7 +2456,10 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
 
           {/* Services list — grouped by category when categories exist */}
           {(() => {
-            const allSvcs = svcList.data ?? [];
+            // Soft-deleted services (hidden=1) disappear from management; a
+            // deactivated service (active=0, hidden=0, toggled off in the edit
+            // modal) stays visible with its "скрыта" badge.
+            const allSvcs = (svcList.data ?? []).filter((s: any) => s.hidden !== 1);
             const filtered: any[] = svcCategoryFilter
               ? allSvcs.filter((s: any) => s.category === svcCategoryFilter)
               : allSvcs;

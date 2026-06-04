@@ -2348,6 +2348,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
               setDate={setCalViewDate}
               apts={dayAptsFiltered}
               masters={(mastersList.data ?? []) as any}
+              workHours={salonWorkHours}
               isLoading={dayApts.isLoading || mastersList.isLoading}
               lang={lang}
               onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}

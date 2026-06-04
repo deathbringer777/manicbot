@@ -1,9 +1,11 @@
 "use client";
 
+import type { MouseEvent, KeyboardEvent } from "react";
 import { t, type Lang } from "~/lib/i18n";
 import { APT_BORDER } from "~/lib/appointments";
 import { STATUS_STYLES } from "~/lib/appointments";
 import { StatusActionMenu } from "~/components/dashboard-ui/StatusActionMenu";
+import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 
 export { APT_BORDER, STATUS_STYLES };
 
@@ -19,10 +21,13 @@ const CANCELLED_BY_LABELS: Record<string, string> = {
   system: "Отменено системой",
 };
 
-export function AptCard({ a, lang, onAction, onNoShow }: {
+export function AptCard({ a, lang, onAction, onNoShow, onOpen }: {
   a: any; lang: Lang;
   onAction?: (id: any, status: "confirmed" | "cancelled" | "rejected") => void;
   onNoShow?: (id: any, noShowBy: "client" | "master") => void;
+  /** When set, the card becomes clickable and reports its on-screen rect so the
+   *  caller can anchor an AppointmentDetailPanel popover to it. */
+  onOpen?: (rect: AnchorRect) => void;
 }) {
   const [hh, mm] = (a.time ?? "00:00").split(":");
   const statusKey = a.noShow ? "no_show" : a.cancelled ? "cancelled" : a.status;
@@ -40,14 +45,31 @@ export function AptCard({ a, lang, onAction, onNoShow }: {
         ? (CANCELLED_BY_LABELS[a.cancelledBy] ?? t(`status.${a.status}` as any, lang))
         : t(`status.${a.status}` as any, lang);
 
+  // Opt-in clickability: the whole card opens the detail popover, but the
+  // status dropdown inside it stops propagation so its own clicks never double
+  // as "open". Keyboard parity via Enter/Space on the role=button.
+  const open = (e: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) =>
+    onOpen?.(e.currentTarget.getBoundingClientRect());
+  const clickableProps = onOpen
+    ? {
+        role: "button" as const,
+        tabIndex: 0,
+        onClick: open,
+        onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(e); }
+        },
+      }
+    : {};
+
   return (
     <div
       className={`glass-card rounded-xl border-l-2 ${border} transition ${
         isTerminal ? "opacity-50" : ""
-      }`}
+      } ${onOpen ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40" : ""}`}
       data-testid="apt-card"
       data-status={statusKey}
       data-terminal={isTerminal ? "1" : "0"}
+      {...clickableProps}
     >
       <div className="p-3 flex items-start gap-3">
         <div className="w-8 h-8 shrink-0 rounded-xl bg-brand-500/20 flex items-center justify-center text-[11px] font-bold text-brand-400 mt-0.5">
@@ -63,13 +85,15 @@ export function AptCard({ a, lang, onAction, onNoShow }: {
               <p className="text-base font-bold text-slate-900 dark:text-white tabular-nums leading-none">
                 {hh}<span className="text-slate-500 font-normal text-sm">:{mm ?? "00"}</span>
               </p>
-              <StatusActionMenu
-                statusKey={statusKey}
-                label={statusLabel}
-                lang={lang}
-                onAction={onAction ? (status) => onAction(a.id, status) : undefined}
-                onNoShow={onNoShow ? (by) => onNoShow(a.id, by) : undefined}
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <StatusActionMenu
+                  statusKey={statusKey}
+                  label={statusLabel}
+                  lang={lang}
+                  onAction={onAction ? (status) => onAction(a.id, status) : undefined}
+                  onNoShow={onNoShow ? (by) => onNoShow(a.id, by) : undefined}
+                />
+              </div>
             </div>
           </div>
           {a.cancelReason && (statusKey === "cancelled" || statusKey === "no_show") && (

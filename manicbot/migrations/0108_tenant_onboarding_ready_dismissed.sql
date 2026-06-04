@@ -1,0 +1,13 @@
+-- 0108_tenant_onboarding_ready_dismissed.sql — 2026-06-04
+--
+-- Server-side persistence for the "owner dismissed the 4/4-ready onboarding
+-- bar" flag. Previously this lived only in localStorage, which (a) lost the
+-- flag on every page load — a transient async-load window made the component
+-- briefly see allEssentialsDone=false and wipe the stored flag — and (b) never
+-- synced across devices / the Telegram webview, so the bar kept resurfacing.
+--
+-- Unix-seconds timestamp; NULL means "not dismissed". getStatus only honors it
+-- while the salon is still booking-ready (ANDs it with all-essentials-done), so
+-- the checklist resurfaces as a warning if an essential later regresses.
+-- Additive + nullable → safe, no backfill, ignored by the Worker.
+ALTER TABLE tenant_onboarding ADD COLUMN ready_dismissed_at INTEGER;

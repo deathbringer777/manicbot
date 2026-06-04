@@ -46,10 +46,11 @@ const OPTIONAL_STEPS: Step[] = [
 
 const ALL_STEPS: Step[] = [...ESSENTIAL_STEPS, ...OPTIONAL_STEPS];
 
+// Optional-tier collapse is a pure presentation preference (which device the
+// owner is on doesn't matter), so it stays in localStorage. The "ready"
+// dismissal, by contrast, is now persisted server-side (see setReadyDismissed)
+// because it must be permanent and identical across devices / the TG webview.
 const COLLAPSE_LS_KEY = "manicbot_onboarding_optional_collapsed";
-// Permanent dismiss of the "ready" bar. Only honored while the salon is
-// operational (4/4 essentials); cleared on regression so it resurfaces.
-const READY_DISMISS_LS_KEY = "manicbot_onboarding_ready_dismissed";
 
 function readUserCollapsePreference(): boolean | null {
   if (typeof localStorage === "undefined") return null;
@@ -64,19 +65,9 @@ function writeUserCollapsePreference(collapsed: boolean) {
   localStorage.setItem(COLLAPSE_LS_KEY, collapsed ? "1" : "0");
 }
 
-function readReadyDismissPreference(): boolean {
-  if (typeof localStorage === "undefined") return false;
-  return localStorage.getItem(READY_DISMISS_LS_KEY) === "1";
-}
-
-function writeReadyDismissPreference(dismissed: boolean) {
-  if (typeof localStorage === "undefined") return;
-  if (dismissed) localStorage.setItem(READY_DISMISS_LS_KEY, "1");
-  else localStorage.removeItem(READY_DISMISS_LS_KEY);
-}
-
 export function OnboardingChecklist({ tenantId }: Props) {
   const { lang } = useLang();
+  const utils = api.useUtils();
   const { data, isLoading } = api.onboarding.getStatus.useQuery({ tenantId });
 
   const completed = useMemo(
@@ -101,24 +92,22 @@ export function OnboardingChecklist({ tenantId }: Props) {
   }, []);
   const optionalCollapsed = userPref !== null ? userPref : !autoOpen;
 
-  // Permanent dismiss of the "ready" bar (4/4 essentials). Honored only while
-  // operational; an essential regressing clears it so the checklist returns.
-  const [readyDismissed, setReadyDismissed] = useState(false);
-  useEffect(() => {
-    setReadyDismissed(readReadyDismissPreference());
-  }, []);
-  useEffect(() => {
-    if (!allEssentialsDone && readReadyDismissPreference()) {
-      writeReadyDismissPreference(false);
-      setReadyDismissed(false);
-    }
-  }, [allEssentialsDone]);
+  // Permanent dismiss of the "ready" bar (4/4 essentials) — persisted
+  // server-side via getStatus.readyDismissed (the server ANDs it with
+  // all-essentials-done, so it resurfaces on regression). optimisticDismissed
+  // hides the bar instantly on click; the refetch then confirms it. On error
+  // we roll back so the UI reflects what actually persisted.
+  const [optimisticDismissed, setOptimisticDismissed] = useState(false);
+  const dismissMut = api.onboarding.setReadyDismissed.useMutation({
+    onSuccess: () => { void utils.onboarding.getStatus.invalidate({ tenantId }); },
+    onError: () => { setOptimisticDismissed(false); },
+  });
 
   const nextEssential = ESSENTIAL_STEPS.find((s) => !completed.has(s.id));
 
   if (isLoading || !data) return null;
   if (allDone) return null;
-  if (allEssentialsDone && readyDismissed) return null;
+  if (allEssentialsDone && (data.readyDismissed || optimisticDismissed)) return null;
 
   const essentialProgress = essentialsDoneCount / ESSENTIAL_STEPS.length;
   const headlineKey = allEssentialsDone
@@ -132,8 +121,8 @@ export function OnboardingChecklist({ tenantId }: Props) {
   };
 
   const dismissReady = () => {
-    writeReadyDismissPreference(true);
-    setReadyDismissed(true);
+    setOptimisticDismissed(true);
+    dismissMut.mutate({ tenantId, dismissed: true });
   };
 
   // Operational (4/4 essentials): collapse the big card into a slim, dismissible

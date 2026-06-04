@@ -26,8 +26,11 @@ import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { LangContext } from "~/components/LangContext";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
 
-let mockData: { completedSteps: string[]; allCompletedAt: number | null; totalSteps: number } | null;
+let mockData: { completedSteps: string[]; allCompletedAt: number | null; totalSteps: number; readyDismissed?: boolean } | null;
 let mockIsLoading = false;
+// Captures setReadyDismissed.mutate calls so the dismiss test can assert the
+// server was told to persist the dismissal.
+let dismissCalls: Array<{ tenantId: string; dismissed: boolean }> = [];
 
 // happy-dom's bare `localStorage` global lacks a working `.getItem` in a
 // symlinked worktree, so OnboardingChecklist (which reads the optional-tier
@@ -51,9 +54,15 @@ beforeAll(() => {
 
 vi.mock("~/trpc/react", () => ({
   api: {
+    useUtils: () => ({ onboarding: { getStatus: { invalidate: () => {} } } }),
     onboarding: {
       getStatus: {
         useQuery: () => ({ data: mockData, isLoading: mockIsLoading }),
+      },
+      setReadyDismissed: {
+        useMutation: () => ({
+          mutate: (vars: { tenantId: string; dismissed: boolean }) => { dismissCalls.push(vars); },
+        }),
       },
     },
   },
@@ -71,6 +80,7 @@ afterEach(() => {
   cleanup();
   mockData = null;
   mockIsLoading = false;
+  dismissCalls = [];
   // Clean localStorage so optional-collapse preference doesn't leak between
   // test cases.
   if (typeof localStorage !== "undefined") localStorage.clear();
@@ -350,10 +360,9 @@ describe("OnboardingChecklist — collapse preference persistence", () => {
 
 describe("OnboardingChecklist — ready collapse + permanent dismiss (4/4)", () => {
   const FOUR = ["connect_bot", "add_master", "set_master_schedule", "add_service"];
-  const READY_KEY = "manicbot_onboarding_ready_dismissed";
 
   it("collapses to the slim ready bar — essential step rows are gone, dismiss is offered", () => {
-    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8 };
+    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8, readyDismissed: false };
     renderChecklist();
     expect(screen.getByTestId("onboarding-checklist")).toBeTruthy();
     expect(screen.getByTestId("onboarding-headline").textContent).toContain("Готов принимать записи");
@@ -364,35 +373,45 @@ describe("OnboardingChecklist — ready collapse + permanent dismiss (4/4)", () 
   });
 
   it("expanding the ready bar reveals the optional steps", () => {
-    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8 };
+    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8, readyDismissed: false };
     renderChecklist();
     expect(document.querySelector('[data-step-id="add_branding"]')).toBeNull();
     fireEvent.click(screen.getByTestId("onboarding-optional-toggle"));
     expect(document.querySelector('[data-step-id="add_branding"]')).not.toBeNull();
   });
 
-  it("dismiss hides the whole component and persists across remounts while still ready", () => {
-    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8 };
-    const { container, unmount } = renderChecklist();
+  it("dismiss hides the bar instantly AND tells the server to persist it", () => {
+    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8, readyDismissed: false };
+    const { container } = renderChecklist();
     fireEvent.click(screen.getByTestId("onboarding-dismiss"));
+    // Optimistic: gone immediately, no waiting on the network.
     expect(container.firstChild).toBeNull();
-    expect(localStorage.getItem(READY_KEY)).toBe("1");
-    unmount();
-    const { container: c2 } = renderChecklist();
-    expect(c2.firstChild).toBeNull();
+    // The dismissal is sent to the backend (this is what makes it permanent).
+    expect(dismissCalls).toEqual([{ tenantId: "t_demo", dismissed: true }]);
   });
 
-  it("resurfaces and clears the dismiss flag when an essential regresses", () => {
-    localStorage.setItem(READY_KEY, "1");
-    // Only 3/4 now — e.g. the last service was removed.
+  it("stays hidden on a fresh mount once the SERVER reports the dismissal (the old localStorage async-load race is gone)", () => {
+    // Regression guard for the real bug: previously a transient
+    // `data === undefined` window let a client effect wipe the saved flag on
+    // every reload. The flag now rides the same query, so a fresh mount with
+    // readyDismissed=true is hidden immediately — across sessions and devices.
+    mockData = { completedSteps: FOUR, allCompletedAt: null, totalSteps: 8, readyDismissed: true };
+    const { container } = renderChecklist();
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("resurfaces when an essential regresses — the server reports readyDismissed=false on < 4/4", () => {
+    // getStatus ANDs the stored timestamp with all-essentials-done, so a
+    // regressed salon (3/4 here) gets readyDismissed=false and the full
+    // actionable card returns even though the owner dismissed it before.
     mockData = {
       completedSteps: ["connect_bot", "add_master", "set_master_schedule"],
       allCompletedAt: null,
       totalSteps: 8,
+      readyDismissed: false,
     };
     const { container } = renderChecklist();
     expect(container.firstChild).not.toBeNull();
     expect(document.querySelector('[data-step-id="add_service"]')).not.toBeNull();
-    expect(localStorage.getItem(READY_KEY)).toBeNull();
   });
 });

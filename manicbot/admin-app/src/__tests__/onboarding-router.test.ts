@@ -45,6 +45,7 @@ function seedSelects(opts: {
   bots?: number;
   masters?: number;
   manualSteps?: string[];
+  readyDismissedAt?: number | null;
   description?: string | null;
   logo?: string | null;
   coverPhoto?: string | null;
@@ -55,8 +56,13 @@ function seedSelects(opts: {
     [{ n: opts.services ?? 0 }],
     [{ n: opts.bots ?? 0 }],
     [{ n: opts.masters ?? 0 }],
-    opts.manualSteps
-      ? [{ completedSteps: JSON.stringify(opts.manualSteps) }]
+    // The tenant_onboarding row carries BOTH the manual-steps JSON and the
+    // server-persisted ready-dismiss marker, so emit it when either is set.
+    (opts.manualSteps || opts.readyDismissedAt !== undefined)
+      ? [{
+          completedSteps: JSON.stringify(opts.manualSteps ?? []),
+          readyDismissedAt: opts.readyDismissedAt ?? null,
+        }]
       : [],
     [{
       description: opts.description ?? null,
@@ -240,5 +246,85 @@ describe("onboardingRouter.getStatus", () => {
     );
     expect(res.totalSteps).toBe(8);
     expect(res.allCompletedAt).toBeNull();
+  });
+});
+
+describe("onboardingRouter.getStatus — ready-dismiss persistence", () => {
+  const createCaller = createCallerFactory(onboardingRouter);
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "" }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("readyDismissed defaults to false when no tenant_onboarding row exists", async () => {
+    const { db } = createDbMock(seedSelects({ services: 1, bots: 1, masters: 1, schedule: 1 }));
+    const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
+    expect(res.readyDismissed).toBe(false);
+  });
+
+  it("readyDismissed is true when essentials are 4/4 AND ready_dismissed_at is set", async () => {
+    const { db } = createDbMock(
+      seedSelects({ services: 1, bots: 1, masters: 1, schedule: 1, readyDismissedAt: 1700000000 }),
+    );
+    const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
+    expect(res.readyDismissed).toBe(true);
+  });
+
+  it("readyDismissed RESURFACES (false) when an essential regresses even though ready_dismissed_at is still set", async () => {
+    // 3/4 essentials (schedule lost) but the owner had dismissed the bar earlier.
+    const { db } = createDbMock(
+      seedSelects({ services: 1, bots: 1, masters: 1, schedule: 0, readyDismissedAt: 1700000000 }),
+    );
+    const res = await createCaller(makeAdminCtx(db) as never).getStatus({ tenantId: "t_demo" });
+    expect(res.readyDismissed).toBe(false);
+  });
+});
+
+describe("onboardingRouter.setReadyDismissed", () => {
+  const createCaller = createCallerFactory(onboardingRouter);
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "" }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("inserts a ready_dismissed_at timestamp when dismissing a tenant with no onboarding row yet", async () => {
+    // [0] = "find existing row" SELECT → empty → insert path.
+    const { db, insertCalls } = createDbMock([[]]);
+    const res = await createCaller(makeAdminCtx(db) as never).setReadyDismissed({
+      tenantId: "t_demo",
+      dismissed: true,
+    });
+    expect(res.ok).toBe(true);
+    expect(insertCalls).toHaveLength(1);
+    expect(insertCalls[0]!.values.readyDismissedAt).toBeTypeOf("number");
+  });
+
+  it("updates ready_dismissed_at when a row already exists", async () => {
+    const { db, updateCalls } = createDbMock([[{ completedSteps: "[]", readyDismissedAt: null }]]);
+    const res = await createCaller(makeAdminCtx(db) as never).setReadyDismissed({
+      tenantId: "t_demo",
+      dismissed: true,
+    });
+    expect(res.ok).toBe(true);
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0]!.values.readyDismissedAt).toBeTypeOf("number");
+  });
+
+  it("clears ready_dismissed_at (null) when dismissed=false", async () => {
+    const { db, updateCalls } = createDbMock([[{ completedSteps: "[]", readyDismissedAt: 1700000000 }]]);
+    const res = await createCaller(makeAdminCtx(db) as never).setReadyDismissed({
+      tenantId: "t_demo",
+      dismissed: false,
+    });
+    expect(res.ok).toBe(true);
+    expect(updateCalls[0]!.values.readyDismissedAt).toBeNull();
   });
 });

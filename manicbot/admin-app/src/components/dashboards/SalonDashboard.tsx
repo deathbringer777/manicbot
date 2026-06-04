@@ -1601,6 +1601,11 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const todayStr = new Date().toISOString().slice(0, 10);
   const overview = api.salon.getOverview.useQuery({ tenantId }, { enabled: tab === "overview" });
   const todayApts = api.salon.getAppointments.useQuery({ tenantId, date: todayStr }, { enabled: tab === "overview" });
+  // Inline appointment detail opened from the "Записей сегодня" cards on the
+  // overview — a Google-Calendar-style popover anchored to the clicked card, so
+  // the owner can act on a booking without leaving Домой.
+  const [openApt, setOpenApt] = useState<any | null>(null);
+  const [openAptRect, setOpenAptRect] = useState<AnchorRect | null>(null);
   const apts = api.salon.getAppointments.useQuery({ tenantId }, { enabled: tab === "appointments" && aptViewMode === "list" });
 
   // Calendar data: full month
@@ -1669,8 +1674,9 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     { tenantId },
     {
       // Masters power the rail's "My calendars" + every appointment view's
-      // master coloring, so keep the query enabled for the whole tab.
-      enabled: tab === "masters" || tab === "appointments",
+      // master coloring, so keep the query enabled for the whole tab. Also on
+      // overview so the inline today-appointment popover resolves master names.
+      enabled: tab === "masters" || tab === "appointments" || tab === "overview",
     },
   );
   // Auto-confirm settings — surfaced in the calendar left rail so the
@@ -1712,7 +1718,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // Services list is needed in the appointments tab too — we use it both
   // for the rail filter and to look up service display names in the
   // agenda/list rows.
-  const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" });
+  const svcList = api.salon.getServices.useQuery({ tenantId }, { enabled: tab === "services" || tab === "appointments" || tab === "overview" });
   const clients = api.salon.getClients.useQuery({ tenantId }, { enabled: tab === "clients" || tab === "overview" });
   const billing = api.salon.getBillingStatus.useQuery({ tenantId }, { enabled: tab === "overview" });
   const profile = api.salon.getSalonProfile.useQuery({ tenantId }, { enabled: tab === "analytics" || tab === "channels" || tab === "appointments" });
@@ -2156,6 +2162,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                     .sort((a: any, b: any) => String(b.time ?? "").localeCompare(String(a.time ?? "")))
                     .map((a: any) => (
                       <AptCard key={a.id} a={a} lang={lang}
+                        onOpen={(rect) => { setOpenApt(a); setOpenAptRect(rect); }}
                         onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
                         onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
                     ))}
@@ -2165,6 +2172,47 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />
               )}
             </>
+          )}
+
+          {openApt && (
+            <AppointmentDetailPanel
+              tenantId={tenantId}
+              selected={{
+                id: openApt.id,
+                tenantId,
+                date: openApt.date,
+                time: openApt.time,
+                duration: typeof openApt.duration === "number" ? openApt.duration : null,
+                status: openApt.status,
+                cancelled: openApt.cancelled ?? null,
+                noShow: openApt.noShow ?? null,
+                noShowBy: openApt.noShowBy ?? null,
+                cancelledBy: openApt.cancelledBy ?? null,
+                cancelReason: openApt.cancelReason ?? null,
+                masterId: openApt.masterId ?? null,
+                svcId: openApt.svcId ?? null,
+                userName: openApt.userName ?? null,
+                userPhone: openApt.userPhone ?? null,
+                userTg: openApt.userTg ?? null,
+                chatId: openApt.chatId ?? null,
+              }}
+              masters={(mastersList.data ?? []).map((m: any) => ({ chatId: m.chatId, name: m.name }))}
+              services={(svcList.data ?? []).map((s) => ({
+                svcId: s.svcId,
+                names: s.names ?? null,
+                duration: s.duration,
+                price: typeof s.price === "number" ? s.price : Number(s.price ?? 0),
+              }))}
+              lang={lang}
+              anchorRect={openAptRect}
+              onClose={() => { setOpenApt(null); setOpenAptRect(null); }}
+              onChanged={() => {
+                void todayApts.refetch();
+                void utils.salon.getAppointments.invalidate();
+                setOpenApt(null);
+                setOpenAptRect(null);
+              }}
+            />
           )}
         </div>
       )}

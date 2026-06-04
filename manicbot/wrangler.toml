@@ -61,8 +61,11 @@ MARKETING_AUTOPILOT_ENABLED = "0"
 # Превращает notify-бота в двусторонний AI-бот мониторинга. Использует тот же
 # вебхук-пайплайн (/webhook/{botId}); отвечает ТОЛЬКО владельцу (ADMIN_CHAT_ID).
 #   wrangler secret put ADMIN_WEBHOOK_SECRET   # ОБЯЗАТЕЛЬНО (≥16 символов) — без него бот выключен
-#   wrangler secret put ADMIN_BOT_TOKEN        # опционально; иначе берётся NOTIFY_BOT_TOKEN (НИКОГДА не BOT_TOKEN)
+#   wrangler secret put ADMIN_BOT_TOKEN        # опционально; выделенный бот
+#   wrangler secret put ADMIN_USE_BOT_TOKEN    # опционально "1": занять BOT_TOKEN (бот утреннего отчёта), без вставки токена
 #   wrangler secret put ADMIN_BOT_ALLOWED_IDS  # опционально; доп. авторизованные Telegram id через пробел/запятую
+# Токен: ADMIN_BOT_TOKEN → (ADMIN_USE_BOT_TOKEN=1 ? BOT_TOKEN) → NOTIFY_BOT_TOKEN. Явный выбор
+# (ADMIN_BOT_TOKEN/ADMIN_USE_BOT_TOKEN) ПЕРЕХВАТЫВАЕТ даже зарегистрированного бота — осознанно.
 # После установки секретов один раз вызвать: GET /admin/register-admin-bot-webhook (Bearer ADMIN_KEY)
 
 # ─── Секреты (задаются через wrangler secret put, НЕ хранятся в этом файле) ─

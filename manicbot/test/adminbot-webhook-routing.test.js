@@ -28,6 +28,17 @@ describe('getCtx admin interception', () => {
     const ctx = await getCtx(env, new URL('https://manicbot.com/webhook/777'), { method: 'POST' });
     expect(ctx).toBe(null);
   });
+
+  it('intercepts a REGISTERED bot when ADMIN_BOT_TOKEN is explicit (deliberate repurpose)', async () => {
+    const env = {
+      ADMIN_BOT_TOKEN: '777:abc',
+      ADMIN_WEBHOOK_SECRET: SECRET,
+      // DB says botId 777 is a registered client bot — explicit token overrides the guard.
+      DB: { prepare: () => ({ bind: () => ({ first: async () => ({ tenant_id: 't_salon1' }), all: async () => ({ results: [] }) }) }) },
+    };
+    const ctx = await getCtx(env, new URL('https://manicbot.com/webhook/777'), { method: 'POST' });
+    expect(ctx?.isAdminBot).toBe(true);
+  });
 });
 
 describe('onMsg short-circuit', () => {

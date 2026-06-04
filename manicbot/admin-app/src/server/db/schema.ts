@@ -816,6 +816,12 @@ export const tenantOnboarding = sqliteTable("tenant_onboarding", {
   tenantId: text("tenant_id").primaryKey(),
   completedSteps: text("completed_steps").notNull().default("[]"),
   allCompletedAt: integer("all_completed_at"),
+  // Unix-seconds marker: the owner permanently dismissed the 4/4-ready
+  // onboarding bar. Honored only while the salon stays booking-ready
+  // (getStatus ANDs it with all-essentials-done) so it resurfaces on
+  // regression. Server-side because localStorage lost it on every reload
+  // and never synced across devices / the Telegram webview.
+  readyDismissedAt: integer("ready_dismissed_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

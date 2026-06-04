@@ -740,6 +740,7 @@ CREATE TABLE IF NOT EXISTS tenant_onboarding (
   tenant_id TEXT PRIMARY KEY,
   completed_steps TEXT NOT NULL DEFAULT '[]',
   all_completed_at INTEGER,
+  ready_dismissed_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

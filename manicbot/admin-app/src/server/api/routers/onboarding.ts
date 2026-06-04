@@ -22,7 +22,7 @@
  */
 
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, publicProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { tenantOnboarding, services, bots, masters, tenants } from "~/server/db/schema";
 import { eq, sql, and, isNotNull, ne } from "drizzle-orm";
@@ -112,10 +112,17 @@ export const onboardingRouter = createTRPCRouter({
       if (manualSteps.includes("share_link")) completed.push("share_link");
 
       const allDone = STEP_IDS.every(s => completed.includes(s));
+      // Honor the server-persisted ready-dismiss only while the salon stays
+      // booking-ready (4/4 essentials). If an essential later regresses the
+      // checklist resurfaces as a warning; the stored timestamp is preserved
+      // and the bar hides again automatically once readiness is restored.
+      const allEssentialsDone = ESSENTIAL_STEP_IDS.every(s => completed.includes(s));
+      const readyDismissed = allEssentialsDone && !!manualRow[0]?.readyDismissedAt;
       return {
         completedSteps: completed,
         allCompletedAt: allDone ? (manualRow[0]?.allCompletedAt ?? null) : null,
         totalSteps: STEP_IDS.length,
+        readyDismissed,
       };
     }),
 
@@ -160,5 +167,44 @@ export const onboardingRouter = createTRPCRouter({
           });
       }
       return { ok: true, completed: newSteps, allDone };
+    }),
+
+  /**
+   * Persist (or clear) the owner's dismissal of the 4/4-ready onboarding bar.
+   * tenantOwnerProcedure gates the role; assertTenantOwner scopes it to the
+   * caller's own tenant. Stores a timestamp (not a bool) so we keep a record
+   * of WHEN readiness was acknowledged.
+   */
+  setReadyDismissed: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      dismissed: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db
+        .select()
+        .from(tenantOnboarding)
+        .where(eq(tenantOnboarding.tenantId, input.tenantId))
+        .limit(1);
+      const now = nowSec();
+      const ts = input.dismissed ? now : null;
+      if (rows[0]) {
+        await ctx.db
+          .update(tenantOnboarding)
+          .set({ readyDismissedAt: ts, updatedAt: now })
+          .where(eq(tenantOnboarding.tenantId, input.tenantId));
+      } else {
+        await ctx.db
+          .insert(tenantOnboarding)
+          .values({
+            tenantId: input.tenantId,
+            completedSteps: "[]",
+            readyDismissedAt: ts,
+            createdAt: now,
+            updatedAt: now,
+          });
+      }
+      return { ok: true, readyDismissed: input.dismissed };
     }),
 });

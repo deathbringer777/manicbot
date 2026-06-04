@@ -132,4 +132,75 @@ describe('POST /admin/appointment-action — sync_calendar action', () => {
     expect(res.status).toBe(404);
     expect(syncAppointmentCalendar).not.toHaveBeenCalled();
   });
+
+  // ── Read-after-write fallback ──────────────────────────────────────────
+  // A manual dashboard booking inserts the row, then immediately calls this
+  // endpoint. The row may not yet be visible to this Worker's D1 read, which
+  // used to 404 and silently drop the push to the ≤15-min cron. The
+  // sync_calendar action now accepts a tenant-matched appointment payload
+  // from the request body as a fallback.
+  const bodyApt = {
+    id: 'apt_manual_1',
+    tenantId: 't1',
+    chatId: -1717,
+    svcId: 'svc_a',
+    date: '2026-09-12',
+    time: '11:00',
+    ts: 1789000000000,
+    status: 'confirmed',
+    masterId: 42,
+  };
+
+  it('falls back to the request-body apt when the freshly-written row is not yet readable', async () => {
+    const { getAptById } = await import('../src/services/appointments.js');
+    vi.mocked(getAptById).mockResolvedValueOnce(null); // replica lag: row not visible yet
+    const req = makeRequest({ action: 'sync_calendar', appointmentId: 'apt_manual_1', tenantId: 't1', apt: bodyApt });
+    const res = await tryAdminKeyRoutes(req, makeEnv(), new URL(req.url));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.calendarSynced).toBe(true);
+    expect(syncAppointmentCalendar).toHaveBeenCalledTimes(1);
+    expect(syncAppointmentCalendar.mock.calls[0][1]).toMatchObject({ id: 'apt_manual_1', tenantId: 't1' });
+  });
+
+  it('rejects a body apt whose tenantId does not match the authenticated tenant (tenant isolation)', async () => {
+    const { getAptById } = await import('../src/services/appointments.js');
+    vi.mocked(getAptById).mockResolvedValueOnce(null);
+    const req = makeRequest({
+      action: 'sync_calendar',
+      appointmentId: 'apt_manual_1',
+      tenantId: 't1',
+      apt: { ...bodyApt, tenantId: 't2' },
+    });
+    const res = await tryAdminKeyRoutes(req, makeEnv(), new URL(req.url));
+
+    expect(res.status).toBe(404);
+    expect(syncAppointmentCalendar).not.toHaveBeenCalled();
+  });
+
+  it('ignores a body apt whose id does not match the appointmentId', async () => {
+    const { getAptById } = await import('../src/services/appointments.js');
+    vi.mocked(getAptById).mockResolvedValueOnce(null);
+    const req = makeRequest({
+      action: 'sync_calendar',
+      appointmentId: 'apt_manual_1',
+      tenantId: 't1',
+      apt: { ...bodyApt, id: 'someone_else' },
+    });
+    const res = await tryAdminKeyRoutes(req, makeEnv(), new URL(req.url));
+
+    expect(res.status).toBe(404);
+    expect(syncAppointmentCalendar).not.toHaveBeenCalled();
+  });
+
+  it('does not use a body apt for non-calendar actions (confirm still 404s on a missing row)', async () => {
+    const { getAptById } = await import('../src/services/appointments.js');
+    vi.mocked(getAptById).mockResolvedValueOnce(null);
+    const req = makeRequest({ action: 'confirm', appointmentId: 'apt_manual_1', tenantId: 't1', apt: bodyApt });
+    const res = await tryAdminKeyRoutes(req, makeEnv(), new URL(req.url));
+
+    expect(res.status).toBe(404);
+    expect(syncAppointmentCalendar).not.toHaveBeenCalled();
+  });
 });

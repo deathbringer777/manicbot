@@ -455,11 +455,13 @@ export function AppointmentDetailPanel({
         </p>
       )}
 
-      {/* Action row — varies by mode. Buttons stack into a 2-col grid on
-          phones so each row remains a 44px+ tap target (sm:auto-flow lets
-          them wrap normally above sm). */}
+      {/* Action row — a full-width primary status action (Confirm when
+          pending, Done when confirmed) sits above an even two-column row of
+          no-show buttons. This keeps the block balanced regardless of state
+          (no orphaned half-width button) while each control stays a 44px+
+          tap target. */}
       {mode === "read" && !isCancelled && !isNoShow && !isDone && (
-        <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:flex-wrap">
+        <div className="space-y-2 pt-1">
           {isPending && (
             <button
               type="button"
@@ -467,7 +469,7 @@ export function AppointmentDetailPanel({
               onClick={() =>
                 confirmApt.mutate({ tenantId, id: String(selected.id) })
               }
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex w-full min-h-11 items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="panel-confirm"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
@@ -484,7 +486,7 @@ export function AppointmentDetailPanel({
               onClick={() =>
                 markDoneMut.mutate({ tenantId, id: String(selected.id) })
               }
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-brand-500/15 px-3 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex w-full min-h-11 items-center justify-center gap-1.5 rounded-lg bg-brand-500/15 px-3 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="panel-done"
               data-can-mark-done={canMarkDone ? "1" : "0"}
             >
@@ -494,30 +496,32 @@ export function AppointmentDetailPanel({
                 : t("salon.day.panel.markDone", lang)}
             </button>
           )}
-          <button
-            type="button"
-            disabled={statusBusy}
-            onClick={() => markNoShow.mutate({ tenantId, id: String(selected.id), noShowBy: "client" })}
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid="panel-client-no-show"
-          >
-            <UserX className="h-3.5 w-3.5" />
-            {markNoShow.isPending && markNoShow.variables?.noShowBy === "client"
-              ? t("salon.day.panel.markingNoShow", lang)
-              : t("salon.day.panel.clientNoShow", lang)}
-          </button>
-          <button
-            type="button"
-            disabled={statusBusy}
-            onClick={() => markNoShow.mutate({ tenantId, id: String(selected.id), noShowBy: "master" })}
-            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid="panel-master-no-show"
-          >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {markNoShow.isPending && markNoShow.variables?.noShowBy === "master"
-              ? t("salon.day.panel.markingNoShow", lang)
-              : t("salon.day.panel.masterNoShow", lang)}
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={statusBusy}
+              onClick={() => markNoShow.mutate({ tenantId, id: String(selected.id), noShowBy: "client" })}
+              className="inline-flex w-full min-h-11 items-center justify-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="panel-client-no-show"
+            >
+              <UserX className="h-3.5 w-3.5" />
+              {markNoShow.isPending && markNoShow.variables?.noShowBy === "client"
+                ? t("salon.day.panel.markingNoShow", lang)
+                : t("salon.day.panel.clientNoShow", lang)}
+            </button>
+            <button
+              type="button"
+              disabled={statusBusy}
+              onClick={() => markNoShow.mutate({ tenantId, id: String(selected.id), noShowBy: "master" })}
+              className="inline-flex w-full min-h-11 items-center justify-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="panel-master-no-show"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {markNoShow.isPending && markNoShow.variables?.noShowBy === "master"
+                ? t("salon.day.panel.markingNoShow", lang)
+                : t("salon.day.panel.masterNoShow", lang)}
+            </button>
+          </div>
         </div>
       )}
 
@@ -630,7 +634,7 @@ function DetailRow({
   sub?: string;
 }) {
   return (
-    <div className="flex items-start gap-2 rounded-lg bg-slate-50/60 dark:bg-white/[0.02] px-3 py-2">
+    <div className="flex h-full items-start gap-2 rounded-lg bg-slate-50/60 dark:bg-white/[0.02] px-3 py-2">
       <div className="mt-0.5 text-slate-400 dark:text-white/40 shrink-0">{icon}</div>
       <div className="min-w-0">
         <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50">

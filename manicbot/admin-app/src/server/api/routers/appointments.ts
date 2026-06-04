@@ -596,15 +596,29 @@ export const appointmentsRouter = createTRPCRouter({
       } catch { /* non-fatal */ }
 
       // Fire-and-forget: push the new booking to the connected Google Calendar
-      // immediately. Every other confirm path syncs on confirm (bot
-      // APT_CONFIRM, dashboard updateStatus / claimAndConfirm); a manual
-      // dashboard booking is created already-confirmed but was previously left
-      // to the ≤10-min `phaseGcalSync` cron, so it didn't show up in Google
-      // Calendar until the next tick. "sync_calendar" is calendar-only — it
-      // does NOT message the client (manual bookings stay silent to the
-      // client by design; the Worker loads the row to resolve the calendar
-      // target, so no master/confirmedBy is passed here).
-      notifyWorker("sync_calendar", aptId, input.tenantId, null).catch(() => {});
+      // immediately. A manual dashboard booking is created already-confirmed
+      // but was previously left to the ≤15-min `phaseGcalSync` cron, so it
+      // didn't show up in Google Calendar until the next tick. "sync_calendar"
+      // is calendar-only — it does NOT message the client (manual bookings stay
+      // silent by design). We pass the row payload in `apt` so the Worker can
+      // sync even when the freshly-inserted row isn't yet visible to its D1
+      // read (read-after-write); the Worker uses this payload only when it is
+      // tenant-matched. See adminKeyHttp sync_calendar.
+      notifyWorker("sync_calendar", aptId, input.tenantId, null, {
+        apt: {
+          id: aptId,
+          tenantId: input.tenantId,
+          chatId,
+          svcId: input.serviceId,
+          date: input.date,
+          time: input.time,
+          ts: startTs,
+          status: "confirmed",
+          masterId: input.masterId ?? null,
+          userName: input.clientName ?? existingClientName ?? null,
+          userPhone: input.clientPhone ?? existingClientPhone ?? null,
+        },
+      }).catch(() => {});
 
       return { ok: true, appointmentId: aptId };
     }),

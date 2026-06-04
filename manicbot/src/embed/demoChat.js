@@ -333,6 +333,11 @@ export const DEMO_CHAT_SRC = `
     '.mb-composer button{flex-shrink:0;border:0;background:var(--mb-bubble-user);color:var(--mb-user-text);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(139,92,246,.35);transition:transform .1s}' +
     '.mb-composer button:active{transform:scale(.94)}' +
     '.mb-composer button:disabled{opacity:.4;cursor:not-allowed}' +
+    // Touch: 16px input prevents iOS focus-zoom; 44px send button meets the
+    // tap-target guideline. Desktop demo keeps its compact 11.5px / 32px look.
+    '@media (hover:none){.mb-composer input{font-size:16px}.mb-composer button{width:44px;height:44px}}' +
+    // touch-action:manipulation drops the ~300ms tap delay on chips/controls.
+    '.mb-btn,.mb-composer button,.mb-photo-nav,.mb-photo-dot{touch-action:manipulation}' +
     '.mb-typing{align-self:flex-start;padding:5px 9px;border-radius:12px;background:var(--mb-bubble-bot);display:inline-flex;gap:3px}' +
     '.mb-typing span{width:5px;height:5px;border-radius:50%;background:var(--mb-muted);animation:mb-bounce 1s infinite}' +
     '.mb-typing span:nth-child(2){animation-delay:.15s}.mb-typing span:nth-child(3){animation-delay:.3s}' +

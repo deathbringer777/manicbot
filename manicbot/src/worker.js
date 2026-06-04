@@ -12,6 +12,7 @@ import { maybeRunD1Backup } from './services/d1Backup.js';
 import { pruneExpiredDedupRows } from './utils/dedup.js';
 import { pruneExpiredUploadNonces } from './services/upload.js';
 import { syncStripeLedger } from './billing/ledgerSync.js';
+import { ensureAdminBotWebhook } from './adminbot/ctx.js';
 import { envCtx } from './http/envCtx.js';
 import { ensureDemoBotsProvisioned } from './http/demoBots.js';
 import { ensurePreviewTenantProvisioned } from './tenant/previewTenant.js';
@@ -664,6 +665,21 @@ export default {
           }),
         );
       }
+
+      // Admin/ops bot webhook self-registration. When the admin bot is
+      // configured (ADMIN_WEBHOOK_SECRET + ADMIN_BOT_TOKEN | ADMIN_USE_BOT_TOKEN
+      // | NOTIFY_BOT_TOKEN), register its Telegram webhook automatically so the
+      // operator doesn't have to call the admin endpoint by hand. Idempotent
+      // (KV-flagged) — registers once, then no-ops. Fire-and-forget.
+      _scheduledCtx.waitUntil(
+        ensureAdminBotWebhook(env, env.APP_BASE_URL || 'https://manicbot.com').then(
+          (r) => { if (r?.registered) log.info('worker.adminBotWebhook', { url: r.url }); },
+          (e) => {
+            log.error('worker.adminBotWebhook', e instanceof Error ? e : new Error(String(e?.message || e)));
+            void captureError(env, e, { source: 'worker.scheduled', phase: 'admin_bot_webhook' });
+          },
+        ),
+      );
 
       // Platform D1 → R2 backup. Runs once per cron tick (not per tenant);
       // internal 6h idempotency window (see d1Backup.js maybeRunD1Backup)

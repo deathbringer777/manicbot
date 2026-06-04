@@ -7,14 +7,16 @@
  * stats. The webhook ingestion pipeline (secret check, dedup, send) is reused
  * unchanged — getCtx just needs to hand back this ctx for the admin botId.
  *
- * HIJACK GUARD: we NEVER fall back to the main client BOT_TOKEN, and webhook
- * registration refuses if the resolved botId belongs to a registered client
- * bot — so reusing the notify bot can never steal a salon's updates.
+ * HIJACK GUARD: we never fall back to the main client BOT_TOKEN by accident.
+ * Reuse of an existing bot is only via a DELIBERATE opt-in (ADMIN_BOT_TOKEN, or
+ * ADMIN_USE_BOT_TOKEN=1 to reuse BOT_TOKEN); the accidental NOTIFY_BOT_TOKEN
+ * fallback is still refused if it resolves to a registered client bot.
  */
 import { baseCtx } from '../tenant/baseCtx.js';
 import { api } from '../telegram.js';
 import { getTenantIdByBotId } from '../tenant/storage.js';
 import { log } from '../utils/logger.js';
+import { kvGet, kvPut } from '../utils/kv.js';
 import { ADMIN_BOT_COMMANDS } from './keyboards.js';
 
 const MIN_SECRET_LEN = 16;
@@ -109,4 +111,39 @@ export async function registerAdminBotWebhook(env, baseUrl) {
     log.error('adminbot.register', e instanceof Error ? e : new Error(String(e?.message)), { phase: 'setMyCommands' });
   }
   return { ok: !!r?.ok, url: whUrl, description: r?.description || null };
+}
+
+/**
+ * Cron-safe one-time self-registration. When the admin bot is configured
+ * (ADMIN_WEBHOOK_SECRET + a token source), register its webhook automatically
+ * so the operator doesn't have to call /admin/register-admin-bot-webhook by
+ * hand. Idempotent via a KV flag keyed on (botId, expectedUrl): registers once,
+ * then no-ops on every subsequent tick.
+ *
+ * A KV flag (not a getWebhookInfo url-check) is used deliberately: when reusing
+ * a bot that already had a webhook on the same /webhook/{botId} path, the url
+ * already matches but the secret_token is wrong — so we must (re)register to set
+ * ADMIN_WEBHOOK_SECRET, and getWebhookInfo cannot confirm the secret.
+ *
+ * @param {any} env
+ * @param {string} baseUrl
+ * @returns {Promise<{ok?:boolean, registered?:boolean, skipped?:string, url?:string, error?:string}>}
+ */
+export async function ensureAdminBotWebhook(env, baseUrl) {
+  const ctx = buildAdminBotCtx(env);
+  if (!ctx) return { skipped: 'no_admin_bot_token' };
+  if (String(env.ADMIN_WEBHOOK_SECRET || '').length < MIN_SECRET_LEN) {
+    return { skipped: 'no_secret' };
+  }
+  const expectedUrl = `${String(baseUrl).replace(/\/$/, '')}/webhook/${ctx.botId}`;
+  const desired = `${ctx.botId}|${expectedUrl}`;
+  let done = null;
+  try { done = await kvGet(ctx, 'webhook:autoreg'); } catch { /* treat as not-done */ }
+  if (done === desired) return { skipped: 'already_registered' };
+  const r = await registerAdminBotWebhook(env, baseUrl);
+  if (r?.ok) {
+    try { await kvPut(ctx, 'webhook:autoreg', desired); } catch { /* best-effort; retried next tick */ }
+    return { ok: true, registered: true, url: r.url };
+  }
+  return { ok: false, error: r?.error || 'register_failed' };
 }

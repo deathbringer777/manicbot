@@ -40,12 +40,23 @@ import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResize";
 import { useCoarsePointer } from "~/lib/useCoarsePointer";
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
+import { WEEKDAY_KEYS, type WorkHoursState } from "~/lib/workHours";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
-const HOUR_START = 8; // 08:00
-const HOUR_END = 22; // 22:00 (exclusive — last visible row is 21:00–22:00)
-const TOTAL_HOURS = HOUR_END - HOUR_START;
+
+// The visible hour window is computed per-day from salon + per-master working
+// hours (see computeDayVisibleHourWindow). These are only the FALLBACK bounds,
+// used when no hours are known, plus the floor for how small the window shrinks.
+const DEFAULT_HOUR_START = 8; // 08:00
+const DEFAULT_HOUR_END = 22; // 22:00
+const MIN_WINDOW_HOURS = 6; // never collapse the grid to a cramped sliver
+
+// Softened diagonal gray for blocked time (reservations / time-off). Lighter
+// than a solid fill so days with blocks read as "lightly blocked", not "fully
+// unavailable". The per-master non-working overlay keeps its flat tint.
+const HATCH_BG =
+  "repeating-linear-gradient(45deg, rgba(100,116,139,0.10) 0 6px, rgba(100,116,139,0.03) 6px 14px)";
 
 /** Brand-derived palette — assigned to master columns by index. Each tone
  *  has enough contrast against both light and dark surfaces. */
@@ -102,6 +113,13 @@ interface Props {
   setDate: (d: Date) => void;
   apts: AptRow[];
   masters: MasterRow[];
+  /**
+   * Salon-level working hours («Godziny pracy»). Used as the BASE for the
+   * visible hour window (unioned with per-master windows + widened by items).
+   * Optional — God-Mode / per-master callers omit it and the window falls back
+   * to per-master hours, then to DEFAULT_HOUR_START..END.
+   */
+  workHours?: WorkHoursState;
   isLoading: boolean;
   lang: Lang;
   onAction?: (id: number | string, status: "confirmed" | "cancelled" | "rejected") => void;
@@ -146,8 +164,8 @@ interface Props {
    *   - an empty-state overlay is rendered inside the grid when the
    *     visible day has zero appointments AND zero blocks;
    *   - auto-scroll-to-now is skipped when the day is empty so the
-   *     master sees from `HOUR_START` (working hours start) instead
-   *     of landing on a blank "current time" 14h into the day.
+   *     master sees from the top of the visible window (working-hours
+   *     start) instead of landing on a blank "current time" deep in the day.
    * Default `false` preserves the existing multi-master owner-side
    * behavior in SalonDashboard.
    */
@@ -172,9 +190,9 @@ function parseHHMMToMinutes(hhmm: string | undefined): number {
 }
 
 /** Convert a HH:MM time on the visible day into an absolute pixel offset. */
-function timeToTop(hhmm: string): number {
+function timeToTop(hhmm: string, hourStart: number): number {
   const minutes = parseHHMMToMinutes(hhmm);
-  const start = HOUR_START * 60;
+  const start = hourStart * 60;
   return ((minutes - start) / 60) * HOUR_HEIGHT;
 }
 
@@ -264,11 +282,88 @@ function parseRangeString(s: string): { startMin: number; endMin: number } | { c
   return null;
 }
 
+/**
+ * Pick the [start, end] hour window the day grid renders.
+ *
+ * Policy (mirrors SalonWeekView.computeVisibleHourWindow, adapted to the
+ * per-master day view):
+ *   1. Base window = the salon's working hours for this weekday, UNIONed with
+ *      every visible master's concrete working window (a master rostered past
+ *      salon close still gets a full column).
+ *   2. Never clip data: widen to cover any appointment or timed block on this
+ *      day that falls outside the base. Full-day / multi-day bands are skipped —
+ *      they span 00:00–24:00 and would reopen the window to the whole day.
+ *   3. Snap to whole hours, clamp to [0, 24], enforce MIN_WINDOW_HOURS.
+ *
+ * Falls back to DEFAULT_HOUR_START..END when nothing concrete is known (no
+ * salon hours, every master unknown/closed) so the broad grid still shows.
+ */
+function computeDayVisibleHourWindow(
+  workHours: WorkHoursState | undefined,
+  masters: MasterRow[],
+  dayOfWeek: number, // JS Date.getDay(): 0=Sun … 6=Sat
+  apts: AptRow[],
+  blocks: DayViewBlock[] | undefined,
+  isoDate: string,
+): { start: number; end: number } {
+  let openMin = DEFAULT_HOUR_START * 60;
+  let closeMin = DEFAULT_HOUR_END * 60;
+  let known = false;
+
+  const salonDay = workHours ? workHours[WEEKDAY_KEYS[(dayOfWeek + 6) % 7]!] : null;
+  if (salonDay) {
+    const o = parseHHMMToMinutes(salonDay.open);
+    const c = parseHHMMToMinutes(salonDay.close);
+    if (c > o) {
+      openMin = o;
+      closeMin = c;
+      known = true;
+    }
+  }
+
+  for (const m of masters) {
+    const range = getMasterWorkRange(m.workHours, dayOfWeek);
+    if (range === null || "closed" in range) continue;
+    if (!known) {
+      openMin = range.startMin;
+      closeMin = range.endMin;
+      known = true;
+    } else {
+      openMin = Math.min(openMin, range.startMin);
+      closeMin = Math.max(closeMin, range.endMin);
+    }
+  }
+
+  for (const a of apts) {
+    if (a.date !== isoDate) continue;
+    const s = parseHHMMToMinutes(a.time);
+    openMin = Math.min(openMin, s);
+    closeMin = Math.max(closeMin, s + (typeof a.duration === "number" ? a.duration : 60));
+  }
+  for (const b of blocks ?? []) {
+    const isMultiDay = !!b.endDate && b.endDate !== b.date;
+    if (isMultiDay || b.durationMin >= 24 * 60) continue;
+    if (b.date !== isoDate) continue;
+    const s = parseHHMMToMinutes(b.time);
+    openMin = Math.min(openMin, s);
+    closeMin = Math.max(closeMin, s + b.durationMin);
+  }
+
+  let start = Math.max(0, Math.floor(openMin / 60));
+  let end = Math.min(24, Math.ceil(closeMin / 60));
+  if (end - start < MIN_WINDOW_HOURS) {
+    end = Math.min(24, start + MIN_WINDOW_HOURS);
+    start = Math.max(0, end - MIN_WINDOW_HOURS);
+  }
+  return { start, end };
+}
+
 export function SalonDayView({
   date,
   setDate,
   apts,
   masters,
+  workHours,
   isLoading,
   lang,
   onAction,
@@ -296,21 +391,29 @@ export function SalonDayView({
   // move / resize) so the grid scrolls under a finger; creation happens via
   // the "+ Запись" button instead. Desktop (mouse/trackpad) is unchanged.
   const isTouch = useCoarsePointer();
+  const isoDate = fmtIsoDate(date);
+  // Visible hour window — fitted to salon + per-master working hours, widened to
+  // cover any out-of-hours item. Computed BEFORE the drag hooks because they map
+  // a pointer's Y → time against [hourStart, hourEnd].
+  const { start: hourStart, end: hourEnd } = useMemo(
+    () => computeDayVisibleHourWindow(workHours, masters, date.getDay(), apts, blocks, isoDate),
+    [workHours, masters, date, apts, blocks, isoDate],
+  );
+  const totalHours = hourEnd - hourStart;
   const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
     hourHeight: HOUR_HEIGHT,
-    hourStart: HOUR_START,
-    hourEnd: HOUR_END,
+    hourStart,
+    hourEnd,
     isTouch,
     onCommit: (c) => (c.kind === "block" ? onMoveBlock : onMoveAppointment)?.(c),
   });
   const { ghost: resizeGhost, resizingId, bindHandle: bindResize } = useDragToResize({
     hourHeight: HOUR_HEIGHT,
-    hourStart: HOUR_START,
-    hourEnd: HOUR_END,
+    hourStart,
+    hourEnd,
     isTouch,
     onResize: (c) => onResize?.(c),
   });
-  const isoDate = fmtIsoDate(date);
   const [selectedApt, setSelectedApt] = useState<AptRow | null>(null);
   // Viewport rect of the clicked block — anchors the detail popover (GCal style).
   const [selectedRect, setSelectedRect] = useState<AnchorRect | null>(null);
@@ -398,13 +501,13 @@ export function SalonDayView({
     if (singleColumnMode && !hasContentToday) return;
     const now = new Date();
     const minutes = now.getHours() * 60 + now.getMinutes();
-    const offset = ((minutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
+    const offset = ((minutes - hourStart * 60) / 60) * HOUR_HEIGHT;
     if (offset < 0) return;
     const t = window.setTimeout(() => {
       scrollerRef.current?.scrollTo({ top: Math.max(0, offset - HOUR_HEIGHT * 1.5), behavior: "smooth" });
     }, 100);
     return () => window.clearTimeout(t);
-  }, [isToday, singleColumnMode, hasContentToday]);
+  }, [isToday, singleColumnMode, hasContentToday, hourStart]);
 
   // Filter apts for this day, group by masterId.
   const aptsByMaster = useMemo(() => {
@@ -502,8 +605,8 @@ export function SalonDayView({
   // Sourced from useNowTicker so red line + past-event dimming move in lockstep.
   const nowDate = useMemo(() => new Date(nowMs), [nowMs]);
   const nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
-  const currentTimeTop = ((nowMinutes - HOUR_START * 60) / 60) * HOUR_HEIGHT;
-  const currentTimeVisible = isToday && nowMinutes >= HOUR_START * 60 && nowMinutes < HOUR_END * 60;
+  const currentTimeTop = ((nowMinutes - hourStart * 60) / 60) * HOUR_HEIGHT;
+  const currentTimeVisible = isToday && nowMinutes >= hourStart * 60 && nowMinutes < hourEnd * 60;
 
   // Per-appointment "is in the past" lookup. An appointment is past when
   // its end time (start + svc duration) is before now. We collapse the
@@ -686,7 +789,7 @@ export function SalonDayView({
                 + grid lines through (ugly seam when scrolled right). */}
             <div className="shrink-0 w-20 sticky left-0 z-10 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10">
               <div className="h-12 border-b border-slate-200 dark:border-white/10" />
-              {Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i).map((h) => (
+              {Array.from({ length: totalHours }, (_, i) => hourStart + i).map((h) => (
                 <div
                   key={h}
                   className="text-[10px] text-slate-400 dark:text-slate-500 text-right pr-2 border-b border-slate-200 dark:border-white/10"
@@ -755,9 +858,9 @@ export function SalonDayView({
                     masterId={master.chatId === -1 ? null : (master.chatId as number)}
                     isTouch={isTouch}
                     hourHeight={HOUR_HEIGHT}
-                    hourStart={HOUR_START}
-                    hourEnd={HOUR_END}
-                    totalHeight={TOTAL_HOURS * HOUR_HEIGHT}
+                    hourStart={hourStart}
+                    hourEnd={hourEnd}
+                    totalHeight={totalHours * HOUR_HEIGHT}
                     onCreateAt={
                       master.chatId === -1 || !onCreateAt
                         ? undefined
@@ -782,8 +885,8 @@ export function SalonDayView({
                         date.getDay(),
                       );
                       if (range === null) return null;
-                      const dayStart = HOUR_START * 60;
-                      const dayEnd = HOUR_END * 60;
+                      const dayStart = hourStart * 60;
+                      const dayEnd = hourEnd * 60;
                       const tintClass =
                         "absolute left-0 right-0 pointer-events-none bg-slate-100/60 dark:bg-slate-950/40";
                       if ("closed" in range) {
@@ -791,7 +894,7 @@ export function SalonDayView({
                           <div
                             data-testid="day-view-non-working"
                             className={tintClass}
-                            style={{ top: 0, height: TOTAL_HOURS * HOUR_HEIGHT }}
+                            style={{ top: 0, height: totalHours * HOUR_HEIGHT }}
                           />
                         );
                       }
@@ -799,7 +902,7 @@ export function SalonDayView({
                       const endVis = Math.min(range.endMin, dayEnd);
                       const beforeHeight = ((startVis - dayStart) / 60) * HOUR_HEIGHT;
                       const afterTop = ((endVis - dayStart) / 60) * HOUR_HEIGHT;
-                      const afterHeight = TOTAL_HOURS * HOUR_HEIGHT - afterTop;
+                      const afterHeight = totalHours * HOUR_HEIGHT - afterTop;
                       return (
                         <>
                           {beforeHeight > 0 && (
@@ -823,7 +926,7 @@ export function SalonDayView({
                     {/* Grid lines — solid at every hour, dashed at every
                         half-hour. Drawn over the non-working tint so the
                         ruled-paper effect stays visible everywhere. */}
-                    {Array.from({ length: TOTAL_HOURS }, (_, i) => i).map((i) => (
+                    {Array.from({ length: totalHours }, (_, i) => i).map((i) => (
                       <div key={`h-${i}`}>
                         {/* Solid hour line — skip the very first to avoid
                             doubling the column-header bottom border. */}
@@ -846,7 +949,7 @@ export function SalonDayView({
                     // Shared overlap lanes (appointments + single-day blocks)
                     // computed once per column above in `laneMap`.
                     return list.map((a) => {
-                      const top = timeToTop(a.time);
+                      const top = timeToTop(a.time, hourStart);
                       const height = durationToHeight(a.duration);
                       const placement = laneMap.get(laneKey("apt", a.id)) ?? { lane: 0, lanes: 1 };
                       const laneWidthPct = (100 - 4) / placement.lanes;
@@ -962,7 +1065,7 @@ export function SalonDayView({
                         <div
                           data-testid="day-view-empty-master"
                           className="absolute inset-x-2 pointer-events-none flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 px-4"
-                          style={{ top: 0, height: TOTAL_HOURS * HOUR_HEIGHT }}
+                          style={{ top: 0, height: totalHours * HOUR_HEIGHT }}
                         >
                           <p className="text-sm font-semibold">
                             {t("master.schedule.emptyDay.title", lang)}
@@ -983,7 +1086,7 @@ export function SalonDayView({
                           data-testid="day-view-draft-slot"
                           className="absolute left-1 right-1 rounded-lg border-2 border-dashed pointer-events-none"
                           style={{
-                            top: timeToTop(createSlot.time),
+                            top: timeToTop(createSlot.time, hourStart),
                             height: durationToHeight(createSlot.durationMin),
                             background: "rgba(124,58,237,0.18)",
                             borderColor: "rgba(124,58,237,0.7)",
@@ -1044,9 +1147,9 @@ export function SalonDayView({
                         to soft-cancel the row. */}
                     {masterBlocks.map((b) => {
                       const isMultiDay = !!b.endDate && b.endDate !== isoDate;
-                      const top = isMultiDay ? 0 : timeToTop(b.time);
+                      const top = isMultiDay ? 0 : timeToTop(b.time, hourStart);
                       const height = isMultiDay
-                        ? TOTAL_HOURS * HOUR_HEIGHT
+                        ? totalHours * HOUR_HEIGHT
                         : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
                       const isPast = blockIsPast.get(b.id) === true;
                       const dimClass = isPast ? "opacity-70 saturate-50" : "";
@@ -1095,8 +1198,7 @@ export function SalonDayView({
                             top,
                             height,
                             ...laneStyle,
-                            background:
-                              "repeating-linear-gradient(45deg, rgba(100,116,139,0.18) 0 6px, rgba(100,116,139,0.06) 6px 12px)",
+                            background: HATCH_BG,
                             borderColor: "rgba(100,116,139,0.6)",
                             color: "#475569",
                             ...(blockBusy ? { opacity: 0.4 } : {}),

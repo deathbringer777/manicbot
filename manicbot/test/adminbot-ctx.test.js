@@ -2,7 +2,7 @@
  * Admin/ops bot — ctx builder + webhook registration.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { buildAdminBotCtx, adminBotId, registerAdminBotWebhook } from '../src/adminbot/ctx.js';
+import { buildAdminBotCtx, adminBotId, registerAdminBotWebhook, ensureAdminBotWebhook } from '../src/adminbot/ctx.js';
 
 const SECRET = 'admin-webhook-secret-32-chars-minimum-xx';
 
@@ -100,5 +100,51 @@ describe('registerAdminBotWebhook', () => {
     expect(body.secret_token).toBe(SECRET);
     expect(body.url).toBe('https://manicbot.com/webhook/888');
     expect(body.allowed_updates).toEqual(['message', 'callback_query']);
+  });
+});
+
+function fakeKv() {
+  const store = new Map();
+  return {
+    store,
+    get: async (k, type) => {
+      const raw = store.has(k) ? store.get(k) : null;
+      if (raw == null) return null;
+      return type === 'json' ? JSON.parse(raw) : raw;
+    },
+    put: async (k, v) => { store.set(k, v); },
+    delete: async (k) => { store.delete(k); },
+  };
+}
+
+describe('ensureAdminBotWebhook (cron self-registration)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, result: true }), { status: 200 })));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const collisionDb = { prepare: () => ({ bind: () => ({ first: async () => ({ tenant_id: 't_salon1' }), all: async () => ({ results: [] }) }) }) };
+
+  it('auto-registers once (ADMIN_USE_BOT_TOKEN), then is idempotent', async () => {
+    const env = { ADMIN_USE_BOT_TOKEN: '1', BOT_TOKEN: '555:xyz', ADMIN_WEBHOOK_SECRET: SECRET, MANICBOT: fakeKv(), DB: collisionDb };
+    const r1 = await ensureAdminBotWebhook(env, 'https://manicbot.com');
+    expect(r1.registered).toBe(true);
+    expect(r1.url).toBe('https://manicbot.com/webhook/555');
+    expect(globalThis.fetch.mock.calls.filter(([u]) => String(u).includes('/setWebhook')).length).toBe(1);
+    // second tick — KV flag present → no further setWebhook
+    const r2 = await ensureAdminBotWebhook(env, 'https://manicbot.com');
+    expect(r2.skipped).toBe('already_registered');
+    expect(globalThis.fetch.mock.calls.filter(([u]) => String(u).includes('/setWebhook')).length).toBe(1);
+  });
+
+  it('skips when ADMIN_WEBHOOK_SECRET is missing', async () => {
+    const r = await ensureAdminBotWebhook({ ADMIN_USE_BOT_TOKEN: '1', BOT_TOKEN: '555:xyz', MANICBOT: fakeKv() }, 'https://manicbot.com');
+    expect(r.skipped).toBe('no_secret');
+    expect(globalThis.fetch.mock.calls.length).toBe(0);
+  });
+
+  it('skips when no admin bot token is configured', async () => {
+    const r = await ensureAdminBotWebhook({ ADMIN_WEBHOOK_SECRET: SECRET, MANICBOT: fakeKv() }, 'https://manicbot.com');
+    expect(r.skipped).toBe('no_admin_bot_token');
   });
 });

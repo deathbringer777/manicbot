@@ -131,7 +131,7 @@ export function MasterAvatarPicker({
         </div>
 
         <div className="mb-4 flex items-center justify-center">
-          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-accent-500/15 to-brand-500/15 text-4xl ring-1 ring-accent-500/20">
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-purple-500/15 to-brand-500/15 text-4xl ring-1 ring-purple-500/20">
             {hasPhoto ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={currentUrl!} alt="" className="h-full w-full object-cover" />

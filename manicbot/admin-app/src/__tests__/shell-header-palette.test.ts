@@ -7,13 +7,12 @@
  * every dashboard page, sitting between the cream sidebar (left) and cream
  * workspace (right). The user flagged it as "разные цвета".
  *
- * Fix: header background syncs to the workspace palette. Since the
- * beige+red+turquoise migration this is the semantic `bg-background` token
- * (warm cream in the authed scope, replacing the old `#fafaf7` literal) plus
- * `dark:bg-slate-900` (slate is remapped to warm taupe inside the scope). The
- * sticky `border-b` keeps the visual separation without a brightness jump.
+ * Fix: header background syncs to the workspace palette
+ * (`bg-[#fafaf7] dark:bg-slate-900`). The sticky `border-b` keeps the
+ * visual separation between header and content without relying on a
+ * brightness jump.
  *
- * This test pins the parity contract by string-matching the header className.
+ * This test pins the contract by string-matching the header className.
  * A future refactor that re-introduces `bg-white` (or any other
  * non-workspace shade) on the data-tour="web-header" element fails here.
  */
@@ -35,7 +34,7 @@ describe("WebShell header — palette parity with workspace", () => {
     const m = tail.match(/className="([^"]+)"/);
     expect(m).toBeTruthy();
     const cls = m![1]!;
-    expect(cls).toMatch(/bg-background/);
+    expect(cls).toMatch(/bg-\[#fafaf7\]/);
     // Hard NO on the old pure-white shade. `bg-white/N` opacity utilities
     // are fine (used for sub-elements like buttons), but the literal
     // `bg-white` on the header itself is the regression we're guarding.
@@ -52,13 +51,13 @@ describe("WebShell header — palette parity with workspace", () => {
     expect(cls).toMatch(/dark:bg-slate-900(?!\/)/);
   });
 
-  it("workspace root uses bg-background — the value we sync the header to", () => {
+  it("workspace root uses #fafaf7 — the value we sync the header to", () => {
     // Anchor on the outermost flex container of WebShell.
-    expect(SRC).toMatch(/flex h-screen w-full overflow-hidden bg-background/);
+    expect(SRC).toMatch(/flex h-screen w-full overflow-hidden bg-\[#fafaf7\]/);
   });
 
-  it("sidebar uses bg-background — palette is consistent across the three surfaces", () => {
-    // The desktop sidebar aside element carries the same workspace background.
-    expect(SRC).toMatch(/border-r [^"]*bg-background/);
+  it("sidebar uses #fafaf7 — palette is consistent across the three surfaces", () => {
+    // The desktop sidebar aside element carries the cream background.
+    expect(SRC).toMatch(/border-r [^"]*bg-\[#fafaf7\]/);
   });
 });

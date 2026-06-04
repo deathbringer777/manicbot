@@ -111,11 +111,11 @@ export function TenantSwitcher() {
         data-testid="tenant-switcher"
         aria-expanded={open}
         title={active.tenantName ?? "ManicBot"}
-        className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-border dark:border-white/10 bg-white dark:bg-white/[0.04] text-foreground dark:text-slate-200 hover:bg-surface-muted dark:hover:bg-white/8 transition-colors text-[12px] font-medium max-w-[200px]"
+        className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-[#e5e7eb] dark:border-white/10 bg-white dark:bg-white/[0.04] text-[#1a1a2e] dark:text-slate-200 hover:bg-[#f3f4f6] dark:hover:bg-white/8 transition-colors text-[12px] font-medium max-w-[200px]"
       >
-        <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground dark:text-slate-400" />
+        <Building2 className="h-3.5 w-3.5 shrink-0 text-[#6b7280] dark:text-slate-400" />
         <span className="truncate hidden sm:inline">{active.tenantName ?? "ManicBot"}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground dark:text-slate-400" />
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#6b7280] dark:text-slate-400" />
       </button>
 
       {open && (

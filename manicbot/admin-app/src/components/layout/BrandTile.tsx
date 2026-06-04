@@ -8,7 +8,7 @@
  *   2. Tenant owner / manager:   tenant.logo > 💅
  *   3. System admin / support:   💅 (no personal salon)
  *
- * The tile background is theme-aware (`bg-surface-muted dark:bg-white/[0.06]`)
+ * The tile background is theme-aware (`bg-[#f3f4f6] dark:bg-white/[0.06]`)
  * so the glyph reads on both light and dark sidebars. When a photo URL is
  * present we render it edge-to-edge inside the rounded tile so the user's
  * upload feels like a real avatar, not an icon sitting inside a chip.
@@ -69,7 +69,7 @@ export function BrandTile({
   // matching the rest of the sidebar's icon buttons.
   return (
     <div
-      className={`flex items-center justify-center bg-surface-muted dark:bg-white/[0.06] shrink-0 ${className}`}
+      className={`flex items-center justify-center bg-[#f3f4f6] dark:bg-white/[0.06] shrink-0 ${className}`}
       data-testid="brand-tile-glyph"
     >
       <span

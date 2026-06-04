@@ -224,7 +224,7 @@ export function ClientsTab({ tenantId }: Props) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("clients.search.placeholder", lang)}
             data-testid="clients-search"
-            className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-8 text-sm text-slate-900 outline-none transition focus:border-brand-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400"
+            className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-8 text-sm text-slate-900 outline-none transition focus:border-brand-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400"
           />
           {search && (
             <button

@@ -90,7 +90,7 @@ export function AddMasterFab({ onPick }: AddMasterFabProps) {
             onClick={() => pick("create_account")}
             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
           >
-            <UserPlus className="h-4 w-4 text-brand-500" />
+            <UserPlus className="h-4 w-4 text-violet-500" />
             <span className="text-sm font-medium text-slate-900 dark:text-white">{labels.create}</span>
           </button>
           <button
@@ -117,7 +117,7 @@ export function AddMasterFab({ onPick }: AddMasterFabProps) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="h-14 sm:h-12 rounded-full text-white font-semibold flex items-center justify-center gap-2 px-4 sm:px-5 shadow-2xl active:scale-95 transition-transform"
-        style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
+        style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
       >
         <Plus className="h-5 w-5" />
         <span className="hidden sm:inline text-sm">{labels.add}</span>

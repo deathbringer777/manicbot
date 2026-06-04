@@ -8,7 +8,24 @@ import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { SectionHeader } from "~/components/salon/SalonShared";
 import { TrackingLinksGenerator } from "~/components/salon/TrackingLinksGenerator";
-import { sourceColor } from "~/lib/theme/palette";
+
+const SOURCE_COLORS: Record<string, string> = {
+  qr: "#EC4899",
+  website: "#3B82F6",
+  instagram: "#E1306C",
+  tiktok: "#000000",
+  facebook: "#1877F2",
+  google_maps: "#34A853",
+  flyer: "#F59E0B",
+  sms: "#8B5CF6",
+  telegram: "#229ED9",
+  direct: "#64748B",
+  other: "#94A3B8",
+};
+
+function colorFor(source: string): string {
+  return SOURCE_COLORS[source] ?? "#94A3B8";
+}
 
 function labelFor(source: string, lang: Lang): string {
   switch (source) {
@@ -269,15 +286,15 @@ export function AnalyticsTab({
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "var(--chart-tooltip-bg)",
-                        border: "1px solid var(--chart-grid)",
+                        background: "rgb(15 23 42)",
+                        border: "1px solid rgb(51 65 85)",
                         borderRadius: 8,
                         fontSize: 11,
                       }}
                     />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {acquisition.data.sources.map((src) => (
-                      <Bar key={src} dataKey={src} stackId="a" fill={sourceColor(src)} name={labelFor(src, lang)} />
+                      <Bar key={src} dataKey={src} stackId="a" fill={colorFor(src)} name={labelFor(src, lang)} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
@@ -325,7 +342,7 @@ export function AnalyticsTab({
                           <span className="inline-flex items-center gap-1.5">
                             <span
                               className="h-2 w-2 rounded-full"
-                              style={{ background: sourceColor(c.source) }}
+                              style={{ background: colorFor(c.source) }}
                             />
                             {labelFor(c.source, lang)}
                           </span>

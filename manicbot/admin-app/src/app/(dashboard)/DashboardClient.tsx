@@ -147,7 +147,7 @@ function MiniCalendar({ data, lang }: { data: { date: string; appointments: numb
               }`}
               style={
                 !isToday(day) && count > 0
-                  ? { backgroundColor: `rgba(30,168,150,${0.07 + intensity * 0.18})` }
+                  ? { backgroundColor: `rgba(11,155,107,${0.07 + intensity * 0.18})` }
                   : undefined
               }
               title={count > 0 ? `${count} bookings` : undefined}

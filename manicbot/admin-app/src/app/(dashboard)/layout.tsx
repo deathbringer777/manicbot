@@ -52,17 +52,6 @@ export default function DashboardLayout({
     }
   }, [roleQuery.isLoading, roleQuery.data?.role, router]);
 
-  // Scope the authenticated-app palette (beige + red + turquoise) to this
-  // subtree. globals.css overrides the design tokens under [data-app="authed"];
-  // tagging <body> (a descendant of the <html>.dark theme node) makes every
-  // authed surface — including body-portaled modals, toasts and the command
-  // palette — adopt the palette, while public/marketing/storefront routes,
-  // which never mount this layout, keep the default palette. Cleared on unmount.
-  useEffect(() => {
-    document.body.setAttribute("data-app", "authed");
-    return () => document.body.removeAttribute("data-app");
-  }, []);
-
   // Loading
   if (roleQuery.isLoading || !roleQuery.data?.role) {
     return (

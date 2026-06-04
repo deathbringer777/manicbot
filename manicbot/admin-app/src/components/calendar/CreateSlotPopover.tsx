@@ -131,7 +131,7 @@ export function CreateSlotPopover({
           }}
           placeholder={t("appointments.quickTitle", lang)}
           data-testid="create-slot-title"
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400 dark:placeholder:text-white/30"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30"
         />
 
         <div className="grid grid-cols-1 gap-2">
@@ -139,8 +139,8 @@ export function CreateSlotPopover({
             type="button"
             onClick={() => onCreate(title.trim())}
             data-testid="create-slot-create"
-            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90"
-            style={{ background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }}
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
+            style={{ background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }}
           >
             <Plus className="h-4 w-4" />
             {t("appointments.manual.create", lang)}

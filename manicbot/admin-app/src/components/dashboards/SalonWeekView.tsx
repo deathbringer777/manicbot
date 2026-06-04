@@ -30,6 +30,7 @@ import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResize";
+import { useCoarsePointer } from "~/lib/useCoarsePointer";
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
 import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHours";
@@ -197,16 +198,22 @@ export function SalonWeekView({
   // state. The Week view doesn't pin masters to columns, so commit will
   // always have `toMasterId === fromMasterId` here; the hook still resolves
   // it generically for Day-view parity.
+  // Touch/coarse-pointer devices disable the desktop drag gestures (create /
+  // move / resize) so the grid scrolls under a finger; creation happens via
+  // the "+ Запись" button instead. Desktop (mouse/trackpad) is unchanged.
+  const isTouch = useCoarsePointer();
   const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
     hourHeight: HOUR_HEIGHT,
     hourStart: HOUR_START,
     hourEnd: HOUR_END,
+    isTouch,
     onCommit: (c) => (c.kind === "block" ? onMoveBlock : onMoveAppointment)?.(c),
   });
   const { ghost: resizeGhost, resizingId, bindHandle: bindResize } = useDragToResize({
     hourHeight: HOUR_HEIGHT,
     hourStart: HOUR_START,
     hourEnd: HOUR_END,
+    isTouch,
     onResize: (c) => onResize?.(c),
   });
   const days = useMemo(() => weekDays(date), [date]);
@@ -483,6 +490,7 @@ export function SalonWeekView({
                   <DragCreateLayer
                     date={iso}
                     masterId={null}
+                    isTouch={isTouch}
                     hourHeight={HOUR_HEIGHT}
                     hourStart={HOUR_START}
                     hourEnd={HOUR_END}

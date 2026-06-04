@@ -18,7 +18,7 @@ export function AddServiceDropdown({ lang, onNew, onTemplates }: { lang: Lang; o
       {open && (
         <>
           <div className="fixed inset-0 z-[59]" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 z-[60] min-w-[168px] rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/60 dark:border-white/10 shadow-2xl overflow-hidden">
+          <div className="absolute right-0 top-full mt-2 z-[60] min-w-[168px] max-w-[calc(100vw-1.5rem)] rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/60 dark:border-white/10 shadow-2xl overflow-hidden">
             <button
               onClick={() => { setOpen(false); onNew(); }}
               className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">

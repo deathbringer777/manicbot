@@ -234,3 +234,29 @@ body.driver-tour-active .overflow-hidden {
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Touch (coarse-pointer) affordances. Phones/tablets can't hover, so any
+   action hidden behind `group-hover:opacity-100` would be permanently
+   unreachable. On touch we (1) reveal those opacity-gated affordances,
+   (2) floor the Button primitive's tap target near the 44px guideline via
+   its data-size attribute, and (3) add a press-dim for tactile feedback.
+   Gated on `(hover: none)` so desktop (mouse/trackpad) is untouched. */
+@media (hover: none) {
+  /* (1) Reveal hover-gated action icons (delete / edit / copy / etc). */
+  .group .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+
+  /* (2) Tap targets — only the <Button> primitive (it emits data-size),
+     so compact raw icon-chips keep their footprint. */
+  button[data-size="sm"] { min-height: 2.25rem; }  /* 36px */
+  button[data-size="md"] { min-height: 2.75rem; }  /* 44px */
+  button[data-size="lg"] { min-height: 3rem; }     /* 48px */
+
+  /* (3) Press feedback (touch has no :hover state to lean on). */
+  button:active,
+  [role="button"]:active {
+    opacity: 0.85;
+  }
+}

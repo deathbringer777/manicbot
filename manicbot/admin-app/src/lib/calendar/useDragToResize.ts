@@ -61,6 +61,10 @@ interface UseDragToResizeArgs {
   /** Floor for the resized duration. Default 15. */
   minDurationMin?: number;
   onResize: (c: ResizeCommit) => void;
+  /** Touch/coarse-pointer flag. When true drag-to-resize is disabled and the
+   *  handle's `touchAction` becomes "pan-x pan-y" so the grid scrolls.
+   *  Defaults to false (desktop) — pass `useCoarsePointer()`. */
+  isTouch?: boolean;
 }
 
 export interface UseDragToResizeBindArgs {
@@ -80,7 +84,7 @@ export interface UseDragToResizeApi {
   /** Attach to the small bottom-edge handle rendered inside each block. */
   bindHandle: (args: UseDragToResizeBindArgs) => {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => void;
-    style: { touchAction: "none" };
+    style: { touchAction: "none" | "pan-x pan-y" };
   };
 }
 
@@ -109,6 +113,7 @@ export function useDragToResize({
   snapMin = 15,
   minDurationMin = 15,
   onResize,
+  isTouch = false,
 }: UseDragToResizeArgs): UseDragToResizeApi {
   const [ghost, setGhost] = useState<ResizeGhost | null>(null);
   const [resizingId, setResizingId] = useState<string | number | null>(null);
@@ -133,6 +138,9 @@ export function useDragToResize({
 
   const bindHandle = useCallback((args: UseDragToResizeBindArgs) => {
     const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+      // Touch/coarse-pointer: drag-to-resize is disabled (duration follows the
+      // service; change it via the edit form). Desktop unchanged.
+      if (isTouch) return;
       if (e.button !== 0 && e.pointerType === "mouse") return;
       // Claim the gesture before the block body's move handler / the
       // DragCreateLayer beneath sees it.
@@ -217,8 +225,8 @@ export function useDragToResize({
       e.preventDefault();
     };
 
-    return { onPointerDown, style: { touchAction: "none" as const } };
-  }, [cleanup, durationFromPointer, hourHeight, hourStart, onResize]);
+    return { onPointerDown, style: { touchAction: (isTouch ? "pan-x pan-y" : "none") as "none" | "pan-x pan-y" } };
+  }, [cleanup, durationFromPointer, hourHeight, hourStart, isTouch, onResize]);
 
   return useMemo(
     () => ({ ghost, resizingId, bindHandle }),

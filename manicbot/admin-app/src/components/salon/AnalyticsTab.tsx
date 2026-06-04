@@ -325,7 +325,8 @@ export function AnalyticsTab({
             </h3>
             {topCampaigns.data && topCampaigns.data.campaigns.length > 0 ? (
               <div className="glass-card rounded-2xl overflow-hidden">
-                <table className="w-full text-xs">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[32rem] text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500">
                     <tr>
                       <th className="text-left px-3 py-2 font-medium">{t("analytics.colSource", lang)}</th>
@@ -357,6 +358,7 @@ export function AnalyticsTab({
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             ) : (
               <div className="glass-card rounded-2xl p-6 text-center text-sm text-slate-500">

@@ -121,7 +121,7 @@ export function TenantSwitcher() {
       {open && (
         <div
           data-testid="tenant-switcher-menu"
-          className="absolute right-0 top-10 z-50 w-64 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl shadow-black/20 dark:shadow-black/60 overflow-hidden"
+          className="absolute right-0 top-10 z-50 w-64 max-w-[calc(100vw-1.5rem)] rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl shadow-black/20 dark:shadow-black/60 overflow-hidden"
         >
           <p className="px-3 pt-2.5 pb-1 text-[10px] uppercase font-bold tracking-wider text-slate-400">
             {HEADER_LABEL[lang] ?? HEADER_LABEL.en}

@@ -1045,7 +1045,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
     try {
-      const { action, appointmentId, tenantId, confirmedBy, oldDate, oldTime } = await request.json();
+      const { action, appointmentId, tenantId, confirmedBy, oldDate, oldTime, apt: bodyApt } = await request.json();
       if (!action || !appointmentId || !tenantId) {
         return Response.json({ error: 'action, appointmentId, tenantId required' }, { status: 400 });
       }
@@ -1076,7 +1076,19 @@ export async function tryAdminKeyRoutes(request, env, url) {
       await initServices(ctx);
 
       const { getAptById, updateApt } = await import('../services/appointments.js');
-      const apt = await getAptById(ctx, appointmentId);
+      let apt = await getAptById(ctx, appointmentId);
+      // Read-after-write fallback for the calendar-only `sync_calendar` action:
+      // appointments.createManual inserts the row then immediately calls this
+      // endpoint, so the row may not yet be visible to this Worker's D1 read.
+      // Accept the appointment payload from the request body when it is
+      // tenant-matched — otherwise the push is silently dropped to the ≤15-min
+      // phaseGcalSync cron (the exact delay #358 set out to remove). Tenant
+      // isolation: the payload's tenantId MUST equal the authenticated tenantId
+      // and its id MUST equal appointmentId.
+      if (!apt && action === 'sync_calendar' && bodyApt
+          && bodyApt.id === appointmentId && bodyApt.tenantId === tenantId) {
+        apt = bodyApt;
+      }
       if (!apt) return Response.json({ error: 'appointment not found' }, { status: 404 });
 
       let notified = false;
@@ -1150,6 +1162,11 @@ export async function tryAdminKeyRoutes(request, env, url) {
             const { syncAppointmentCalendar } = await import('../services/google-calendar-oauth.js');
             const result = await syncAppointmentCalendar(ctx, apt);
             calendarSynced = !!result?.ok;
+            if (!result?.ok && !result?.skipped) {
+              // Don't swallow a failed push: surface it so it's diagnosable.
+              // The row keeps google_event_id NULL, so phaseGcalSync retries.
+              log.warn('http.adminKey', { action: 'appointment_calendar_sync_manual_failed', aptId: appointmentId, error: result?.error });
+            }
           } catch (e) {
             log.error('http.adminKey', e instanceof Error ? e : new Error(String(e.message)), { action: 'appointment_calendar_sync_manual' });
           }

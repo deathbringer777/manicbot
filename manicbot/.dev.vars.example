@@ -73,12 +73,15 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # ─── ADMIN / OPS BOT (interactive monitoring; system_admin only) ─────────────
 # Turns the notify bot into a two-way AI ops/monitoring bot. Reaches /webhook/{botId}
 # via the existing pipeline; owner-only (gated by ADMIN_CHAT_ID).
-#   - Bot token: ADMIN_BOT_TOKEN if set, else NOTIFY_BOT_TOKEN (NEVER BOT_TOKEN).
+#   - Bot token resolution: ADMIN_BOT_TOKEN → (ADMIN_USE_BOT_TOKEN=1 ? BOT_TOKEN) → NOTIFY_BOT_TOKEN.
 #   - REQUIRED to enable: ADMIN_WEBHOOK_SECRET (min 16 chars). Without it the bot
 #     is disabled (getCtx will not intercept the botId).
 # After setting these, register the webhook once: GET /admin/register-admin-bot-webhook
-# (Bearer ADMIN_KEY). It refuses if the botId belongs to a registered client bot.
+# (Bearer ADMIN_KEY). Hijack guard: refuses a registered client bot ONLY on the
+# accidental NOTIFY_BOT_TOKEN fallback; an EXPLICIT ADMIN_BOT_TOKEN / ADMIN_USE_BOT_TOKEN
+# is a deliberate repurpose and is allowed (that bot's tenant Telegram flow stops).
 # ADMIN_BOT_TOKEN=123456:ABCdef...            # optional; dedicated admin bot
+# ADMIN_USE_BOT_TOKEN=1                        # optional; reuse the Worker's BOT_TOKEN (the 7:20 report bot) — no token to paste
 # ADMIN_WEBHOOK_SECRET=min_16_char_secret_here
 # ADMIN_BOT_ALLOWED_IDS=123456789 987654321   # optional extra authorized Telegram user ids
 

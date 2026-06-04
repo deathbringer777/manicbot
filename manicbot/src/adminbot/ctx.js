@@ -22,7 +22,21 @@ const MIN_SECRET_LEN = 16;
 /** Resolve the admin bot token — dedicated first, else the notify bot. No
  *  fallback to the client BOT_TOKEN (would hijack a customer bot). */
 export function adminBotToken(env) {
-  return env?.ADMIN_BOT_TOKEN || env?.NOTIFY_BOT_TOKEN || null;
+  if (env?.ADMIN_BOT_TOKEN) return env.ADMIN_BOT_TOKEN;
+  // Opt-in: reuse the Worker's own BOT_TOKEN (the bot that already sends the
+  // 7:20 report). Lets the owner dedicate the existing report bot to the admin
+  // role without exposing/pasting its token — the Worker reads BOT_TOKEN itself.
+  if (env?.ADMIN_USE_BOT_TOKEN === '1' && env?.BOT_TOKEN) return env.BOT_TOKEN;
+  return env?.NOTIFY_BOT_TOKEN || null;
+}
+
+/**
+ * Did the operator DELIBERATELY dedicate a specific bot to the admin role?
+ * True for an explicit ADMIN_BOT_TOKEN or the ADMIN_USE_BOT_TOKEN opt-in.
+ * False = the accidental NOTIFY_BOT_TOKEN fallback (keep the strict hijack guard).
+ */
+export function adminBotIsExplicit(env) {
+  return !!(env?.ADMIN_BOT_TOKEN || env?.ADMIN_USE_BOT_TOKEN === '1');
 }
 
 /** The admin bot's numeric id (the part before ':' in the token), or null. */
@@ -69,11 +83,18 @@ export async function registerAdminBotWebhook(env, baseUrl) {
   if (String(secret).length < MIN_SECRET_LEN) {
     return { ok: false, error: 'admin_webhook_secret_too_short' };
   }
+  // Hijack guard: refuse a registered client bot ONLY when the admin bot was
+  // resolved via the NOTIFY_BOT_TOKEN fallback (accidental). An explicit
+  // ADMIN_BOT_TOKEN means the operator deliberately dedicated this bot — allow
+  // it (its tenant Telegram flow stops by design).
   if (ctx.db) {
     const collision = await getTenantIdByBotId(ctx, ctx.botId);
-    if (collision) {
-      log.error('adminbot.register', new Error('admin botId collides with a registered client bot — refusing'), { botId: ctx.botId, tenantId: collision });
+    if (collision && !adminBotIsExplicit(env)) {
+      log.error('adminbot.register', new Error('admin bot fell back to a registered client bot — refusing (set ADMIN_BOT_TOKEN to dedicate a bot)'), { botId: ctx.botId, tenantId: collision });
       return { ok: false, error: 'admin_bot_id_is_client_bot', tenantId: collision };
+    }
+    if (collision) {
+      log.warn('adminbot.register', { message: 'repurposing a registered bot as admin bot (explicit ADMIN_BOT_TOKEN)', botId: ctx.botId, tenantId: collision });
     }
   }
   const whUrl = `${String(baseUrl).replace(/\/$/, '')}/webhook/${ctx.botId}`;

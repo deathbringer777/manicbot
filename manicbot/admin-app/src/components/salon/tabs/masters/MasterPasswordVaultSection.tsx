@@ -411,7 +411,7 @@ export function MasterPasswordVaultSection({
   function Header() {
     return (
       <div className="flex items-center gap-2">
-        <KeyRound className="h-4 w-4 text-accent-600" />
+        <KeyRound className="h-4 w-4 text-purple-500" />
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
           {t("masterDetail.password.title", lang)}
         </h3>

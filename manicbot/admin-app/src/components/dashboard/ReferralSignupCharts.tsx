@@ -13,7 +13,15 @@ import {
 } from "recharts";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
-import { SOURCE_COLORS, sourceColor } from "~/lib/theme/palette";
+
+const COLORS: Record<string, string> = {
+  google: "#4285F4",
+  instagram: "#E4405F",
+  telegram: "#26A5E4",
+  friends: "#a78bfa",
+  other: "#64748b",
+  unspecified: "#334155",
+};
 
 function labelFor(source: string, lang: Lang): string {
   switch (source) {
@@ -52,7 +60,7 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
       key: r.source,
       name: labelFor(r.source, lang),
       value: r.count,
-      fill: sourceColor(r.source),
+      fill: COLORS[r.source] ?? COLORS.other,
     }));
 
   const dailyChart = daily.map((d) => ({
@@ -76,12 +84,12 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={barData} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" horizontal={false} />
-              <XAxis type="number" stroke="var(--chart-axis)" fontSize={11} tickLine={false} allowDecimals={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+              <XAxis type="number" stroke="#475569" fontSize={11} tickLine={false} allowDecimals={false} />
               <YAxis
                 type="category"
                 dataKey="name"
-                stroke="var(--chart-axis)"
+                stroke="#475569"
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
@@ -89,13 +97,13 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "var(--chart-tooltip-bg)",
-                  border: "1px solid var(--chart-grid)",
+                  backgroundColor: "#0f172a",
+                  border: "1px solid #1e293b",
                   borderRadius: "8px",
                   fontSize: "12px",
                 }}
-                itemStyle={{ color: "var(--chart-tooltip-text)" }}
-                labelStyle={{ color: "var(--chart-axis-text)" }}
+                itemStyle={{ color: "#f8fafc" }}
+                labelStyle={{ color: "#94a3b8" }}
                 formatter={(value) => [value ?? 0, t("charts.tooltipSignups", lang)]}
               />
               <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={28}>
@@ -115,20 +123,20 @@ export function ReferralSignupCharts({ bySource, daily, totalLabel }: ReferralSi
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={dailyChart} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
-              <XAxis dataKey="label" stroke="var(--chart-axis)" fontSize={10} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-              <YAxis stroke="var(--chart-axis)" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+              <XAxis dataKey="label" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "var(--chart-tooltip-bg)",
-                  border: "1px solid var(--chart-grid)",
+                  backgroundColor: "#0f172a",
+                  border: "1px solid #1e293b",
                   borderRadius: "8px",
                   fontSize: "12px",
                 }}
               />
               <Legend wrapperStyle={{ fontSize: "10px" }} />
               {STACK_KEYS.map((k) => (
-                <Bar key={k} stackId="signup" dataKey={k} name={labelFor(k, lang)} fill={SOURCE_COLORS[k]} />
+                <Bar key={k} stackId="signup" dataKey={k} name={labelFor(k, lang)} fill={COLORS[k]} />
               ))}
             </BarChart>
           </ResponsiveContainer>

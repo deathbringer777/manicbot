@@ -192,13 +192,13 @@ export function ServiceCategoriesModal({ tenantId, onClose }: Props) {
                       }}
                       autoFocus
                       maxLength={60}
-                      className="w-full bg-white dark:bg-slate-800 border border-brand-400 dark:border-brand-400 text-slate-900 dark:text-white rounded-lg px-2 py-1 text-sm focus:outline-none"
+                      className="w-full bg-white dark:bg-slate-800 border border-brand-400 dark:border-violet-400 text-slate-900 dark:text-white rounded-lg px-2 py-1 text-sm focus:outline-none"
                       data-testid={`category-rename-input-${c.id}`}
                     />
                   ) : (
                     <button
                       onClick={() => startEdit(c)}
-                      className="w-full text-left text-sm font-medium text-slate-900 dark:text-white hover:text-brand-500 dark:hover:text-brand-300 transition-colors truncate"
+                      className="w-full text-left text-sm font-medium text-slate-900 dark:text-white hover:text-brand-500 dark:hover:text-violet-300 transition-colors truncate"
                       data-testid={`category-name-${c.id}`}
                     >
                       {c.name}

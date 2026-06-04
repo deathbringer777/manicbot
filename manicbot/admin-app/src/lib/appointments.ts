@@ -19,10 +19,7 @@ export const APT_BORDER: Record<string, string> = {
   cancelled: "border-l-red-500/40",
   rejected:  "border-l-red-500/40",
   no_show:   "border-l-orange-500/40",
-  // `done` uses violet (not brand): brand-* is remapped to red inside the
-  // authed scope, which would collide with cancelled/rejected red. Violet is
-  // a non-remapped scale, so `done` keeps a distinct (formerly purple) hue.
-  done:      "border-l-violet-500",
+  done:      "border-l-brand-500",
 };
 
 export const STATUS_STYLES: Record<string, string> = {
@@ -31,7 +28,7 @@ export const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-red-500/15 text-red-400 border border-red-500/20",
   rejected:  "bg-red-500/15 text-red-400 border border-red-500/20",
   no_show:   "bg-orange-500/15 text-orange-400 border border-orange-500/20",
-  done:      "bg-violet-500/15 text-violet-400 border border-violet-500/20",
+  done:      "bg-brand-500/15 text-brand-400 border border-brand-500/20",
 };
 
 export const NAIL_EMOJIS: string[] = [

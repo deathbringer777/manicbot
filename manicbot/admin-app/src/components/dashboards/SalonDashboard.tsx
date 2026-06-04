@@ -2666,7 +2666,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                   className="glass-card group flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:border-brand-500/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500/40 active:scale-[0.99]"
                 >
                   <div
-                    className={`h-10 w-10 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-brand-500/20 to-accent-500/20 flex items-center justify-center text-xl ${isHidden ? "opacity-50" : ""}`}
+                    className={`h-10 w-10 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-brand-500/20 to-violet-500/20 flex items-center justify-center text-xl ${isHidden ? "opacity-50" : ""}`}
                     data-testid={`master-row-avatar-${m.chatId}`}
                   >
                     {m.avatarUrl ? (
@@ -2680,7 +2680,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className={`font-medium text-sm ${isHidden ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"}`}>{m.name ?? `#${m.chatId}`}</p>
                       {isWebAccount && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent-500/15 text-accent-700 dark:text-accent-300 border border-accent-500/20">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/15 text-purple-400 border border-purple-500/20">
                           {t("master.webBadge", lang)}
                         </span>
                       )}

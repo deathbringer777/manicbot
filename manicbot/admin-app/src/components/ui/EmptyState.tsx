@@ -30,21 +30,21 @@ export function EmptyState({
           {/* Soft animated halo */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-[-22px] rounded-full bg-[radial-gradient(circle_at_center,rgba(30,168,150,0.18),rgba(30,168,150,0)_60%)] dark:bg-[radial-gradient(circle_at_center,rgba(52,197,176,0.22),rgba(52,197,176,0)_65%)] animate-empty-halo"
+            className="pointer-events-none absolute inset-[-22px] rounded-full bg-[radial-gradient(circle_at_center,rgba(11,155,107,0.18),rgba(11,155,107,0)_60%)] dark:bg-[radial-gradient(circle_at_center,rgba(11,155,107,0.22),rgba(11,155,107,0)_65%)] animate-empty-halo"
           />
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-muted dark:bg-slate-800/80 ring-1 ring-inset ring-border dark:ring-white/[0.06]">
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f3f4f6] dark:bg-slate-800/80 ring-1 ring-inset ring-[#e5e7eb] dark:ring-white/[0.06]">
             <Icon
-              className="h-7 w-7 text-muted-foreground dark:text-slate-400"
+              className="h-7 w-7 text-[#6b7280] dark:text-slate-400"
               strokeWidth={1.6}
             />
           </div>
         </div>
       )}
-      <h3 className="text-[20px] font-bold tracking-tight text-foreground dark:text-white">
+      <h3 className="text-[20px] font-bold tracking-tight text-[#1a1a2e] dark:text-white">
         {title}
       </h3>
       {description && (
-        <p className="mt-2 max-w-[380px] text-[14px] leading-relaxed text-muted-foreground dark:text-slate-400">
+        <p className="mt-2 max-w-[380px] text-[14px] leading-relaxed text-[#6b7280] dark:text-slate-400">
           {description}
         </p>
       )}
@@ -60,7 +60,7 @@ export function EmptyState({
 
 function PrimaryAction({ action }: { action: Action }) {
   const cls =
-    "group inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-[13px] font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover hover:shadow-md transition-all";
+    "group inline-flex items-center gap-1.5 rounded-full bg-[#1a1a2e] dark:bg-white px-5 py-2.5 text-[13px] font-semibold text-white dark:text-[#1a1a2e] shadow-sm hover:shadow-md transition-all hover:opacity-90";
   const inner = (
     <>
       <span>{action.label}</span>
@@ -83,7 +83,7 @@ function PrimaryAction({ action }: { action: Action }) {
 
 function SecondaryAction({ action }: { action: Action }) {
   const cls =
-    "inline-flex items-center gap-1 text-[13px] font-medium text-muted-foreground dark:text-slate-400 hover:text-foreground dark:hover:text-white transition-colors";
+    "inline-flex items-center gap-1 text-[13px] font-medium text-[#6b7280] dark:text-slate-400 hover:text-[#1a1a2e] dark:hover:text-white transition-colors";
   if (action.href) {
     return (
       <Link href={action.href} className={cls}>

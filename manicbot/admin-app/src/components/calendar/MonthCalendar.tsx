@@ -30,13 +30,19 @@ import { useMemo, type ReactNode } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
-import { MASTER_EVENT_HUES } from "~/lib/theme/palette";
 
 /** Brand-derived hue order — must match SalonDayView/Week so the same
- *  master always renders in the same color across every view. Sourced from
- *  the shared theme palette (red/turquoise first) so all calendar surfaces
- *  agree per master. */
-export const MONTH_CAL_MASTER_PALETTE = [...MASTER_EVENT_HUES];
+ *  master always renders in the same color across every view. */
+export const MONTH_CAL_MASTER_PALETTE = [
+  "#7c3aed", // brand purple
+  "#0b9b6b", // accent green
+  "#0891b2", // cyan
+  "#ec4899", // pink
+  "#d97706", // amber
+  "#2563eb", // blue
+  "#9333ea", // violet
+  "#0d9488", // teal
+] as const;
 
 const WEEKDAYS_BY_LANG: Record<string, string[]> = {
   ru: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
@@ -100,13 +106,13 @@ function fmtIso(y: number, m: number, d: number): string {
 
 /** Status → chip tint (bg + text). Cancelled / no_show fade through opacity. */
 function statusTone(sk: string): { bg: string; text: string } {
-  if (sk === "pending") return { bg: "var(--status-pending-bg)", text: "var(--status-pending-text)" };
-  if (sk === "confirmed") return { bg: "var(--status-confirmed-bg)", text: "var(--status-confirmed-text)" };
-  if (sk === "done") return { bg: "var(--status-done-bg)", text: "var(--status-done-text)" };
-  if (sk === "no_show") return { bg: "var(--status-noshow-bg)", text: "var(--status-noshow-text)" };
+  if (sk === "pending") return { bg: "rgba(245,158,11,0.18)", text: "#b45309" };
+  if (sk === "confirmed") return { bg: "rgba(16,185,129,0.16)", text: "#047857" };
+  if (sk === "done") return { bg: "rgba(124,58,237,0.16)", text: "#6d28d9" };
+  if (sk === "no_show") return { bg: "rgba(249,115,22,0.16)", text: "#c2410c" };
   if (sk === "cancelled" || sk === "rejected")
-    return { bg: "var(--status-cancelled-bg)", text: "var(--status-cancelled-text)" };
-  return { bg: "var(--status-neutral-bg)", text: "var(--status-neutral-text)" };
+    return { bg: "rgba(100,116,139,0.16)", text: "#475569" };
+  return { bg: "rgba(100,116,139,0.16)", text: "#475569" };
 }
 
 function statusKeyOf(a: MonthCalApt): string {
@@ -407,21 +413,21 @@ export function MonthCalendar({
           <span>{t("salon.cal.today", lang)}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded" style={{ background: "var(--status-pending-dot)" }} />
+          <div className="w-2.5 h-2.5 rounded" style={{ background: "rgba(245,158,11,0.4)" }} />
           <span>{t("salon.cal.pending", lang)}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded" style={{ background: "var(--status-confirmed-dot)" }} />
+          <div className="w-2.5 h-2.5 rounded" style={{ background: "rgba(16,185,129,0.4)" }} />
           <span>{t("salon.cal.confirmed", lang)}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded" style={{ background: "var(--status-noshow-dot)" }} />
+          <div className="w-2.5 h-2.5 rounded" style={{ background: "rgba(249,115,22,0.4)" }} />
           <span>{t("status.no_show", lang)}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div
             className="w-2.5 h-2.5 rounded opacity-50"
-            style={{ background: "var(--status-neutral-dot)" }}
+            style={{ background: "rgba(100,116,139,0.4)" }}
           />
           <span>{t("status.cancelled", lang)}</span>
         </div>

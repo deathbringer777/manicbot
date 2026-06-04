@@ -59,7 +59,7 @@ interface Props {
 }
 
 const FIELD_BASE =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none transition focus:border-brand-500 placeholder:text-slate-400 [color-scheme:light] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400 dark:placeholder:text-white/30 dark:[color-scheme:dark]";
 
 const LABEL =
   "mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50";
@@ -401,10 +401,10 @@ export function BlockDetailPanel({
                       data-testid={`block-panel-duration-${d}`}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
                         sel
-                          ? "border-transparent text-white shadow-[0_4px_12px_-4px_rgba(209,70,56,0.55)]"
+                          ? "border-transparent text-white shadow-[0_4px_12px_-4px_rgba(124,58,237,0.55)]"
                           : "border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.04]"
                       }`}
-                      style={sel ? { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" } : undefined}
+                      style={sel ? { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" } : undefined}
                     >
                       {durationLabel(d)}
                     </button>
@@ -459,12 +459,12 @@ export function BlockDetailPanel({
             className={
               !dirty || !formValid || update.isPending
                 ? "flex-1 rounded-lg bg-slate-200 py-2 text-xs font-semibold text-slate-400 cursor-not-allowed dark:bg-slate-700 dark:text-slate-500"
-                : "flex-1 rounded-lg py-2 text-xs font-semibold text-white shadow-[0_8px_24px_-6px_rgba(209,70,56,0.45)] transition hover:opacity-90"
+                : "flex-1 rounded-lg py-2 text-xs font-semibold text-white shadow-[0_8px_24px_-6px_rgba(124,58,237,0.45)] transition hover:opacity-90"
             }
             style={
               !dirty || !formValid || update.isPending
                 ? undefined
-                : { background: "linear-gradient(135deg,var(--color-primary),var(--color-secondary))" }
+                : { background: "linear-gradient(135deg,#7c3aed,#06b6d4)" }
             }
             data-testid="block-panel-edit-save"
           >

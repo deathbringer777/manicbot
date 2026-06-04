@@ -49,7 +49,7 @@ interface Props {
 }
 
 const TRIGGER_BASE =
-  "w-full flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-slate-900 outline-none transition focus:border-brand-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-brand-400";
+  "w-full flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-slate-900 outline-none transition focus:border-brand-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400";
 
 const TRIGGER_DISABLED = "opacity-60 cursor-not-allowed";
 const TRIGGER_ENABLED = "hover:border-slate-300 dark:hover:border-white/20 cursor-pointer";

@@ -38,21 +38,21 @@ export function OverviewChart({ data = [] }: Props) {
       <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id="colorAppts" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="var(--chart-line)" stopOpacity={0.3} />
-            <stop offset="95%" stopColor="var(--chart-line)" stopOpacity={0} />
+            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
         <XAxis
           dataKey="name"
-          stroke="var(--chart-axis)"
+          stroke="#475569"
           fontSize={11}
           tickLine={false}
           axisLine={false}
           interval="preserveStartEnd"
         />
         <YAxis
-          stroke="var(--chart-axis)"
+          stroke="#475569"
           fontSize={11}
           tickLine={false}
           axisLine={false}
@@ -60,24 +60,24 @@ export function OverviewChart({ data = [] }: Props) {
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: "var(--chart-tooltip-bg)",
-            border: "1px solid var(--chart-grid)",
+            backgroundColor: "#0f172a",
+            border: "1px solid #1e293b",
             borderRadius: "8px",
             fontSize: "12px",
           }}
-          itemStyle={{ color: "var(--chart-tooltip-text)" }}
-          labelStyle={{ color: "var(--chart-axis-text)" }}
+          itemStyle={{ color: "#f8fafc" }}
+          labelStyle={{ color: "#94a3b8" }}
           formatter={(value) => [value ?? 0, t("charts.tooltipBookings", lang)]}
         />
         <Area
           type="monotone"
           dataKey="value"
-          stroke="var(--chart-line)"
+          stroke="#3b82f6"
           strokeWidth={2}
           fillOpacity={1}
           fill="url(#colorAppts)"
           dot={false}
-          activeDot={{ r: 4, fill: "var(--chart-line)", strokeWidth: 0 }}
+          activeDot={{ r: 4, fill: "#3b82f6", strokeWidth: 0 }}
         />
       </AreaChart>
     </ResponsiveContainer>

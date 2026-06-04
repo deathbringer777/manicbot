@@ -244,8 +244,8 @@ describe("MonthCalendar", () => {
       <MonthCalendar
         apts={[apt({ id: 1, masterId: 200 })]}
         masters={[
-          { chatId: 100, name: "Anna" }, // idx 0 — MASTER_EVENT_HUES[0] (red)
-          { chatId: 200, name: "Olga" }, // idx 1 — MASTER_EVENT_HUES[1] (turquoise)
+          { chatId: 100, name: "Anna" }, // idx 0 — purple
+          { chatId: 200, name: "Olga" }, // idx 1 — green
         ]}
         viewDate={FIXED_NOW}
         setViewDate={() => undefined}
@@ -256,11 +256,10 @@ describe("MonthCalendar", () => {
       "en",
     );
     const event = screen.getByTestId("month-cal-event");
-    // Olga is index 1 → MASTER_EVENT_HUES[1] = #1ea896 (turquoise). Find the
-    // master-color stripe span; style carries the hue as hex or rgb.
+    // Olga is index 1 → "#0b9b6b" — find the master-color stripe span.
     const stripe = event.querySelector("span[style*='background']") as HTMLElement | null;
     expect(stripe).toBeTruthy();
-    expect(stripe!.getAttribute("style") ?? "").toMatch(/1ea896|30.*168.*150/);
+    expect(stripe!.getAttribute("style") ?? "").toMatch(/0b9b6b|11.*155.*107/);
   });
 
   it("shows a count badge in cells that have appointments", () => {

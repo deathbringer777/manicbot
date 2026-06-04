@@ -179,7 +179,7 @@ function renderInline(text: string): ReactNode[] {
           {...(external
             ? { target: "_blank", rel: "noopener noreferrer" }
             : {})}
-          className="text-violet-600 underline decoration-violet-300 underline-offset-2 hover:text-violet-700 hover:decoration-violet-500 dark:text-violet-400 dark:hover:text-brand-300"
+          className="text-violet-600 underline decoration-violet-300 underline-offset-2 hover:text-violet-700 hover:decoration-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
         >
           {m[11] ?? safe}
         </a>,
@@ -243,7 +243,7 @@ export function MarkdownArticle({ source }: { source: string }) {
           return (
             <ul
               key={idx}
-              className="my-4 list-disc space-y-1.5 pl-6 text-[15px] leading-7 sm:text-base marker:text-brand-500"
+              className="my-4 list-disc space-y-1.5 pl-6 text-[15px] leading-7 sm:text-base marker:text-violet-500"
             >
               {t.items.map((it, i) => (
                 <li key={i}>{renderInline(it)}</li>
@@ -255,7 +255,7 @@ export function MarkdownArticle({ source }: { source: string }) {
           return (
             <ol
               key={idx}
-              className="my-4 list-decimal space-y-1.5 pl-6 text-[15px] leading-7 sm:text-base marker:text-brand-500 marker:font-semibold"
+              className="my-4 list-decimal space-y-1.5 pl-6 text-[15px] leading-7 sm:text-base marker:text-violet-500 marker:font-semibold"
             >
               {t.items.map((it, i) => (
                 <li key={i}>{renderInline(it)}</li>

@@ -138,7 +138,7 @@ export function NotificationBell() {
       {open && (
         <div
           data-testid="notification-bell-panel"
-          className="absolute right-0 top-10 z-50 w-[22rem] sm:w-[26rem] rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl shadow-black/30 dark:shadow-black/60 overflow-hidden"
+          className="absolute right-0 top-10 z-50 w-[22rem] sm:w-[26rem] max-w-[calc(100vw-1.5rem)] rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl shadow-black/30 dark:shadow-black/60 overflow-hidden"
         >
           {/* Header — title + tabs + actions */}
           <div className="px-4 pt-3 pb-2 border-b border-slate-100 dark:border-white/5">

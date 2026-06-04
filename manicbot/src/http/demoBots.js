@@ -147,6 +147,13 @@ export async function ensureDemoBotsProvisioned(env) {
       billingEmail: null,
       cancelAtPeriodEnd: false,
     });
+    // `is_test` is a legacy column NOT in the putTenant payload, and putTenant's
+    // INSERT-OR-REPLACE resets it to its DEFAULT (0) on every re-provision. Flag
+    // the demo salons explicitly so they get the TEST badge, stay noindex, and
+    // are excluded from the sitemap (utils/seo.js filters `is_test = 0`).
+    // Mirrors tenant/previewTenant.js. .catch so a flag failure never breaks provisioning.
+    await dbRun(ec, 'UPDATE tenants SET is_test = ? WHERE id = ?', 1, b.tenantId)
+      .catch(e => log.error('http.demoBots', e instanceof Error ? e : new Error(String(e.message)), { action: 'is_test_flag', tenantId: b.tenantId }));
     await putBot(ec, botId, {
       botId,
       tenantId: b.tenantId,

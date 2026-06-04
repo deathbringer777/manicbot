@@ -8,7 +8,12 @@ export type AppointmentAction =
   | "reschedule"
   | "done"
   | "no_show_client"
-  | "no_show_master";
+  | "no_show_master"
+  // Calendar-only push (NO client message). Used by dashboard manual
+  // bookings (appointments.createManual) which create an already-confirmed
+  // row but must not re-notify the client — the booking stays silent while
+  // still appearing in the connected Google Calendar immediately.
+  | "sync_calendar";
 
 /**
  * Fire-and-forget call to the Worker's POST /admin/appointment-action endpoint

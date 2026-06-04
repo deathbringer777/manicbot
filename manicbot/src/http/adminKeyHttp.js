@@ -1137,6 +1137,23 @@ export async function tryAdminKeyRoutes(request, env, url) {
             log.error('http.adminKey', e instanceof Error ? e : new Error(String(e.message)), { action: 'appointment_calendar_sync_reschedule' });
           }
         }
+      } else if (action === 'sync_calendar') {
+        // Calendar-only push, NO client message. Used by dashboard manual
+        // bookings (appointments.createManual): the row is created
+        // already-confirmed and the client must not be re-notified, but the
+        // event must land in the connected Google Calendar immediately
+        // instead of waiting for the ≤10-min phaseGcalSync cron. Mirrors the
+        // confirm branch's calendar sync, gated by the plan feature.
+        const { canUse } = await import('../billing/features.js');
+        if (canUse(ctx, 'calendar')) {
+          try {
+            const { syncAppointmentCalendar } = await import('../services/google-calendar-oauth.js');
+            const result = await syncAppointmentCalendar(ctx, apt);
+            calendarSynced = !!result?.ok;
+          } catch (e) {
+            log.error('http.adminKey', e instanceof Error ? e : new Error(String(e.message)), { action: 'appointment_calendar_sync_manual' });
+          }
+        }
       } else if (action === 'done' || action === 'no_show_client' || action === 'no_show_master') {
         // New unified path — routes through the marketing-automation
         // dispatcher. The dispatcher always runs deterministic D1

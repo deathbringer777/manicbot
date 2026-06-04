@@ -595,6 +595,17 @@ export const appointmentsRouter = createTRPCRouter({
         }
       } catch { /* non-fatal */ }
 
+      // Fire-and-forget: push the new booking to the connected Google Calendar
+      // immediately. Every other confirm path syncs on confirm (bot
+      // APT_CONFIRM, dashboard updateStatus / claimAndConfirm); a manual
+      // dashboard booking is created already-confirmed but was previously left
+      // to the ≤10-min `phaseGcalSync` cron, so it didn't show up in Google
+      // Calendar until the next tick. "sync_calendar" is calendar-only — it
+      // does NOT message the client (manual bookings stay silent to the
+      // client by design; the Worker loads the row to resolve the calendar
+      // target, so no master/confirmedBy is passed here).
+      notifyWorker("sync_calendar", aptId, input.tenantId, null).catch(() => {});
+
       return { ok: true, appointmentId: aptId };
     }),
 

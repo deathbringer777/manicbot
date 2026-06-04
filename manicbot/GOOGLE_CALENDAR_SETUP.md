@@ -15,6 +15,29 @@ Google Calendar sync has two surfaces:
 
 This split is intentional: the secure session is minted in the Worker/bot flow, not by exposing an open `tenant_id` connect URL from Pages.
 
+## Outbound sync (appointment → Google Calendar)
+
+Once connected, ManicBot pushes each booking into the calendar via
+`syncAppointmentCalendar` (`src/services/google-calendar-oauth.js`). It fires
+**immediately** on every appointment-confirmation path:
+
+- Bot: master taps **Confirm** (`handlers/callback.js`).
+- Dashboard: confirm a request — `appointments.updateStatus` / `claimAndConfirm`
+  → Worker `POST /admin/appointment-action` `action: "confirm"`.
+- Dashboard: **manual booking** — `appointments.createManual` (row is created
+  already `confirmed`) → Worker `action: "sync_calendar"`. This action is
+  **calendar-only**: it pushes the event but does NOT message the client, so a
+  staff-entered booking stays silent to the client.
+
+The `phaseGcalSync` cron (every ~10 min) is the **fallback** that retries any
+`status='confirmed'` row still missing `google_event_id` (e.g. the immediate
+push failed, or the Worker was unreachable). All outbound paths are gated by the
+`calendar` plan feature (`canUse(ctx, 'calendar')` — `pro`/`max` only).
+
+> Note: the "last sync" timestamp shown in the Mini App is the **inbound**
+> busy-block sync (Google → ManicBot), not the outbound push — a green "ok"
+> there does not by itself prove that bookings are reaching Google.
+
 ## Worker env / secrets
 
 Required for OAuth mode:

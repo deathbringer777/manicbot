@@ -46,6 +46,9 @@ interface Props {
   children: ReactNode;
   /** Optional test id suffix so day vs week wrappers don't collide. */
   testIdPrefix?: string;
+  /** Touch/coarse-pointer flag → forwarded to useDragToCreate to disable
+   *  drag-create and let the grid scroll natively on touch. */
+  isTouch?: boolean;
 }
 
 export function DragCreateLayer({
@@ -58,11 +61,13 @@ export function DragCreateLayer({
   onCreateAt,
   children,
   testIdPrefix = "drag",
+  isTouch = false,
 }: Props) {
   const { ghost, bind } = useDragToCreate({
     hourHeight,
     hourStart,
     hourEnd,
+    isTouch,
     snapMin: 15,
     defaultDurationMin: 60,
     onCommit: (g) => {

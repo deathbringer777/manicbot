@@ -56,6 +56,10 @@ interface UseDragToCreateArgs {
   defaultDurationMin?: number;
   /** Fired exactly once on pointerup with the resolved geometry. */
   onCommit: (g: DragGhost) => void;
+  /** Touch/coarse-pointer flag. When true the drag gesture is disabled and
+   *  `bind.style.touchAction` switches to "pan-x pan-y" so the grid scrolls
+   *  natively. Defaults to false (desktop) — pass `useCoarsePointer()`. */
+  isTouch?: boolean;
 }
 
 export interface UseDragToCreateApi {
@@ -63,7 +67,7 @@ export interface UseDragToCreateApi {
   /** Spread on the column body that should accept drag-create. */
   bind: {
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
-    style: { touchAction: "none" };
+    style: { touchAction: "none" | "pan-x pan-y" };
   };
 }
 
@@ -88,6 +92,7 @@ export function useDragToCreate({
   clickThresholdPx = 6,
   defaultDurationMin = 60,
   onCommit,
+  isTouch = false,
 }: UseDragToCreateArgs): UseDragToCreateApi {
   const [ghost, setGhost] = useState<DragGhost | null>(null);
   const startRef = useRef<{ y: number; container: HTMLDivElement; rect: DOMRect; pointerId: number; modifier: "none" | "shift" | "alt" } | null>(null);
@@ -163,6 +168,11 @@ export function useDragToCreate({
   }, [clearAll, clickThresholdPx, defaultDurationMin, hourEnd, hourHeight, hourStart, onCommit, onPointerMove, snapMin]);
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // Touch/coarse-pointer devices: drag-create is disabled (creation goes
+    // through the "+ Запись" button). Returning here means no ghost, no
+    // preventDefault — the tap falls through and the grid scrolls natively.
+    // Desktop (isTouch=false) keeps the exact original behaviour.
+    if (isTouch) return;
     if (e.button !== 0 && e.pointerType === "mouse") return; // only primary button
     const target = e.target as HTMLElement;
     // Don't hijack clicks on existing appointment chips, master headers,
@@ -189,12 +199,15 @@ export function useDragToCreate({
     document.addEventListener("pointerup", onPointerUp);
     document.addEventListener("pointercancel", onPointerUp);
     e.preventDefault();
-  }, [defaultDurationMin, hourHeight, hourStart, onPointerMove, onPointerUp, snapMin]);
+  }, [defaultDurationMin, hourHeight, hourStart, isTouch, onPointerMove, onPointerUp, snapMin]);
 
   return useMemo(() => ({
     ghost,
-    bind: { onPointerDown, style: { touchAction: "none" as const } },
-  }), [ghost, onPointerDown]);
+    bind: {
+      onPointerDown,
+      style: { touchAction: (isTouch ? "pan-x pan-y" : "none") as "none" | "pan-x pan-y" },
+    },
+  }), [ghost, isTouch, onPointerDown]);
 }
 
 /** Convert minutes-since-midnight to "HH:MM" — used by callers wiring

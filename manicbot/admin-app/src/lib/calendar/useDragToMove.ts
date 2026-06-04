@@ -84,6 +84,10 @@ interface UseDragToMoveArgs {
   /** Fired once on pointerup when the user actually dragged. NOT called
    *  for plain taps below the click threshold. */
   onCommit: (c: MoveCommit) => void;
+  /** Touch/coarse-pointer flag. When true drag-to-move is disabled and the
+   *  block's `touchAction` becomes "pan-x pan-y" so the grid scrolls.
+   *  Defaults to false (desktop) — pass `useCoarsePointer()`. */
+  isTouch?: boolean;
 }
 
 export interface UseDragToMoveBindArgs {
@@ -112,7 +116,7 @@ export interface UseDragToMoveApi {
    *  re-renders only for the same args, so call inside the render path. */
   bindBlock: (args: UseDragToMoveBindArgs) => {
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => void;
-    style: { touchAction: "none" };
+    style: { touchAction: "none" | "pan-x pan-y" };
   };
 }
 
@@ -165,6 +169,7 @@ export function useDragToMove({
   snapMin = 15,
   clickThresholdPx = 6,
   onCommit,
+  isTouch = false,
 }: UseDragToMoveArgs): UseDragToMoveApi {
   const [ghost, setGhost] = useState<MoveGhost | null>(null);
   const [draggingId, setDraggingId] = useState<string | number | null>(null);
@@ -227,6 +232,9 @@ export function useDragToMove({
 
   const bindBlock = useCallback((args: UseDragToMoveBindArgs) => {
     const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+      // Touch/coarse-pointer: drag-to-move is disabled so the tap opens the
+      // appointment detail and the grid scrolls natively. Desktop unchanged.
+      if (isTouch) return;
       if (e.button !== 0 && e.pointerType === "mouse") return; // primary only
       // Don't fight the parent DragCreateLayer — but we DO want this
       // pointerdown to claim the gesture before the layer sees it.
@@ -340,9 +348,9 @@ export function useDragToMove({
 
     return {
       onPointerDown,
-      style: { touchAction: "none" as const },
+      style: { touchAction: (isTouch ? "pan-x pan-y" : "none") as "none" | "pan-x pan-y" },
     };
-  }, [cleanup, clickThresholdPx, detach, hourEnd, hourHeight, hourStart, onPointerMove, onCommit, snapMin]);
+  }, [cleanup, clickThresholdPx, detach, hourEnd, hourHeight, hourStart, isTouch, onPointerMove, onCommit, snapMin]);
 
   return useMemo(
     () => ({ ghost, draggingId, bindBlock }),

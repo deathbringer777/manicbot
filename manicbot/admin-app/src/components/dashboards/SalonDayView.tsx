@@ -38,6 +38,7 @@ import { BlockDetailPanel } from "~/components/dashboard-ui/BlockDetailPanel";
 import type { DragGhost } from "~/lib/calendar/useDragToCreate";
 import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResize";
+import { useCoarsePointer } from "~/lib/useCoarsePointer";
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
 import { masterHueSet } from "~/lib/theme/palette";
 
@@ -288,16 +289,22 @@ export function SalonDayView({
   // Both the date+master pair are resolved from the column under the
   // cursor, so dropping on a different master's column reassigns the
   // booking server-side via newMasterId.
+  // Touch/coarse-pointer devices disable the desktop drag gestures (create /
+  // move / resize) so the grid scrolls under a finger; creation happens via
+  // the "+ Запись" button instead. Desktop (mouse/trackpad) is unchanged.
+  const isTouch = useCoarsePointer();
   const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
     hourHeight: HOUR_HEIGHT,
     hourStart: HOUR_START,
     hourEnd: HOUR_END,
+    isTouch,
     onCommit: (c) => (c.kind === "block" ? onMoveBlock : onMoveAppointment)?.(c),
   });
   const { ghost: resizeGhost, resizingId, bindHandle: bindResize } = useDragToResize({
     hourHeight: HOUR_HEIGHT,
     hourStart: HOUR_START,
     hourEnd: HOUR_END,
+    isTouch,
     onResize: (c) => onResize?.(c),
   });
   const isoDate = fmtIsoDate(date);
@@ -743,6 +750,7 @@ export function SalonDayView({
                   <DragCreateLayer
                     date={isoDate}
                     masterId={master.chatId === -1 ? null : (master.chatId as number)}
+                    isTouch={isTouch}
                     hourHeight={HOUR_HEIGHT}
                     hourStart={HOUR_START}
                     hourEnd={HOUR_END}

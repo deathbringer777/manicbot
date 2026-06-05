@@ -30,6 +30,10 @@ import { nowSec } from '../../utils/time.js';
 /** Re-ask cadence (durable anti-nag; see migration 0109 + shouldAskEmail). */
 export const EMAIL_REASK_COOLDOWN_SEC = 14 * 24 * 3600; // 14 days
 export const EMAIL_MAX_PROMPTS = 3;
+/** Proactive re-ask cron (Scenario C) tuning. */
+export const EMAIL_REENGAGE_DELAY_SEC = 14 * 24 * 3600; // first contact must be ≥14d ago
+export const EMAIL_REASK_BATCH = 50;        // max prompts per tenant per cron tick
+export const EMAIL_REASK_SCAN_LIMIT = 500;  // max candidate rows scanned per tick
 
 const MAX_EMAIL_LEN = 254;
 
@@ -190,6 +194,19 @@ export async function captureChatEmail(ctx, input = {}) {
       await dbRun(ctx, 'UPDATE users SET marketing_contact_id = ? WHERE tenant_id = ? AND chat_id = ?', contactId, tenantId, chatId);
     }
 
+    // 5) Killer-feature seam: a freshly consented contact is now reachable by
+    //    the marketing automation engine. Fire a dedicated event so a (disabled-
+    //    by-default) welcome automation can greet them. Wrapped — a failure here
+    //    must never fail the capture itself.
+    if (grantConsent && contactId != null) {
+      try {
+        const { fireAutomationForEvent } = await import('./automations.js');
+        await fireAutomationForEvent(ctx, 'contact.email_captured', { chatId });
+      } catch (e) {
+        log.warn('marketing.contacts', { action: 'fire_capture_event_failed', error: e?.message?.slice(0, 120) });
+      }
+    }
+
     return { ok: true, contactId, consentGranted: !!grantConsent };
   } catch (e) {
     log.error('marketing.contacts', e instanceof Error ? e : new Error(String(e?.message)), { phase: 'capture', tenantId, source });
@@ -234,6 +251,20 @@ export function shouldAskEmail(user, now = nowSec(), opts = {}) {
   const last = user.emailPromptLastAt;
   if (last && now - last < cooldownSec) return false;
   return true;
+}
+
+/**
+ * Eligible for the PROACTIVE re-ask (Scenario C cron): all of shouldAskEmail
+ * PLUS first contact (first_touch_at, falling back to registered_at) is at least
+ * REENGAGE_DELAY ago. Covers people who only used the bot and never booked.
+ * A user with no known first-contact anchor is skipped (can't age-gate them).
+ */
+export function isReaskEligible(user, now = nowSec(), opts = {}) {
+  if (!shouldAskEmail(user, now, opts)) return false;
+  const reengageSec = opts.reengageSec ?? EMAIL_REENGAGE_DELAY_SEC;
+  const firstContact = user?.firstTouchAt ?? user?.registeredAt ?? null;
+  if (firstContact == null) return false;
+  return now - firstContact >= reengageSec;
 }
 
 /** Stamp that we showed the prompt (anti-nag cooldown + count). */

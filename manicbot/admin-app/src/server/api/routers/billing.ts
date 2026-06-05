@@ -85,10 +85,14 @@ export const billingRouter = createTRPCRouter({
   getOverview: adminProcedure.query(async ({ ctx }) => {
     const allTenants = await ctx.db.select().from(tenants).orderBy(desc(tenants.createdAt));
 
-    const active = allTenants.filter((t) => t.billingStatus === "active");
-    const trialing = allTenants.filter((t) => t.billingStatus === "trialing");
-    const grace = allTenants.filter((t) => t.billingStatus === "grace_period");
-    const inactive = allTenants.filter(
+    // Secondary salons (parent_tenant_id set) are billed under their parent's
+    // MAX subscription — exclude from customer/MRR metrics so an owner counts
+    // once. Still listed below (labeled) for admin visibility.
+    const billable = allTenants.filter((t) => !t.parentTenantId);
+    const active = billable.filter((t) => t.billingStatus === "active");
+    const trialing = billable.filter((t) => t.billingStatus === "trialing");
+    const grace = billable.filter((t) => t.billingStatus === "grace_period");
+    const inactive = billable.filter(
       (t) => !t.billingStatus || t.billingStatus === "inactive"
     );
 
@@ -106,7 +110,7 @@ export const billingRouter = createTRPCRouter({
     return {
       metrics: {
         mrr,
-        totalTenants: allTenants.length,
+        totalTenants: billable.length,
         activeSubscribers: active.length,
         trialing: trialing.length,
         grace: grace.length,
@@ -118,6 +122,7 @@ export const billingRouter = createTRPCRouter({
         name: t.name,
         plan: t.plan ?? "start",
         billingStatus: t.billingStatus ?? "inactive",
+        parentTenantId: t.parentTenantId,
         email: t.billingEmail,
         stripeCustomerId: t.stripeCustomerId,
         stripeSubscriptionId: t.stripeSubscriptionId,
@@ -125,8 +130,9 @@ export const billingRouter = createTRPCRouter({
         currentPeriodEnd: t.currentPeriodEnd,
         cancelAtPeriodEnd: t.cancelAtPeriodEnd,
         createdAt: t.createdAt,
+        // Secondary salons don't bill independently (counted under the parent).
         monthlyRevenue:
-          t.billingStatus === "active" ? (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0) : 0,
+          t.billingStatus === "active" && !t.parentTenantId ? (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0) : 0,
       })),
     };
   }),

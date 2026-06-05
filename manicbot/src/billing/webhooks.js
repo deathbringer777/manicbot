@@ -4,7 +4,7 @@
  * stripe_customer:{customerId} → D1 stripe_customers table.
  */
 
-import { updateTenantBilling } from './storage.js';
+import { updateTenantBilling, setSecondarySalonsBillingStatus } from './storage.js';
 import { mapStripeStatusToBilling } from './stripe.js';
 import { GRACE_DURATION_MS, priceIdToPlan } from './config.js';
 import { dbGet, dbRun } from '../utils/db.js';
@@ -349,6 +349,19 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
       }
 
       await updateTenantBilling(ctx, tenantId, updates);
+
+      // Multi-salon cascade (migration 0109): secondary salons are billed under
+      // this parent's MAX subscription. Mirror the parent's effective MAX
+      // entitlement onto them — freeze when it leaves MAX (or its sub ends),
+      // restore when it returns. No-op for tenants without secondaries.
+      try {
+        const parent = await dbGet(ctx, 'SELECT plan, billing_status FROM tenants WHERE id = ?', tenantId);
+        const entitled = !!parent && parent.plan === 'max' &&
+          (parent.billing_status === 'active' || parent.billing_status === 'trialing');
+        await setSecondarySalonsBillingStatus(ctx, tenantId, entitled ? 'active' : 'inactive');
+      } catch (e) {
+        log.error('webhook.multiSalonCascade', e instanceof Error ? e : new Error(String(e)), { tenantId });
+      }
 
       if (
         type === 'customer.subscription.updated' &&

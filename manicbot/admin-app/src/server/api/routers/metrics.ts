@@ -1,6 +1,6 @@
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { users, tenants, appointments, webUsers } from "~/server/db/schema";
-import { sql, desc, and, eq, gte, asc } from "drizzle-orm";
+import { sql, desc, and, eq, gte, asc, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { PLAN_PRICES_PLN } from "~/lib/money";
 
@@ -36,15 +36,17 @@ export const metricsRouter = createTRPCRouter({
     const [usersCount, tenantsCount, activeSubs, trialing, totalApts, todayApts, activeTenants] =
       await Promise.all([
         ctx.db.select({ count: sql<number>`count(*)` }).from(users),
-        ctx.db.select({ count: sql<number>`count(*)` }).from(tenants),
+        // Secondary salons (parent_tenant_id set) are billed under their parent's
+        // MAX subscription — exclude from customer/MRR metrics so an owner counts once.
+        ctx.db.select({ count: sql<number>`count(*)` }).from(tenants).where(isNull(tenants.parentTenantId)),
         ctx.db
           .select({ count: sql<number>`count(*)` })
           .from(tenants)
-          .where(eq(tenants.billingStatus, "active")),
+          .where(and(eq(tenants.billingStatus, "active"), isNull(tenants.parentTenantId))),
         ctx.db
           .select({ count: sql<number>`count(*)` })
           .from(tenants)
-          .where(eq(tenants.billingStatus, "trialing")),
+          .where(and(eq(tenants.billingStatus, "trialing"), isNull(tenants.parentTenantId))),
         ctx.db
           .select({ count: sql<number>`count(*)` })
           .from(appointments)
@@ -56,7 +58,7 @@ export const metricsRouter = createTRPCRouter({
         ctx.db
           .select({ plan: tenants.plan })
           .from(tenants)
-          .where(eq(tenants.billingStatus, "active")),
+          .where(and(eq(tenants.billingStatus, "active"), isNull(tenants.parentTenantId))),
       ]);
 
     const mrr = activeTenants.reduce(

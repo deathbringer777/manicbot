@@ -159,7 +159,7 @@ describe("admin-app stripe.ts — Stripe-Version pin", () => {
       const fetchMock = vi.fn(async () => ({
         ok: true,
         status: 200,
-        json: async () => ({ id: "C", percent_off: 50, duration: "repeating" }),
+        json: async () => ({ id: "C", percent_off: 50, duration: "repeating", duration_in_months: 3 }),
       }));
       vi.stubGlobal("fetch", fetchMock);
       await ensureCoupon(KEY, "C", 50, { duration: "repeating", months: 3 });
@@ -175,7 +175,7 @@ describe("admin-app stripe.ts — Stripe-Version pin", () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ id: "C", percent_off: 50, duration: "repeating" }),
+          json: async () => ({ id: "C", percent_off: 50, duration: "repeating", duration_in_months: 3 }),
         });
       vi.stubGlobal("fetch", fetchMock);
       await ensureCoupon(KEY, "C", 50, { duration: "repeating", months: 3 });
@@ -197,7 +197,7 @@ describe("admin-app stripe.ts — Stripe-Version pin", () => {
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
-          json: async () => ({ id: "C", percent_off: 50, duration: "repeating" }),
+          json: async () => ({ id: "C", percent_off: 50, duration: "repeating", duration_in_months: 3 }),
         });
       vi.stubGlobal("fetch", fetchMock);
       await ensureCoupon(KEY, "C", 50, { duration: "repeating", months: 3 });

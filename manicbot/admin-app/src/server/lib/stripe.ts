@@ -400,6 +400,34 @@ export async function listDisputes(
 }
 
 /**
+ * STRIPE-COUPON-01 — Stripe coupons are IMMUTABLE (percent_off / duration /
+ * duration_in_months cannot be edited post-creation). `ensureCoupon` returns a
+ * pre-existing coupon by id, so changing the intended economics without rotating
+ * the id would silently apply the stale discount. Fail loudly — rotate the id.
+ * Kept in lockstep with the Worker `assertCouponEconomics`.
+ */
+function assertCouponEconomics(
+  existing: { percent_off?: number; duration?: string; duration_in_months?: number | null },
+  code: string,
+  percentOff: number,
+  durationOpts: { duration: "once" | "repeating" | "forever"; months?: number },
+): void {
+  const wantMonths = durationOpts.duration === "repeating" ? (durationOpts.months ?? null) : null;
+  const gotMonths = existing.duration_in_months ?? null;
+  const mismatch =
+    Number(existing.percent_off) !== Number(percentOff) ||
+    existing.duration !== durationOpts.duration ||
+    (durationOpts.duration === "repeating" && gotMonths !== wantMonths);
+  if (mismatch) {
+    throw new Error(
+      `Stripe coupon ${code} exists with mismatched economics ` +
+      `(have percent_off=${existing.percent_off} duration=${existing.duration} months=${gotMonths}, ` +
+      `want percent_off=${percentOff} duration=${durationOpts.duration} months=${wantMonths}); rotate the coupon id`,
+    );
+  }
+}
+
+/**
  * Idempotent Stripe Coupon mint. Mirror of Worker `manicbot/src/billing/stripe.js`
  * `ensureCoupon` — kept in lockstep so backend logic stays single-source-of-truth.
  *
@@ -417,7 +445,11 @@ export async function ensureCoupon(
   const headers = stripeAuthHeaders(secretKey);
 
   const getRes = await fetch(getUrl, { headers, signal: AbortSignal.timeout(15_000) });
-  if (getRes.ok) return await getRes.json();
+  if (getRes.ok) {
+    const existing = await getRes.json();
+    assertCouponEconomics(existing, code, percentOff, durationOpts);
+    return existing;
+  }
   if (getRes.status !== 404) {
     const err = await getRes.json().catch(() => ({}));
     throw new Error((err as any)?.error?.message ?? `Stripe coupon GET failed: ${getRes.status}`);
@@ -448,7 +480,11 @@ export async function ensureCoupon(
     (errCode === "resource_already_exists" || /already exists/i.test(errMsg));
   if (isDuplicate) {
     const reGet = await fetch(getUrl, { headers, signal: AbortSignal.timeout(15_000) });
-    if (reGet.ok) return await reGet.json();
+    if (reGet.ok) {
+      const existing = await reGet.json();
+      assertCouponEconomics(existing, code, percentOff, durationOpts);
+      return existing;
+    }
     const e = await reGet.json().catch(() => ({}));
     throw new Error((e as any)?.error?.message ?? `Stripe coupon re-GET failed: ${reGet.status}`);
   }

@@ -12,15 +12,17 @@
  *   - settings size cap
  *   - every mutation writes to plugin_events
  *
- * 2026-05-16 cleanup notes:
- *   - All retained plugins (post Phase 1) are tenant-scoped, `minPlan: "any"`,
- *     `billing.model: "free"`. Substitutions:
- *       google-calendar (master+owner, pro, included_in_plan) → message-templates (master+owner, any, free)
- *       portfolio-gallery (master+owner, any, free)          → availability-share (master only)
+ * 2026-06-05 cull notes:
+ *   - All retained plugins are tenant-scoped, `minPlan: "any"`,
+ *     `billing.model: "free"`. Fixture slugs after the cull:
+ *       TENANT_PLUGIN     = task-board     (owner + manager + master)
+ *       ROLE_GATED_PLUGIN = loyalty-stamps (owner + manager; excludes master)
+ *     The role-gate test now asserts a *master* is rejected from an
+ *     owner+manager-only plugin (no retained plugin is master-only anymore).
  *   - Tests that require a plan-gated plugin (`minPlan != "any"`), a
  *     `system_admin`-only plugin, or a `scope: "platform"` plugin are
  *     marked `it.skip` with a TODO pointing to Phase 3. They come back to
- *     life once Variant A lands real paid plugins.
+ *     life once real paid / platform plugins land.
  *   - For `free` plugins, the initial billing state is `not_applicable`
  *     (only `included_in_plan` returns `included`).
  */
@@ -45,7 +47,6 @@ import {
   makeAdminCtx,
   makeTenantOwnerCtx,
   makeMasterCtx,
-  makeTenantManagerCtx,
   makeUnauthCtx,
 } from "./helpers/db-mock";
 
@@ -53,8 +54,8 @@ const createCaller = createCallerFactory(pluginsRouter);
 
 // Slugs used across the suite. Keeping these as named constants makes future
 // substitutions a one-line change instead of a sed pass.
-const TENANT_PLUGIN = "message-templates";   // master + tenant_owner, free, scope=tenant
-const MASTER_ONLY_PLUGIN = "availability-share"; // master only, free, scope=tenant
+const TENANT_PLUGIN = "task-board";        // tenant_owner + tenant_manager + master, free, scope=tenant
+const ROLE_GATED_PLUGIN = "loyalty-stamps"; // tenant_owner + tenant_manager only (excludes master) — for role-gate tests
 
 // ─── Auth / basic guards ────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ describe("pluginsRouter.listCatalog", () => {
     const cards = await caller.listCatalog({ lang: "en" });
     expect(cards.length).toBeGreaterThanOrEqual(3);
     const card = cards.find((c) => c.slug === TENANT_PLUGIN);
-    expect(card?.name).toBe("Message Templates");
+    expect(card?.name).toBe("Task Board");
     expect(card?.billingLabel).toBe("Free");
   });
 
@@ -117,7 +118,7 @@ describe("pluginsRouter.listCatalog", () => {
     const caller = createCaller(makeTenantOwnerCtx(db, "t_1") as never);
     const cards = await caller.listCatalog({ lang: "xx" as never });
     const card = cards.find((c) => c.slug === TENANT_PLUGIN);
-    expect(card?.tagline).toBe("Готовые тексты для частых ситуаций — одним кликом");
+    expect(card?.tagline).toBe("Kanban для внутренних дел салона");
   });
 
   it("installedOnly filter returns empty when none installed", async () => {
@@ -212,26 +213,29 @@ describe("pluginsRouter.install — security rejections", () => {
     ).rejects.toMatchObject({ code: "PAYMENT_REQUIRED" });
   });
 
-  it("rejects role-unavailable plugin (tenant_manager cannot install master+owner-only plugin)", async () => {
-    // TENANT_PLUGIN (message-templates) is restricted to availableForRoles=
-    // ["master", "tenant_owner"]. tenant_manager is not in the list → FORBIDDEN.
-    const { db } = createDbMock([[{ plan: "pro" }]]);
-    const caller = createCaller(makeTenantManagerCtx(db, "t_pro") as never);
+  it("rejects role-unavailable plugin (master cannot install an owner+manager-only plugin)", async () => {
+    // ROLE_GATED_PLUGIN (loyalty-stamps) is restricted to availableForRoles=
+    // ["tenant_owner", "tenant_manager"]. A master is not in that list, so even
+    // on their own personal tenant the role gate rejects with FORBIDDEN.
+    // assertCanWriteScope runs first (personal-tenant check = one isPersonal
+    // select), then the role gate fires.
+    const { db } = createDbMock([[{ isPersonal: 1 }]]);
+    const caller = createCaller(makeMasterCtx(db, "t_personal") as never);
     await expect(
-      caller.install({ slug: TENANT_PLUGIN, tenantId: "t_pro" }),
+      caller.install({ slug: ROLE_GATED_PLUGIN, tenantId: "t_personal" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("system_admin bypasses the role-availability gate", async () => {
-    // MASTER_ONLY_PLUGIN (availability-share) is restricted to
-    // availableForRoles=["master"], but system_admin should STILL be able to
-    // install it for testing/support. minPlan is "any", so the plan lookup is
-    // skipped — we only need the dup check mock to return empty.
+    // ROLE_GATED_PLUGIN (loyalty-stamps) is restricted to availableForRoles=
+    // ["tenant_owner", "tenant_manager"], but system_admin should STILL be able
+    // to install it for testing/support. minPlan is "any", so the plan lookup
+    // is skipped — we only need the dup check mock to return empty.
     const { db, insertCalls } = createDbMock([
       [], // dup check (no existing install)
     ]);
     const caller = createCaller(makeAdminCtx(db) as never);
-    const r = await caller.install({ slug: MASTER_ONLY_PLUGIN, tenantId: "t_test" });
+    const r = await caller.install({ slug: ROLE_GATED_PLUGIN, tenantId: "t_test" });
     expect(r.id).toMatch(/.+/);
     expect(insertCalls.length).toBeGreaterThanOrEqual(2);
   });
@@ -381,7 +385,7 @@ describe("pluginsRouter.getInstalled", () => {
   it("returns tenant rows for a tenant user", async () => {
     const rows = [
       { ...ROW_LIVE, id: "pi_tenant_a", tenantId: "t_pro", pluginSlug: TENANT_PLUGIN },
-      { ...ROW_LIVE, id: "pi_tenant_b", tenantId: "t_pro", pluginSlug: MASTER_ONLY_PLUGIN },
+      { ...ROW_LIVE, id: "pi_tenant_b", tenantId: "t_pro", pluginSlug: ROLE_GATED_PLUGIN },
     ];
     const { db } = createDbMock([rows]);
     const caller = createCaller(makeTenantOwnerCtx(db, "t_pro") as never);

@@ -328,6 +328,11 @@ CREATE TABLE IF NOT EXISTS tenants (
   next_payment_date INTEGER,
   billing_email TEXT,
   cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+  pending_plan TEXT,
+  pending_price_id TEXT,
+  pending_plan_effective_at INTEGER,
+  pending_schedule_id TEXT,
+  pause_resumes_at INTEGER,
   slug TEXT,
   description TEXT,
   lat REAL,
@@ -1717,7 +1722,7 @@ CREATE INDEX IF NOT EXISTS idx_platform_campaigns_kind
   ON platform_campaigns(kind);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_campaigns_singleton_kind
   ON platform_campaigns(kind)
-  WHERE kind IN ('monthly_report', 'subscription_reminder');
+  WHERE kind IN ('monthly_report', 'subscription_reminder', 'welcome');
 
 CREATE TABLE IF NOT EXISTS platform_campaign_deliveries (
   id                    TEXT PRIMARY KEY,

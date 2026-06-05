@@ -24,9 +24,10 @@ The `billing_status` field in the D1 `tenants` table:
 | `past_due`     | Stripe: overdue payment                        | Per plan (until grace)        |
 | `inactive`     | Trial expired or subscription not created      | Everything blocked            |
 | `canceled`     | Explicit subscription cancellation             | Everything blocked            |
+| `paused`       | Owner paused billing (`pause_collection`)      | Everything blocked            |
 
 Feature access check: `canUse(ctx, feature)` in `src/billing/features.js`.
-Possible feature values: `booking`, `ai`, `calendar`, `tickets`, `white_label`.
+Possible feature values: `booking`, `ai`, `calendar`, `support_tickets`, `masters_add`, `white_label`, `whatsapp`, `instagram`.
 
 ---
 
@@ -106,19 +107,46 @@ Quick setup: `cd manicbot && ./scripts/setup-stripe-secrets.sh`
 | `customer.subscription.updated`            | Sync plan, status, `current_period_end`                           |
 | `customer.subscription.deleted`            | `billing_status=inactive`                                         |
 | `invoice.payment_failed`                   | `billing_status=grace_period`, `grace_ends_at=now+7days`          |
-| `invoice.paid`                             | Plugin addon billing; referral commission recording               |
-| `invoice.payment_succeeded`                | Plugin addon billing; referral commission recording (same handler as `invoice.paid`) |
+| `invoice.paid`                             | Dunning recovery: `grace_period`/`past_due`/`unpaid` → `active` (clears `grace_ends_at`); plugin addon billing; referral commission recording |
+| `invoice.payment_succeeded`                | Same handler as `invoice.paid` (dunning recovery + plugin addon billing + referral commission recording) |
 | `customer.subscription.trial_will_end`     | Fire notification to tenant; deduplicated per subscription        |
 | `invoice.upcoming`                         | Fire payment-due notification to tenant                           |
 | `charge.dispute.created`                   | Log dispute event to `billing_events`                             |
 
-> **Note on grace recovery:** restoring `billing_status` from `grace_period` → `active` on successful
-> payment is handled by `customer.subscription.updated` (which Stripe fires when a past-due subscription
-> becomes active again). The `invoice.payment_succeeded`/`invoice.paid` handler does NOT perform the
-> recovery flip directly.
+> **Note on grace recovery (`#S2-2`):** the `invoice.payment_succeeded`/`invoice.paid` handler is the
+> authoritative dunning-recovery path — a paid invoice is the signal that the card cleared, so it
+> restores `billing_status` → `active` directly (only for tenants currently in `grace_period`/`past_due`/`unpaid`;
+> never resurrects a deliberately `canceled`/`inactive` tenant) instead of waiting for a separate
+> `customer.subscription.updated`, which Stripe does not guarantee fires. The flip is idempotent.
 
 Handler: `src/billing/webhooks.js` → `handleStripeWebhook()`.
 Billing record in D1: `src/billing/storage.js` → `updateTenantBilling()`.
+
+`customer.subscription.updated` also: maps Stripe `pause_collection` → `billing_status='paused'`
+(Stripe keeps `status='active'` while paused, so we reflect it ourselves), and clears the
+denormalized pending-downgrade fields once a scheduled downgrade's price has taken effect.
+
+---
+
+## In-app self-service (plan change + pause) — migration 0109
+
+Salon owners manage their subscription from **Settings → Billing** without the Stripe customer
+portal. tRPC procedures live on the `salon` router (`admin-app/.../routers/salon.ts`); the raw
+Stripe REST helpers live in `admin-app/.../lib/stripe.ts`.
+
+| Action | Procedure | Stripe mechanism |
+|--------|-----------|------------------|
+| **Upgrade** (pay difference now) | `salon.changePlan` (target rank > current) | `subscriptions.update` with `proration_behavior=always_invoice`, `payment_behavior=error_if_incomplete` |
+| **Downgrade** (no refund, at period end) | `salon.changePlan` (target rank < current) | a **subscription_schedule**: create `from_subscription`, append a 2nd phase at the cheaper price with `proration_behavior=none`, `end_behavior=release` |
+| **Undo a scheduled downgrade** | `salon.cancelPendingDowngrade` | release the schedule |
+| **Pause** (no billing, service paused) | `salon.pauseSubscription` | `pause_collection[behavior]=void` (+ optional `resumes_at`) → reflected as `billing_status='paused'` |
+| **Resume** | `salon.resumeSubscription` | clear `pause_collection` |
+| **Preview upgrade charge** | `salon.previewPlanChange` | upcoming-invoice preview |
+
+A pending downgrade is denormalized onto `tenants` for fast dashboard rendering (Stripe's schedule
+stays authoritative for execution): `pending_plan`, `pending_price_id`, `pending_plan_effective_at`,
+`pending_schedule_id`. Timed pause stores `pause_resumes_at`. `billing_status='paused'` is denied by
+`canUse` (only `active`/`trialing` grant features), so a paused tenant's bot and premium features stop.
 
 ---
 

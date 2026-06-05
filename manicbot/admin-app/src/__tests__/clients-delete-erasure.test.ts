@@ -78,3 +78,59 @@ describe("clients.delete — GDPR erasure completeness + audit (#D-2/#D-3)", () 
     expect(b.rows[0]!.name).toBe("Boris"); // untouched — tenant-scoped scrub
   });
 });
+
+describe("clients.bulkDelete — set-based erasure + single audit row", () => {
+  it("scrubs users + marketing_contacts PII for every id and writes ONE audit row", async () => {
+    const { db, client } = await freshDb();
+    // freshDb seeds A/100 (+ contact); add a 2nd client A/101 (+ contact).
+    await client.execute({ sql: `INSERT INTO users (tenant_id,chat_id,name,phone,email,tg_username,registered_at) VALUES (?,?,?,?,?,?,?)`, args: ["A", 101, "Bob", "+48222", "bob@x.io", "bob_tg", NOW] });
+    await client.execute({ sql: `INSERT INTO marketing_contacts (tenant_id,linked_user_chat_id,name,email,phone,first_seen_at,last_seen_at) VALUES (?,?,?,?,?,?,?)`, args: ["A", 101, "Bob", "bob@x.io", "+48222", NOW, NOW] });
+
+    const { createCallerFactory } = await import("~/server/api/trpc");
+    const { clientsRouter } = await import("~/server/api/routers/clients");
+    const caller = createCallerFactory(clientsRouter)(ownerCtx(db, "A") as never);
+
+    const res = await caller.bulkDelete({ tenantId: "A", chatIds: [100, 101] });
+    expect(res.deleted).toBe(2);
+
+    // Both users scrubbed + soft-deleted.
+    const u = await client.execute("SELECT name, phone, email, deleted_at FROM users WHERE tenant_id='A' ORDER BY chat_id");
+    expect(u.rows.length).toBe(2);
+    for (const row of u.rows) {
+      expect(row.name).toBeNull();
+      expect(row.phone).toBeNull();
+      expect(row.email).toBeNull();
+      expect(Number(row.deleted_at)).toBeGreaterThan(0);
+    }
+
+    // Both linked marketing_contacts scrubbed + unsubscribed.
+    const m = await client.execute("SELECT name, email, phone, unsubscribed FROM marketing_contacts WHERE tenant_id='A'");
+    expect(m.rows.length).toBe(2);
+    for (const row of m.rows) {
+      expect(row.name).toBeNull();
+      expect(row.email).toBeNull();
+      expect(row.phone).toBeNull();
+      expect(Number(row.unsubscribed)).toBe(1);
+    }
+
+    // ONE summary audit row for the whole batch (not one per client).
+    const a = await client.execute("SELECT tenant_id, detail FROM audit_log WHERE action='clients.bulkDelete'");
+    expect(a.rows.length).toBe(1);
+    expect(a.rows[0]!.tenant_id).toBe("A");
+    expect(String(a.rows[0]!.detail)).toContain('"count":2');
+  });
+
+  it("does not touch another tenant's rows", async () => {
+    const { db, client } = await freshDb();
+    await client.execute({ sql: `INSERT INTO users (tenant_id,chat_id,name,phone,registered_at) VALUES (?,?,?,?,?)`, args: ["B", 100, "Boris", "+48999", NOW] });
+    const { createCallerFactory } = await import("~/server/api/trpc");
+    const { clientsRouter } = await import("~/server/api/routers/clients");
+    const caller = createCallerFactory(clientsRouter)(ownerCtx(db, "A") as never);
+
+    await caller.bulkDelete({ tenantId: "A", chatIds: [100] });
+
+    const b = await client.execute({ sql: "SELECT name, deleted_at FROM users WHERE tenant_id=? AND chat_id=?", args: ["B", 100] });
+    expect(b.rows[0]!.name).toBe("Boris"); // untouched
+    expect(b.rows[0]!.deleted_at).toBeNull();
+  });
+});

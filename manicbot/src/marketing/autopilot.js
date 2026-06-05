@@ -186,7 +186,7 @@ async function processPending(env, slot, nowSec) {
 async function processReady(env, slot, nowSec) {
   if (slot.scheduled_at > nowSec) return; // not time to publish yet
 
-  const creds = getIgCredentials(env);
+  const creds = await getIgCredentials(env);
   if (!creds) {
     log.warn('marketing.autopilot', { skipped: 'no_ig_credentials', slotId: slot.id });
     return;
@@ -225,7 +225,7 @@ async function processReady(env, slot, nowSec) {
 }
 
 async function processPublishing(env, slot, nowSec) {
-  const creds = getIgCredentials(env);
+  const creds = await getIgCredentials(env);
   if (!creds) return;
 
   const queue = await env.DB.prepare(
@@ -290,11 +290,41 @@ async function processPublishing(env, slot, nowSec) {
   log.info('marketing.autopilot', { stage: 'publishing->posted', slotId: slot.id, igPostId: pubRes.igPostId });
 }
 
-export function getIgCredentials(env) {
-  const pageId = env?.MARKETING_IG_PAGE_ID;
-  const token = env?.MARKETING_IG_ACCESS_TOKEN;
-  if (!pageId || !token) return null;
-  return { pageId, token };
+/**
+ * Resolve IG publishing credentials for the platform account (@manicbot_com).
+ *
+ * Priority:
+ *   1. Worker secrets MARKETING_IG_PAGE_ID + MARKETING_IG_ACCESS_TOKEN (manual override).
+ *   2. The marketing channel stored in channel_configs under MARKETING_IG_TENANT_ID,
+ *      connected via the product's Instagram-login OAuth: long-lived, auto-refreshed
+ *      (cron token-manager) and encrypted at rest. The token is decrypted only here,
+ *      inside the Worker, via the shared resolver — it never leaves the Worker.
+ *
+ * `pageId` is the IG account id the Graph publish endpoints target
+ * (`/{ig-user-id}/media`). graphPost/graphGet auto-route IGAA tokens to
+ * graph.instagram.com, so no host wiring is needed at the call site.
+ *
+ * @param {object} env - Worker env bindings
+ * @returns {Promise<{ pageId: string, token: string } | null>}
+ */
+export async function getIgCredentials(env) {
+  if (env?.MARKETING_IG_PAGE_ID && env?.MARKETING_IG_ACCESS_TOKEN) {
+    return { pageId: env.MARKETING_IG_PAGE_ID, token: env.MARKETING_IG_ACCESS_TOKEN };
+  }
+  const tenantId = env?.MARKETING_IG_TENANT_ID;
+  if (!tenantId || !env?.DB || !env?.BOT_ENCRYPTION_KEY) return null;
+  const { getChannelConfig } = await import('../channels/resolver.js');
+  const cfg = await getChannelConfig(
+    { db: env.DB },
+    tenantId,
+    'instagram',
+    env.BOT_ENCRYPTION_KEY,
+    env.BOT_ENCRYPTION_KEY_OLD ?? null,
+  );
+  if (!cfg?.token) return null;
+  const pageId = cfg.ig_business_id || cfg.config?.ig_user_id || cfg.config?.ig_account_id || cfg.page_id;
+  if (!pageId) return null;
+  return { pageId, token: cfg.token };
 }
 
 async function markSlotError(env, slotId, msg, nowSec) {

@@ -299,3 +299,25 @@ export function getStarterForLocale(t: StarterTemplate, locale: TemplateLocale |
   const l = (locale as TemplateLocale) in t.i18n ? (locale as TemplateLocale) : "ru";
   return { ...t.i18n[l], name: t.defaultName[l] };
 }
+
+/** IDs surfaced as default example tiles on the Templates page (Pro/Max), in display order. */
+export const EXAMPLE_TEMPLATE_IDS = [
+  "welcome_email",
+  "reminder_sms",
+  "birthday_email",
+  "post_visit_email",
+  "win_back_email",
+] as const;
+
+/**
+ * Resolve the curated example templates, localized to `locale`, preserving
+ * EXAMPLE_TEMPLATE_IDS order. Powers the "example" tiles shown to Pro/Max
+ * tenants on the Templates page so the section is never empty. Unknown ids are
+ * skipped defensively; unknown locales fall back to ru (via getStarterForLocale).
+ */
+export function getExampleTemplates(locale: TemplateLocale | string) {
+  return EXAMPLE_TEMPLATE_IDS
+    .map((id) => STARTER_TEMPLATES.find((s) => s.id === id))
+    .filter((s): s is StarterTemplate => Boolean(s))
+    .map((s) => ({ id: s.id, channel: s.channel, icon: s.icon, ...getStarterForLocale(s, locale) }));
+}

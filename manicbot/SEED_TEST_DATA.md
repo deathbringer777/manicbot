@@ -74,6 +74,6 @@ Example:
 - `tenants` — array of two tenantIds.
 - `masterAssigned: true/false` — whether the master was added by username.
 - `masterChatId` — if master was added.
-- `commands` — command hints for manual assignment.
+- `hint` — present when `masterAssigned: false`: a `/grant_master` command hint for manual assignment.
 
 After the seed, each salon will have its own prices, photos, and "About us"; with a successful `masterAssigned`, @dezbringer will be master and owner in both.

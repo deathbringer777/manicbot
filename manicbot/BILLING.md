@@ -2,13 +2,37 @@
 
 ## Plans
 
-| Plan   | Price      | Masters | AI Chat | Support Tickets | Calendar | White Label |
-|--------|------------|---------|---------|------------------|-----------|-------------|
-| Start  | 45 zł/mo   | 1       | ✗       | ✗                | ✗         | ✗           |
-| Pro    | 60 zł/mo   | 5       | ✓       | ✓                | ✓         | ✗           |
-| MAX    | 90 zł/mo   | ∞       | ✓       | ✓                | ✓         | ✓           |
+| Plan   | Price      | Masters | AI Chat | Support Tickets | Calendar | White Label | Multi-salon |
+|--------|------------|---------|---------|------------------|-----------|-------------|-------------|
+| Start  | 45 zł/mo   | 1       | ✗       | ✗                | ✗         | ✗           | ✗           |
+| Pro    | 60 zł/mo   | 5       | ✓       | ✓                | ✓         | ✗           | ✗           |
+| MAX    | 90 zł/mo   | ∞       | ✓       | ✓                | ✓         | ✓           | ✓ (≤10)     |
 
 Plan limits are set in `src/billing/config.js` (constant `PLAN_LIMITS`).
+
+---
+
+## Multi-salon ownership (MAX) — migration 0109
+
+A **MAX-plan** account can own multiple salons (home + up to `MAX_OWNED_SALONS`,
+default 10).
+
+- A **secondary** salon is a `tenants` row with `parent_tenant_id` = the owner's
+  **home** tenant (the billing root), plus a `tenant_roles(role='tenant_owner')`
+  row keyed by the owner's deterministic synthetic chat id (`memberships.ts`).
+  **No `masters` row** — the owner never appears in the new salon's staff list,
+  public booking, or master limit. Ownership is resolved by
+  `listMembershipsForWebUser` / `resolveActiveMembership` (role-agnostic), so the
+  existing salon switcher and tenant guards work unchanged.
+- **Creation:** `salon.createOwnedSalon` (gated on the home plan being `max` +
+  the `MAX_OWNED_SALONS` cap). UI: the header `TenantSwitcher` "Create salon"
+  entry (visible to MAX owners) → `CreateSalonModal`.
+- **Billing:** secondaries are billed **under the parent's single MAX
+  subscription** — they shadow `plan='max'/billingStatus='active'` so `canUse`
+  works locally, are **excluded from MRR / customer counts** (`metrics.ts`,
+  `billing.ts` filter out `parent_tenant_id`-set rows), and are **cascade-frozen**
+  when the parent leaves MAX (`setSecondarySalonsBillingStatus`, fired from the
+  `customer.subscription.updated/deleted` webhook).
 
 ---
 
@@ -26,7 +50,7 @@ The `billing_status` field in the D1 `tenants` table:
 | `canceled`     | Explicit subscription cancellation             | Everything blocked            |
 
 Feature access check: `canUse(ctx, feature)` in `src/billing/features.js`.
-Possible feature values: `booking`, `ai`, `calendar`, `support_tickets`, `masters_add`, `white_label`, `whatsapp`, `instagram`.
+Possible feature values: `booking`, `ai`, `calendar`, `support_tickets`, `masters_add`, `white_label`, `whatsapp`, `instagram`, `multi_salon`.
 
 ---
 

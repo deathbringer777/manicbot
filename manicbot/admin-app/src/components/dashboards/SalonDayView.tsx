@@ -40,6 +40,7 @@ import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResize";
 import { useCoarsePointer } from "~/lib/useCoarsePointer";
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
+import { clampBand } from "~/lib/calendar/clampBand";
 import { WEEKDAY_KEYS, type WorkHoursState } from "~/lib/workHours";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
@@ -1147,10 +1148,14 @@ export function SalonDayView({
                         to soft-cancel the row. */}
                     {masterBlocks.map((b) => {
                       const isMultiDay = !!b.endDate && b.endDate !== isoDate;
-                      const top = isMultiDay ? 0 : timeToTop(b.time, hourStart);
-                      const height = isMultiDay
+                      const rawTop = isMultiDay ? 0 : timeToTop(b.time, hourStart);
+                      const rawHeight = isMultiDay
                         ? totalHours * HOUR_HEIGHT
                         : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
+                      // Clamp to the visible window — see clampBand: prevents an
+                      // over-long single-day block from overflowing the grid.
+                      const { top, height } = clampBand(rawTop, rawHeight, totalHours * HOUR_HEIGHT);
+                      if (height <= 0) return null; // entirely outside the window
                       const isPast = blockIsPast.get(b.id) === true;
                       const dimClass = isPast ? "opacity-70 saturate-50" : "";
                       const placement = isMultiDay

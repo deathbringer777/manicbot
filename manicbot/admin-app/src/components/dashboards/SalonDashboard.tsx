@@ -20,9 +20,7 @@ import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { AppointmentDetailPanel } from "~/components/dashboard-ui/AppointmentDetailPanel";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
-import { QuickAddFab, type FabExtraItem } from "~/components/dashboards/QuickAddFab";
-import { ReminderModal } from "~/components/plugins/reminders/ReminderModal";
-import { Bell, Repeat } from "lucide-react";
+import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { CalendarLeftRail, type StatusKey } from "~/components/dashboards/CalendarLeftRail";
 import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
@@ -1997,36 +1995,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // Drag-to-create prefill (Day/Week grids → ManualBookingModal /
   // TimeReservationDialog). Cleared on dialog close.
   const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number; title?: string } | null>(null);
-  // Reminders plugin — FAB-launched modal state.
-  const [reminderModal, setReminderModal] = useState<null | "reminder" | "routine">(null);
-  // Which plugins are installed for this tenant. Drives the FAB extraItems list.
-  // Skipped (enabled:false) until tenantId is known so we don't fetch on the
-  // public landing pre-auth render.
-  const installedPlugins = api.plugins.getInstalled.useQuery(undefined, {
-    enabled: !!tenantId,
-  });
-  const remindersInstalled = !!installedPlugins.data?.find(
-    (p) => p.pluginSlug === "reminders" && p.enabled === 1,
-  );
-  const fabExtraItems: FabExtraItem[] = remindersInstalled
-    ? [
-        {
-          id: "reminder",
-          icon: Bell,
-          label: "Напоминание",
-          description: "Однократное напоминание для себя или мастера",
-          onClick: () => setReminderModal("reminder"),
-        },
-        {
-          id: "routine",
-          icon: Repeat,
-          label: "Рутина",
-          description: "Циклическое напоминание (например, по будням)",
-          onClick: () => setReminderModal("routine"),
-        },
-      ]
-    : [];
-
   const isTest = useRole().isTest;
 
   // Delete service confirmation modal
@@ -2090,7 +2058,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           onTimeReservation={() => setTimeReservationOpen(true)}
           onTimeOff={() => setTimeOffOpen(true)}
           onAddClient={() => setClientFormOpen(true)}
-          extraItems={fabExtraItems}
         />
       )}
 
@@ -2125,13 +2092,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         />
       )}
 
-      {reminderModal && (
-        <ReminderModal
-          tenantId={tenantId}
-          defaultKind={reminderModal}
-          onClose={() => setReminderModal(null)}
-        />
-      )}
 
       {/* ── OVERVIEW ──
           The Overview tab is now a focused two-card surface:

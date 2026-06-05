@@ -24,8 +24,8 @@ const manifests = listManifests();
 const realPlugins = manifests; // all registered plugins are now production plugins
 
 describe("Seeded catalog — global shape", () => {
-  it("at least 5 real plugins are registered (Phase 1 floor; raise to 17 after Phase 3)", () => {
-    expect(realPlugins.length).toBeGreaterThanOrEqual(5);
+  it("at least 4 real plugins are registered (raise the floor as the catalog grows)", () => {
+    expect(realPlugins.length).toBeGreaterThanOrEqual(4);
   });
 
   it("no duplicate slugs", () => {
@@ -73,30 +73,30 @@ describe("Seeded catalog — localization coverage", () => {
   });
 });
 
-describe("Seeded catalog — role coverage matrix (post 2026-06-05 cull)", () => {
-  // The retained 5 plugins are all tenant-facing and cover roles as follows:
-  //   tenant_owner   — 5 (loyalty-stamps, task-board, review-collector, inventory-lite, reminders)
-  //   tenant_manager — 5 (all five include tenant_manager)
-  //   master         — 4 (task-board, review-collector, inventory-lite, reminders;
+describe("Seeded catalog — role coverage matrix (post 2026-06-06 cull)", () => {
+  // The retained 4 plugins are all tenant-facing and cover roles as follows:
+  //   tenant_owner   — 4 (loyalty-stamps, task-board, review-collector, inventory-lite)
+  //   tenant_manager — 4 (all four include tenant_manager)
+  //   master         — 3 (task-board, review-collector, inventory-lite;
   //                        loyalty-stamps is owner+manager only)
   //   support / techsup — 0 (export-hub, the only cross-role plugin, was culled)
   //   system_admin      — 0 (same)
   // The marketplace is intentionally tenant-facing now; support / system_admin
   // rely on core UI, not plugins. A future cross-role plugin would lift these.
 
-  it("has at least 5 plugins available for tenant_owner", () => {
+  it("has at least 4 plugins available for tenant_owner", () => {
     const n = realPlugins.filter((m) => m.availableForRoles.includes("tenant_owner")).length;
-    expect(n).toBeGreaterThanOrEqual(5);
-  });
-
-  it("has at least 4 plugins available for master", () => {
-    const n = realPlugins.filter((m) => m.availableForRoles.includes("master")).length;
     expect(n).toBeGreaterThanOrEqual(4);
   });
 
-  it("has at least 5 plugins available for tenant_manager", () => {
+  it("has at least 3 plugins available for master", () => {
+    const n = realPlugins.filter((m) => m.availableForRoles.includes("master")).length;
+    expect(n).toBeGreaterThanOrEqual(3);
+  });
+
+  it("has at least 4 plugins available for tenant_manager", () => {
     const n = realPlugins.filter((m) => m.availableForRoles.includes("tenant_manager")).length;
-    expect(n).toBeGreaterThanOrEqual(5);
+    expect(n).toBeGreaterThanOrEqual(4);
   });
 
   it("retained marketplace is tenant-facing — no support / system_admin plugins", () => {

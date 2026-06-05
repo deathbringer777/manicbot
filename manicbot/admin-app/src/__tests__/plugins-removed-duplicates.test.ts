@@ -54,6 +54,10 @@ const REMOVED_DUPLICATE_SLUGS = [
   "earnings-goal",          // duplicated core master earnings; localStorage stub
   "export-hub",             // duplicated core CSV export; dumped localStorage junk
   "message-templates",      // localStorage-only template store (no server sync)
+  // 2026-06-06 — reminders removed: duplicates the system-level notification
+  // bell + the core phaseReminders appointment cron; its calendar-chip UI was
+  // never wired. Worker phasePluginCron stays (now with zero dispatchers).
+  "reminders",
 ] as const;
 
 describe("removed duplicate plugins stay removed", () => {

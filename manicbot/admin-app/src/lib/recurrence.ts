@@ -13,7 +13,8 @@
  * window. The caller is responsible for translating anchor/time pairs into
  * the right timezone — these functions treat anchor + time as already-UTC
  * for simplicity. The worker copy applies the tenant TZ offset before
- * invoking expansion (see manicbot/plugins/reminders/cron.ts).
+ * invoking expansion (e.g. recurring platform campaigns in
+ * src/services/platformCampaigns.js).
  *
  * Why no rrule library: cloudflare-workers + edge runtime + 8 KB plugin
  * settings budget. RFC 5545 RRULE is 10× our needs (we don't support

@@ -21,7 +21,6 @@ const MODAL_FILES = [
   "components/marketing/AutomationFormModal.tsx",
   "components/marketing/CampaignFormModal.tsx",
   "components/marketing/TemplateFormModal.tsx",
-  "components/plugins/reminders/ReminderModal.tsx",
 ];
 
 describe("marketing modals — no native <select>", () => {

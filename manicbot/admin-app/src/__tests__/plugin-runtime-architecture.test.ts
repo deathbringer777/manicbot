@@ -89,9 +89,10 @@ describe("plugin runtime architecture", () => {
     const slugs = new Set(listRuntimeSlugs());
     // These three are the most user-visible runtimes today; if any of them
     // disappears from the loader map, surface the regression early.
+    // (export-hub / availability-share were culled 2026-06-05 as duplicates.)
     expect(slugs.has("task-board")).toBe(true);
-    expect(slugs.has("export-hub")).toBe(true);
-    expect(slugs.has("availability-share")).toBe(true);
+    expect(slugs.has("loyalty-stamps")).toBe(true);
+    expect(slugs.has("inventory-lite")).toBe(true);
   });
 
   it("runtime file names follow the *Runtime.tsx convention", () => {

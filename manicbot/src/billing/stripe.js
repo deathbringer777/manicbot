@@ -175,6 +175,36 @@ export async function listBalanceTransactions(secretKey, opts = {}) {
 }
 
 /**
+ * STRIPE-COUPON-01 — Stripe coupons are IMMUTABLE: percent_off / duration /
+ * duration_in_months cannot be edited after creation. ensureCoupon returns a
+ * pre-existing coupon by id, so if the intended economics ever change (e.g. a
+ * retention catalogue constant is edited) WITHOUT rotating the coupon id, we'd
+ * silently keep applying the STALE discount. Fail loudly instead — the remedy
+ * is to rotate the coupon id.
+ *
+ * @param {{percent_off?: number, duration?: string, duration_in_months?: number|null}} existing
+ * @param {string} code
+ * @param {number} percentOff
+ * @param {{duration: 'once'|'repeating'|'forever', months?: number}} durationOpts
+ * @throws {Error} when the live coupon's economics differ from intended.
+ */
+function assertCouponEconomics(existing, code, percentOff, durationOpts) {
+  const wantMonths = durationOpts.duration === 'repeating' ? (durationOpts.months ?? null) : null;
+  const gotMonths = existing?.duration_in_months ?? null;
+  const mismatch =
+    Number(existing?.percent_off) !== Number(percentOff) ||
+    existing?.duration !== durationOpts.duration ||
+    (durationOpts.duration === 'repeating' && gotMonths !== wantMonths);
+  if (mismatch) {
+    throw new Error(
+      `Stripe coupon ${code} exists with mismatched economics ` +
+      `(have percent_off=${existing?.percent_off} duration=${existing?.duration} months=${gotMonths}, ` +
+      `want percent_off=${percentOff} duration=${durationOpts.duration} months=${wantMonths}); rotate the coupon id`,
+    );
+  }
+}
+
+/**
  * Idempotent Stripe Coupon mint. Used by the cancellation retention flow
  * to surface a discount counter-offer to the salon owner.
  *
@@ -202,7 +232,9 @@ export async function ensureCoupon(secretKey, code, percentOff, durationOpts) {
     signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
   });
   if (getRes.ok) {
-    return await getRes.json();
+    const existing = await getRes.json();
+    assertCouponEconomics(existing, code, percentOff, durationOpts);
+    return existing;
   }
   if (getRes.status !== 404) {
     const err = await getRes.json().catch(() => ({}));
@@ -245,7 +277,11 @@ export async function ensureCoupon(secretKey, code, percentOff, durationOpts) {
       headers: authHeader(secretKey),
       signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
     });
-    if (reGet.ok) return await reGet.json();
+    if (reGet.ok) {
+      const existing = await reGet.json();
+      assertCouponEconomics(existing, code, percentOff, durationOpts);
+      return existing;
+    }
     const err2 = await reGet.json().catch(() => ({}));
     throw new Error(err2?.error?.message || `Stripe coupon re-GET failed: ${reGet.status}`);
   }

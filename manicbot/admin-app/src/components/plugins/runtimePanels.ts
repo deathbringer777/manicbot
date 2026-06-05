@@ -15,6 +15,10 @@
  * marketplace cleanup: google-calendar, quick-notes, ticket-templates,
  * dark-plus, client-crm-lite, booking-reminder. See plugins/registry.ts
  * header for the full rationale.
+ *
+ * 2026-06-05 — dropped 4 more runtime entries whose plugins were culled as
+ * duplicates / localStorage stubs: export-hub, availability-share,
+ * earnings-goal, message-templates. See plugins/registry.ts header.
  */
 
 import dynamic from "next/dynamic";
@@ -29,10 +33,6 @@ type RuntimeLoader = () => Promise<{ default: ComponentType<PluginRuntimeProps> 
 
 const RUNTIME_LOADERS: Record<string, RuntimeLoader> = {
   "task-board": () => import("./runtimes/TaskBoardRuntime"),
-  "export-hub": () => import("./runtimes/ExportHubRuntime"),
-  "availability-share": () => import("./runtimes/AvailabilityShareRuntime"),
-  "earnings-goal": () => import("./runtimes/EarningsGoalRuntime"),
-  "message-templates": () => import("./runtimes/MessageTemplatesRuntime"),
   "loyalty-stamps": () => import("./runtimes/LoyaltyStampsRuntime"),
   "review-collector": () => import("./runtimes/ReviewCollectorRuntime"),
   "inventory-lite": () => import("./runtimes/InventoryLiteRuntime"),

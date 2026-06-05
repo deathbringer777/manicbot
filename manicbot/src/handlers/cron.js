@@ -1126,7 +1126,12 @@ export async function handleCron(ctx) {
     const now = Date.now();
     const w = warsawNow();
 
-    await checkBillingExpiry(ctx, now);
+    // `now` is Date.now() MILLISECONDS — every phase below consumes it as ms.
+    // checkBillingExpiry, however, compares against trial_ends_at / grace_ends_at
+    // which are stored in UNIX SECONDS. Passing ms made `now > trialEndsAt`
+    // always true, flipping every trialing/grace tenant to `inactive` on the
+    // first cron tick (zero-length trials + grace). Convert to seconds here.
+    await checkBillingExpiry(ctx, Math.floor(now / 1000));
 
     if (!ctx?.db || !ctx?.tenantId) return;
 

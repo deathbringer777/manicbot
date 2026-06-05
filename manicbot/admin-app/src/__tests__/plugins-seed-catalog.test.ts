@@ -7,10 +7,12 @@
  *  - paid addons declare a Stripe price env var name
  *  - role-gated plugins list at least one concrete role
  *
- * 2026-05-16 — Phase 1 cleanup shrank the catalog from 20 → 7 retained
- * plugins. Role-coverage floors have been lowered accordingly. Phase 3
- * (Variant A) will add 10 more plugins; raise the floors back up at that
- * point so a regression in support/system_admin coverage is still caught.
+ * 2026-05-16 — Phase 1 cleanup shrank the catalog from 20 → 7 retained.
+ * 2026-06-05 — second cull dropped 7 more facade / duplicate / stub plugins
+ * (google-calendar, master-telegram-pairing, availability-share, shift-planner,
+ * earnings-goal, export-hub, message-templates), leaving 5 genuinely-modular,
+ * tenant-facing plugins. Role-coverage floors lowered accordingly; support /
+ * system_admin marketplace coverage is intentionally 0 now (they use core UI).
  */
 
 import { describe, it, expect } from "vitest";
@@ -71,46 +73,44 @@ describe("Seeded catalog — localization coverage", () => {
   });
 });
 
-describe("Seeded catalog — role coverage matrix (Phase 1 floors)", () => {
-  // After Phase 1 cleanup the retained 7 plugins cover roles as follows:
-  //   tenant_owner       — 5 (loyalty-stamps, shift-planner, task-board, export-hub, message-templates)
-  //   master             — 5 (task-board, availability-share, earnings-goal, export-hub, message-templates)
-  //   tenant_manager     — 4 (loyalty-stamps, shift-planner, task-board, export-hub)
-  //   support / techsup  — 1 (export-hub only)
-  //   system_admin       — 1 (export-hub only)
-  // Phase 3 lands sms-reminders / review-collector / inventory-lite / etc.
-  // and lifts all role floors back up. Raise the numbers below when that happens.
+describe("Seeded catalog — role coverage matrix (post 2026-06-05 cull)", () => {
+  // The retained 5 plugins are all tenant-facing and cover roles as follows:
+  //   tenant_owner   — 5 (loyalty-stamps, task-board, review-collector, inventory-lite, reminders)
+  //   tenant_manager — 5 (all five include tenant_manager)
+  //   master         — 4 (task-board, review-collector, inventory-lite, reminders;
+  //                        loyalty-stamps is owner+manager only)
+  //   support / techsup — 0 (export-hub, the only cross-role plugin, was culled)
+  //   system_admin      — 0 (same)
+  // The marketplace is intentionally tenant-facing now; support / system_admin
+  // rely on core UI, not plugins. A future cross-role plugin would lift these.
 
   it("has at least 5 plugins available for tenant_owner", () => {
     const n = realPlugins.filter((m) => m.availableForRoles.includes("tenant_owner")).length;
     expect(n).toBeGreaterThanOrEqual(5);
   });
 
-  it("has at least 5 plugins available for master", () => {
+  it("has at least 4 plugins available for master", () => {
     const n = realPlugins.filter((m) => m.availableForRoles.includes("master")).length;
-    expect(n).toBeGreaterThanOrEqual(5);
-  });
-
-  it("has at least 1 plugin available for support/technical_support (Phase 3 raises to 5)", () => {
-    const n = realPlugins.filter(
-      (m) => m.availableForRoles.includes("support") || m.availableForRoles.includes("technical_support"),
-    ).length;
-    expect(n).toBeGreaterThanOrEqual(1);
-  });
-
-  it("has at least 1 plugin available for system_admin (Phase 3 raises to 5)", () => {
-    const n = realPlugins.filter((m) => m.availableForRoles.includes("system_admin")).length;
-    expect(n).toBeGreaterThanOrEqual(1);
-  });
-
-  it("has at least 4 plugins available for tenant_manager (Phase 3 raises to 5)", () => {
-    const n = realPlugins.filter((m) => m.availableForRoles.includes("tenant_manager")).length;
     expect(n).toBeGreaterThanOrEqual(4);
   });
 
-  it("has at least 1 universal plugin (available for 5+ roles) (Phase 3 raises to 4)", () => {
+  it("has at least 5 plugins available for tenant_manager", () => {
+    const n = realPlugins.filter((m) => m.availableForRoles.includes("tenant_manager")).length;
+    expect(n).toBeGreaterThanOrEqual(5);
+  });
+
+  it("retained marketplace is tenant-facing — no support / system_admin plugins", () => {
+    const supportN = realPlugins.filter(
+      (m) => m.availableForRoles.includes("support") || m.availableForRoles.includes("technical_support"),
+    ).length;
+    const adminN = realPlugins.filter((m) => m.availableForRoles.includes("system_admin")).length;
+    expect(supportN).toBe(0);
+    expect(adminN).toBe(0);
+  });
+
+  it("no universal (5+ role) plugin remains after the cull", () => {
     const universal = realPlugins.filter((m) => m.availableForRoles.length >= 5);
-    expect(universal.length).toBeGreaterThanOrEqual(1);
+    expect(universal.length).toBe(0);
   });
 });
 

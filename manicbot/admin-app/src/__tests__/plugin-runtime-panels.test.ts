@@ -9,10 +9,9 @@ import { listManifests } from "@plugins/index";
 
 describe("plugin runtime registry", () => {
   it("lists at least 3 runtime panels (one per major retained-plugin role bucket)", () => {
-    // After the 2026-05-16 cleanup, the retained runtimes are: task-board,
-    // export-hub, availability-share, earnings-goal, message-templates.
-    // Phase 3 will add several more (sms-reminders runtime, etc.). The
-    // floor lives at 3 so a future trim of retained plugins is caught.
+    // After the 2026-06-05 cull the retained runtimes are: task-board,
+    // loyalty-stamps, review-collector, inventory-lite. The floor lives at 3
+    // so a future trim of retained plugins is caught.
     const slugs = listRuntimeSlugs();
     expect(slugs.length).toBeGreaterThanOrEqual(3);
   });
@@ -47,7 +46,8 @@ describe("plugin runtime registry", () => {
   it("every manifest with status='live' either has a runtime or is documented as background", () => {
     // Soft guarantee: at least the live plugins that ship interactive UI
     // must have a runtime registered. Live background plugins without a
-    // runtime are allowed (loyalty-stamps runs on cron, no UI).
+    // runtime are allowed (reminders runs on cron, surfaces via calendar
+    // chips + bell, no detail-page runtime).
     const live = listManifests().filter((m) => m.status === "live");
     const withRuntime = live.filter((m) => hasRuntime(m.slug));
     expect(withRuntime.length).toBeGreaterThanOrEqual(3);

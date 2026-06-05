@@ -62,6 +62,35 @@ describe('ensureCoupon — Stripe idempotent coupon mint', () => {
     expect(fetchFx.calls[0].url).toContain('/v1/coupons/RETENTION_MONTHLY_50_3M');
   });
 
+  it('throws when an existing coupon has mismatched economics (immutability drift)', async () => {
+    // The coupon id already exists but with a different percent_off than
+    // intended. Stripe coupons are immutable, so returning it would silently
+    // apply the stale rate — ensureCoupon must fail loudly instead.
+    fetchFx.responses.push({
+      status: 200,
+      body: { id: 'RETENTION_MONTHLY_50_3M', percent_off: 90, duration: 'repeating', duration_in_months: 3 },
+    });
+
+    await expect(
+      ensureCoupon(SECRET, 'RETENTION_MONTHLY_50_3M', 50, { duration: 'repeating', months: 3 }),
+    ).rejects.toThrow(/mismatched economics/);
+
+    // Must NOT fall through to a POST — no coupon creation/mutation attempted.
+    expect(fetchFx.calls.length).toBe(1);
+    expect(fetchFx.calls[0].method).toBe('GET');
+  });
+
+  it('throws when an existing coupon has mismatched duration_in_months', async () => {
+    fetchFx.responses.push({
+      status: 200,
+      body: { id: 'RETENTION_MONTHLY_50_3M', percent_off: 50, duration: 'repeating', duration_in_months: 6 },
+    });
+
+    await expect(
+      ensureCoupon(SECRET, 'RETENTION_MONTHLY_50_3M', 50, { duration: 'repeating', months: 3 }),
+    ).rejects.toThrow(/mismatched economics/);
+  });
+
   it('POSTs to create new coupon when GET returns 404', async () => {
     fetchFx.responses.push({ status: 404, body: { error: { message: 'No such coupon' } } });
     fetchFx.responses.push({

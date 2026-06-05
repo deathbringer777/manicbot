@@ -1,4 +1,4 @@
--- 0109_users_email_opt_in.sql — 2026-06-06
+-- 0113_users_email_opt_in.sql — 2026-06-06
 --
 -- Durable per-client state for the chat email-capture prompt. The bot asks
 -- clients for an email ("стань постоянным — получай скидки и новости"); to

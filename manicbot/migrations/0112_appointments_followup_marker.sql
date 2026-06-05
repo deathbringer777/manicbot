@@ -1,0 +1,11 @@
+-- 0112_appointments_followup_marker.sql — 2026-06-06
+--
+-- Post-visit follow-up (24h after a visit): idempotency marker for the new
+-- `phasePostVisitFollowup` cron sweep. NULL = no follow-up sent yet; the sweep
+-- claims a row by conditionally stamping this with the send epoch (seconds),
+-- so overlapping cron ticks / queue redeliveries can never double-send.
+--
+-- Nullable additive change, no backfill: existing past visits stay NULL, and a
+-- bounded look-back floor in the sweep keeps them from being blasted on first
+-- deploy.
+ALTER TABLE appointments ADD COLUMN followup_24h_sent_at INTEGER;

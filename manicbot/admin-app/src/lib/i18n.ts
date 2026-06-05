@@ -2300,6 +2300,7 @@ const translations = {
   "marketing.automation.trigger.birthday":         { ru: "День рождения",         ua: "День народження",        en: "Birthday",                  pl: "Urodziny" },
   "marketing.automation.trigger.booking_reminder": { ru: "Напоминание о записи",  ua: "Нагадування про запис",  en: "Booking reminder",          pl: "Przypomnienie wizyty" },
   "marketing.automation.trigger.abandoned_booking":{ ru: "Брошенная запись",      ua: "Покинутий запис",        en: "Abandoned booking",         pl: "Porzucona wizyta" },
+  "marketing.automation.trigger.post_visit_24h":   { ru: "После визита (через 24 ч)", ua: "Після візиту (через 24 год)", en: "After visit (24h later)",   pl: "Po wizycie (po 24h)" },
   // Preset card copy — same 5 as the old PLANNED_AUTOMATIONS grid.
   "marketing.automation.preset.welcome_series.name":    { ru: "Welcome серия",         ua: "Welcome серія",          en: "Welcome series",            pl: "Seria powitalna" },
   "marketing.automation.preset.welcome_series.desc":    { ru: "Поприветствовать новых контактов письмом-знакомством.", ua: "Привітати нових контактів листом-знайомством.", en: "Greet new contacts with a welcome email.", pl: "Powitaj nowe kontakty wiadomością powitalną." },
@@ -2311,6 +2312,8 @@ const translations = {
   "marketing.automation.preset.booking_reminder.desc":  { ru: "Напомнить за 24 ч до записи + follow-up через 48 ч.", ua: "Нагадати за 24 год до запису + follow-up через 48 год.", en: "Reminder 24h before + follow-up 48h after.", pl: "Przypomnienie 24h przed + follow-up po 48h." },
   "marketing.automation.preset.abandoned_booking.name": { ru: "Брошенная запись",      ua: "Покинутий запис",        en: "Abandoned booking",         pl: "Porzucona wizyta" },
   "marketing.automation.preset.abandoned_booking.desc": { ru: "Вернуть клиента, который начал бронирование, но не дошёл.", ua: "Повернути клієнта, який почав бронювання, але не дійшов.", en: "Recover bookings the user started but didn't complete.", pl: "Odzyskaj wizyty rozpoczęte, ale nieukończone." },
+  "marketing.automation.preset.post_visit_24h.name":    { ru: "После визита",          ua: "Після візиту",           en: "After visit",               pl: "Po wizycie" },
+  "marketing.automation.preset.post_visit_24h.desc":    { ru: "Запрос отзыва через 24 ч после визита — собирает соцдоказательство.", ua: "Запит відгуку через 24 год після візиту — збирає соцдоказ.", en: "Review request 24h after the visit — collects social proof.", pl: "Prośba o opinię 24h po wizycie — zbiera dowód społeczny." },
 
   // ── Messenger / MessagesClient shell (P0-UX + P1-UX) ─────────────────────
   "messenger.noSalon":             { ru: "Нет привязанного салона — мессенджер недоступен", ua: "Немає прив'язаного салону — месенджер недоступний", en: "No salon linked — messenger unavailable", pl: "Brak salonu — komunikator niedostępny" },

@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   visit_confirmed_at INTEGER,
   visit_confirmed_by TEXT,
   review_requested_at INTEGER,
+  -- Post-visit follow-up (24h sweep) idempotency marker; epoch seconds,
+  -- NULL = not yet sent. See phasePostVisitFollowup + migration 0112.
+  followup_24h_sent_at INTEGER,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_date ON appointments(tenant_id, date);

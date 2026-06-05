@@ -5,10 +5,11 @@
  * Event schema:
  *   { id, ts, type, level, tenantId?, botId?, message, data? }
  * Levels: "info" | "warn" | "error"
- * Types: booking.created, booking.confirmed, booking.cancelled,
- *        webhook.telegram, webhook.meta, stripe.event,
- *        error.handler, auth.web_login, channel.ig_message,
- *        cron.tenant.skipped, cron.phase.error, cron.retention.pruned
+ * Example types (non-exhaustive — `type` is a free-form string):
+ *        booking.created, booking.confirmed, webhook.bot_unresolved,
+ *        webhook.meta, stripe.event, error.handler, auth.web_login,
+ *        channel.ig_message, cron.tenant.skipped, cron.phase.error,
+ *        cron.retention.pruned
  */
 
 const MAX_EVENTS = 500;

@@ -1,12 +1,12 @@
 -- D1 → R2 backup audit log. One row per successful backup run.
 --
--- Powers the "/admin/d1-backup-status" endpoint and the restore script
--- (scripts/restore-d1.mjs) — which picks the latest healthy row to restore
--- from when the operator runs `npm run d1:restore`.
+-- Read by the restore script (scripts/restore-d1.mjs), which picks the
+-- latest healthy row to restore from when the operator runs it via
+-- `node scripts/restore-d1.mjs --latest`.
 --
--- The cron phase that writes here lives in src/handlers/cron.js
--- (phaseD1Backup → runs every 6h, idempotent via tenant_config
--- "cron:phase:d1_backup:last"). The actual backup payload sits in R2 under
+-- The backup runs from the Worker cron entrypoint (src/worker.js scheduled()
+-- → maybeRunD1Backup), roughly every 6h, idempotent via an internal 6h
+-- window derived from the latest row in this table. The actual backup payload sits in R2 under
 -- the binding ARCHIVE at key path "backups/daily/{iso}.ndjson.gz" plus a
 -- "backups/weekly/{iso-week}.ndjson.gz" promoted snapshot once per ISO week.
 --

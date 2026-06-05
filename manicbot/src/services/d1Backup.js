@@ -1,9 +1,9 @@
 /**
  * @fileoverview D1 → R2 backup pipeline.
  *
- * Runs from the cron orchestrator (`src/handlers/cron.js`, `phaseD1Backup`)
- * every 6 hours. Idempotent via the standard `tenant_config` last-run pin
- * — see `runOncePerWindow()` in cron.js.
+ * Runs from the Worker cron entrypoint (`src/worker.js` `scheduled()` →
+ * `maybeRunD1Backup`) roughly every 6 hours. Idempotent via an internal 6h
+ * window derived from the latest `d1_backup_log` row (not a `tenant_config` pin).
  *
  * The strategy is "platform-runtime" rather than "wrangler-CLI":
  *   - `wrangler d1 export` would be more efficient, but it's a CLI tool;

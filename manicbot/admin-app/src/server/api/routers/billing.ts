@@ -532,14 +532,17 @@ export const billingRouter = createTRPCRouter({
       }
 
       const offer = RETENTION_OFFERS[input.offerType];
-      await ensureCoupon(stripeKey, offer.code, offer.percentOff, {
-        duration: offer.duration,
-        months: "months" in offer ? offer.months : undefined,
-      });
-      await applyCouponToSubscription(stripeKey, tenant.stripeSubscriptionId, offer.code);
-
       const intervalAtCancel = subInterval === "year" ? "year" : "month";
 
+      // #S2-3 — claim the cooldown row BEFORE applying the (window-resetting)
+      // coupon. applyCouponToSubscription RESETS a repeating coupon's window on
+      // every call, so a re-apply STACKS the −50% discount (unbounded money
+      // loss). If the cooldown claim were written only AFTER a successful apply,
+      // an apply-ok-but-insert-fail crash would leave no cooldown row and a
+      // retry would re-apply. Writing the claim first makes the worst case a
+      // benign "cooldown set without the discount applied" (recoverable by
+      // support) instead of a stacking discount. Mirrors confirmCancellation's
+      // row-before-Stripe discipline.
       await ctx.db.insert(subscriptionCancellations).values({
         tenantId: input.tenantId,
         webUserId: ctx.webUser?.id ?? "",
@@ -553,6 +556,12 @@ export const billingRouter = createTRPCRouter({
         retentionCouponCode: offer.code,
         createdAt: nowSec,
       });
+
+      await ensureCoupon(stripeKey, offer.code, offer.percentOff, {
+        duration: offer.duration,
+        months: "months" in offer ? offer.months : undefined,
+      });
+      await applyCouponToSubscription(stripeKey, tenant.stripeSubscriptionId, offer.code);
 
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null,

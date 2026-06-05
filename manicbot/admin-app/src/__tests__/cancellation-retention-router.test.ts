@@ -473,6 +473,38 @@ describe("acceptRetentionOffer — happy path + edges", () => {
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "stripe_subscription_missing" });
     expect(ensureCoupon).not.toHaveBeenCalled();
   });
+
+  // #S2-3 — the cooldown-claim row must be written BEFORE the coupon is applied,
+  // so an apply-failure can never strand us discount-applied-but-uncooled (which
+  // a retry would re-apply, stacking the discount).
+  it("writes the cooldown-claim row BEFORE applying the coupon", async () => {
+    const callOrder: string[] = [];
+    const { db } = createDbMock([[tenantRow()], []]);
+    db.insert = vi.fn(() => ({
+      values: vi.fn(() => {
+        callOrder.push("db.insert");
+        return { onConflictDoUpdate: vi.fn(), then: (r: any) => Promise.resolve({ ok: true }).then(r) };
+      }),
+    })) as any;
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
+    vi.mocked(ensureCoupon).mockResolvedValueOnce({
+      id: "RETENTION_MONTHLY_50_3M", percent_off: 50, duration: "repeating", duration_in_months: 3,
+    });
+    vi.mocked(applyCouponToSubscription).mockImplementationOnce(async () => {
+      callOrder.push("stripe.apply");
+      return { id: SUB_ID };
+    });
+
+    const caller = ownerCaller(db);
+    await caller.acceptRetentionOffer({ tenantId: TENANT, offerType: "monthly_50_3m" });
+
+    expect(callOrder).toEqual(["db.insert", "stripe.apply"]);
+  });
 });
 
 // ─── confirmCancellation ─────────────────────────────────────────────────────

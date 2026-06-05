@@ -4,6 +4,15 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useRole } from "~/components/RoleContext";
 import { useEffectiveProfile } from "~/lib/effectiveProfile";
 import { api } from "~/trpc/react";
+import type { AppRole } from "~/server/api/routers/auth";
+import {
+  WIDGET_REGISTRY,
+  DEFAULT_HOME_LAYOUT,
+  isHomeWidgetType,
+  widgetAllowedForRole,
+  type HomeWidgetItem,
+  type HomeWidgetType,
+} from "~/components/dashboards/home-widgets/registry";
 
 export interface DashboardPrefs {
   hiddenTabs: string[];
@@ -31,6 +40,14 @@ export interface DashboardPrefs {
    * action exposed in the settings UI.
    */
   bottomNavLayout: "default" | "custom";
+  /**
+   * Per-user widget layout for the salon "Домой" (overview) board. Each item
+   * carries its react-grid-layout coordinates + per-widget options. EMPTY ⇒
+   * the board renders `DEFAULT_HOME_LAYOUT` (first-run / after "reset"). Lives
+   * in the schemaless `tenant_config` ui-prefs blob — no migration, no
+   * `tenants` column threading.
+   */
+  homeWidgets: HomeWidgetItem[];
 }
 
 export const MAX_PINNED_TABS = 5;
@@ -60,6 +77,7 @@ const DEFAULTS: DashboardPrefs = {
   pinnedTabs: [],
   bottomNavOrder: [],
   bottomNavLayout: "default",
+  homeWidgets: [],
 };
 
 function load(tenantId?: string | null, profileKey?: string): DashboardPrefs {
@@ -75,6 +93,7 @@ function load(tenantId?: string | null, profileKey?: string): DashboardPrefs {
       tabOrder: Array.isArray(parsed.tabOrder) ? parsed.tabOrder : [],
       pinnedTabs: Array.isArray(parsed.pinnedTabs) ? parsed.pinnedTabs : [],
       bottomNavOrder: Array.isArray(parsed.bottomNavOrder) ? parsed.bottomNavOrder : [],
+      homeWidgets: Array.isArray(parsed.homeWidgets) ? parsed.homeWidgets : [],
     };
   } catch {
     return DEFAULTS;
@@ -143,8 +162,64 @@ export function applyTabPrefs(
   return result.filter((id) => visibleSet.has(id) || !prefs.hiddenTabs.includes(id));
 }
 
+// ── Home-widget layout helpers (pure, unit-tested) ───────────────────────────
+
+/**
+ * Bottom-most free Y for a new widget. New widgets stack in the first column
+ * below everything else; RGL's vertical compaction then tidies the board. This
+ * is simpler and more predictable than gap-hunting, and never overlaps.
+ */
+export function nextWidgetPosition(
+  items: HomeWidgetItem[],
+  _size: { w: number; h: number },
+): { x: number; y: number } {
+  const maxBottom = items.reduce((max, w) => Math.max(max, w.y + w.h), 0);
+  return { x: 0, y: maxBottom };
+}
+
+/**
+ * Append a widget of `type` to the layout. No-op when a singleton of that type
+ * already exists (catalog v1 is all singletons, so `i === type`). Pure — never
+ * mutates `items`.
+ */
+export function addWidget(
+  items: HomeWidgetItem[],
+  type: HomeWidgetType,
+): HomeWidgetItem[] {
+  const def = WIDGET_REGISTRY[type];
+  if (!def) return items;
+  if (def.singleton && items.some((w) => w.type === type)) return items;
+  const id = def.singleton ? type : `${type}_${items.length}`;
+  const { x, y } = nextWidgetPosition(items, def.defaultSize);
+  return [...items, { i: id, type, x, y, w: def.defaultSize.w, h: def.defaultSize.h }];
+}
+
+/** Remove the widget instance with grid key `i`. Pure. */
+export function removeWidget(items: HomeWidgetItem[], i: string): HomeWidgetItem[] {
+  return items.filter((w) => w.i !== i);
+}
+
+/**
+ * Resolve the widgets to actually render:
+ *   - empty input ⇒ a fresh copy of `DEFAULT_HOME_LAYOUT` (first-run board),
+ *   - otherwise drop unknown types (registry changed since save) and, when a
+ *     concrete `role` is given, role-forbidden widgets.
+ * A `null` role applies no role filtering (loading / tests). Pure — returns
+ * fresh item objects so the board can mutate layout without touching prefs.
+ */
+export function hydrateHomeLayout(
+  items: HomeWidgetItem[],
+  role: AppRole = null,
+): HomeWidgetItem[] {
+  const source = items.length > 0 ? items : DEFAULT_HOME_LAYOUT;
+  return source
+    .filter((w) => isHomeWidgetType(w.type))
+    .filter((w) => role == null || widgetAllowedForRole(WIDGET_REGISTRY[w.type], role))
+    .map((w) => ({ ...w }));
+}
+
 export function useDashboardPrefs() {
-  const { tenantId } = useRole();
+  const { tenantId, role } = useRole();
   const profile = useEffectiveProfile();
   const profileKey = profile.effectiveProfileKey;
   const [prefs, setPrefsState] = useState<DashboardPrefs>(() => load(tenantId, profileKey));
@@ -275,6 +350,52 @@ export function useDashboardPrefs() {
     update({ bottomNavOrder: [], bottomNavLayout: "default" });
   }, [update]);
 
+  // ── Home-widget board setters ──────────────────────────────────────────────
+  // `add/remove/setOpts` materialize the default layout on first edit (so
+  // editing a still-default board behaves intuitively); all route through the
+  // shared debounced `persist`.
+
+  const setHomeWidgets = useCallback((items: HomeWidgetItem[]) => {
+    update({ homeWidgets: items });
+  }, [update]);
+
+  const addHomeWidget = useCallback((type: HomeWidgetType) => {
+    setPrefsState((prev) => {
+      const base = prev.homeWidgets.length > 0 ? prev.homeWidgets : hydrateHomeLayout([], role);
+      const next = { ...prev, homeWidgets: addWidget(base, type) };
+      persist(next);
+      return next;
+    });
+  }, [persist, role]);
+
+  const removeHomeWidget = useCallback((i: string) => {
+    setPrefsState((prev) => {
+      const base = prev.homeWidgets.length > 0 ? prev.homeWidgets : hydrateHomeLayout([], role);
+      const next = { ...prev, homeWidgets: removeWidget(base, i) };
+      persist(next);
+      return next;
+    });
+  }, [persist, role]);
+
+  const setHomeWidgetOpts = useCallback((i: string, opts: Record<string, unknown>) => {
+    setPrefsState((prev) => {
+      const base = prev.homeWidgets.length > 0 ? prev.homeWidgets : hydrateHomeLayout([], role);
+      const next = {
+        ...prev,
+        homeWidgets: base.map((w) =>
+          w.i === i ? { ...w, opts: { ...(w.opts ?? {}), ...opts } } : w,
+        ),
+      };
+      persist(next);
+      return next;
+    });
+  }, [persist, role]);
+
+  /** Reset to first-run: empty ⇒ board falls back to DEFAULT_HOME_LAYOUT. */
+  const resetHomeWidgets = useCallback(() => {
+    update({ homeWidgets: [] });
+  }, [update]);
+
   return {
     prefs,
     toggleTab,
@@ -284,6 +405,11 @@ export function useDashboardPrefs() {
     setDefaultTab,
     setBottomNav,
     resetBottomNav,
+    setHomeWidgets,
+    addHomeWidget,
+    removeHomeWidget,
+    setHomeWidgetOpts,
+    resetHomeWidgets,
   };
 }
 

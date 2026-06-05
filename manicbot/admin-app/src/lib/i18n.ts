@@ -2466,6 +2466,62 @@ const translations = {
   "messenger.typing.one":          { ru: "{name} печатает…", ua: "{name} пише…", en: "{name} is typing…", pl: "{name} pisze…" },
   "messenger.typing.many":         { ru: "Несколько человек печатают…", ua: "Кілька людей пишуть…", en: "Several people are typing…", pl: "Kilka osób pisze…" },
   "messenger.conn.reconnecting":   { ru: "Связь прервана — переподключаюсь…", ua: "Зв'язок перервано — перепідключаюсь…", en: "Connection lost — reconnecting…", pl: "Połączenie przerwane — łączę ponownie…" },
+
+  // ── Home widgets (configurable "Домой" board) ───────────────────────────────
+  // Widget titles (one per HomeWidgetType — see home-widgets/registry.tsx)
+  "widget.today_appointments.title":     { ru: "Записи на сегодня", ua: "Записи на сьогодні", en: "Today's appointments", pl: "Wizyty na dziś" },
+  "widget.kpi_total_clients.title":      { ru: "Всего клиентов", ua: "Усього клієнтів", en: "Total clients", pl: "Wszyscy klienci" },
+  "widget.kpi_week_appointments.title":  { ru: "Записи за неделю", ua: "Записи за тиждень", en: "Appointments this week", pl: "Wizyty w tym tygodniu" },
+  "widget.kpi_month_revenue.title":      { ru: "Выручка за месяц", ua: "Дохід за місяць", en: "Revenue this month", pl: "Przychód w tym miesiącu" },
+  "widget.kpi_new_clients.title":        { ru: "Новые клиенты", ua: "Нові клієнти", en: "New clients", pl: "Nowi klienci" },
+  "widget.kpi_no_show_rate.title":       { ru: "Неявки", ua: "Неявки", en: "No-show rate", pl: "Nieobecności" },
+  "widget.calendar_heatmap.title":       { ru: "Активность по дням", ua: "Активність по днях", en: "Activity by day", pl: "Aktywność dzienna" },
+  "widget.top_services.title":           { ru: "Топ услуг", ua: "Топ послуг", en: "Top services", pl: "Najczęstsze usługi" },
+  "widget.top_masters.title":            { ru: "Топ мастеров", ua: "Топ майстрів", en: "Top masters", pl: "Najlepsi mistrzowie" },
+  "widget.activity_feed.title":          { ru: "Последние события", ua: "Останні події", en: "Recent activity", pl: "Ostatnia aktywność" },
+  "widget.quick_actions.title":          { ru: "Быстрые действия", ua: "Швидкі дії", en: "Quick actions", pl: "Szybkie akcje" },
+  // Widget option dropdowns (period / view / limit)
+  "widget.opt.period":      { ru: "Период", ua: "Період", en: "Period", pl: "Okres" },
+  "widget.opt.period.7d":   { ru: "7 дней", ua: "7 днів", en: "7 days", pl: "7 dni" },
+  "widget.opt.period.30d":  { ru: "30 дней", ua: "30 днів", en: "30 days", pl: "30 dni" },
+  "widget.opt.period.90d":  { ru: "90 дней", ua: "90 днів", en: "90 days", pl: "90 dni" },
+  "widget.opt.view":        { ru: "Вид", ua: "Вигляд", en: "View", pl: "Widok" },
+  "widget.opt.view.month":  { ru: "Месяц", ua: "Місяць", en: "Month", pl: "Miesiąc" },
+  "widget.opt.view.week":   { ru: "Неделя", ua: "Тиждень", en: "Week", pl: "Tydzień" },
+  "widget.opt.limit":       { ru: "Сколько показывать", ua: "Скільки показувати", en: "How many", pl: "Ile pokazać" },
+  "widget.opt.limit.5":     { ru: "5", ua: "5", en: "5", pl: "5" },
+  "widget.opt.limit.10":    { ru: "10", ua: "10", en: "10", pl: "10" },
+  // Widget categories (add-widget menu groups)
+  "widget.category.metric":   { ru: "Метрики", ua: "Метрики", en: "Metrics", pl: "Metryki" },
+  "widget.category.calendar": { ru: "Календарь", ua: "Календар", en: "Calendar", pl: "Kalendarz" },
+  "widget.category.list":     { ru: "Списки", ua: "Списки", en: "Lists", pl: "Listy" },
+  "widget.category.action":   { ru: "Действия", ua: "Дії", en: "Actions", pl: "Akcje" },
+  // Widget content / empty / inline labels
+  "widget.top.bookings":      { ru: "записей", ua: "записів", en: "bookings", pl: "wizyt" },
+  "widget.top.empty":         { ru: "Нет данных за период", ua: "Немає даних за період", en: "No data for this period", pl: "Brak danych za okres" },
+  "widget.activity.empty":    { ru: "Пока нет событий", ua: "Поки немає подій", en: "No activity yet", pl: "Brak aktywności" },
+  "widget.quickActions.newBooking":   { ru: "Новая запись", ua: "Новий запис", en: "New appointment", pl: "Nowa wizyta" },
+  "widget.quickActions.addClient":    { ru: "Новый клиент", ua: "Новий клієнт", en: "New client", pl: "Nowy klient" },
+  "widget.quickActions.addService":   { ru: "Новая услуга", ua: "Нова послуга", en: "New service", pl: "Nowa usługa" },
+  "widget.quickActions.openCalendar": { ru: "Календарь", ua: "Календар", en: "Calendar", pl: "Kalendarz" },
+  // Board edit-mode controls
+  "home.customize":  { ru: "Настроить", ua: "Налаштувати", en: "Customize", pl: "Dostosuj" },
+  "home.done":       { ru: "Готово", ua: "Готово", en: "Done", pl: "Gotowe" },
+  "home.addWidget":  { ru: "Добавить виджет", ua: "Додати віджет", en: "Add widget", pl: "Dodaj widżet" },
+  "home.remove":     { ru: "Убрать", ua: "Прибрати", en: "Remove", pl: "Usuń" },
+  "home.reset":      { ru: "Сбросить раскладку", ua: "Скинути розкладку", en: "Reset layout", pl: "Resetuj układ" },
+  "home.empty":      { ru: "Виджетов нет. Нажмите «Настроить», чтобы добавить.", ua: "Віджетів немає. Натисніть «Налаштувати», щоб додати.", en: "No widgets. Tap “Customize” to add some.", pl: "Brak widżetów. Kliknij „Dostosuj”, aby dodać." },
+  "home.error":      { ru: "Не удалось загрузить", ua: "Не вдалося завантажити", en: "Failed to load", pl: "Nie udało się załadować" },
+  "home.allAdded":   { ru: "Все виджеты добавлены", ua: "Усі віджети додані", en: "All widgets added", pl: "Wszystkie widżety dodane" },
+  "home.editHint":   { ru: "Перетаскивайте и меняйте размер виджетов.", ua: "Перетягуйте та змінюйте розмір віджетів.", en: "Drag and resize widgets.", pl: "Przeciągaj i zmieniaj rozmiar widżetów." },
+  "home.touchHint":  { ru: "На телефоне перетаскивание выключено — настройте на компьютере.", ua: "На телефоні перетягування вимкнено — налаштуйте на комп'ютері.", en: "Dragging is off on touch — arrange on desktop.", pl: "Przeciąganie wyłączone na ekranie dotykowym — ułóż na komputerze." },
+  // Settings → Виджеты section
+  "settings.widgets.navLabel":  { ru: "Виджеты", ua: "Віджети", en: "Widgets", pl: "Widżety" },
+  "settings.widgets.title":     { ru: "Виджеты на «Домой»", ua: "Віджети на «Додому»", en: "Home widgets", pl: "Widżety strony głównej" },
+  "settings.widgets.desc":      { ru: "Выберите, какие виджеты показывать на «Домой», и настройте их параметры.", ua: "Виберіть, які віджети показувати на «Додому», і налаштуйте їх.", en: "Choose which widgets to show on Home and configure them.", pl: "Wybierz, które widżety pokazać na stronie głównej i skonfiguruj je." },
+  "settings.widgets.show":      { ru: "Показывать", ua: "Показувати", en: "Show", pl: "Pokaż" },
+  "settings.widgets.reset":     { ru: "Сбросить раскладку", ua: "Скинути розкладку", en: "Reset layout", pl: "Resetuj układ" },
+  "settings.widgets.resetDone": { ru: "Раскладка сброшена", ua: "Розкладку скинуто", en: "Layout reset", pl: "Układ zresetowany" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

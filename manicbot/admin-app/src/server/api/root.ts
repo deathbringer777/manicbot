@@ -51,10 +51,12 @@ import { blogRouter } from "~/server/api/routers/blog";
 import { platformCustomersRouter } from "~/server/api/routers/platformCustomers";
 import { analyticsEventsRouter } from "~/server/api/routers/analyticsEvents";
 import { adminBotsRouter } from "~/server/api/routers/adminBots";
+import { salonMetricsRouter } from "~/server/api/routers/salonMetrics";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
   salon: salonRouter,
+  salonMetrics: salonMetricsRouter,
   master: masterRouter,
   support: supportRouter,
   channels: channelRouter,

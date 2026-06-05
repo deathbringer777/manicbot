@@ -7,6 +7,7 @@ import { useRole } from "~/components/RoleContext";
 import { SettingsShell, getDefaultSettingsSection } from "~/components/settings/SettingsShell";
 import { AccountSection } from "~/components/settings/sections/AccountSection";
 import { AppearanceSection } from "~/components/settings/sections/AppearanceSection";
+import { WidgetsSection } from "~/components/settings/sections/WidgetsSection";
 import { HelpSection } from "~/components/settings/sections/HelpSection";
 import { PlatformSection } from "~/components/settings/sections/PlatformSection";
 import { BillingSection } from "~/components/settings/sections/BillingSection";
@@ -91,6 +92,8 @@ export default function SettingsPageClient() {
         return <NotificationsSection />;
       case "appearance":
         return <AppearanceSection />;
+      case "widgets":
+        return <WidgetsSection />;
       case "help":
         return <HelpSection />;
       case "profile":

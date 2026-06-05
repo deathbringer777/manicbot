@@ -141,11 +141,26 @@ export const userOrigins = sqliteTable("user_origins", {
   rawPayload: text("raw_payload"),
   capturedAt: integer("captured_at").notNull(),
   isFirstTouch: integer("is_first_touch").notNull().default(0),
+  webUserId: text("web_user_id"),
 }, (t) => [
   index("idx_uo_tenant_chat").on(t.tenantId, t.chatId),
   index("idx_uo_tenant_source").on(t.tenantId, t.source, t.capturedAt),
   index("idx_uo_tenant_campaign").on(t.tenantId, t.campaign, t.capturedAt),
   index("idx_uo_tenant_first").on(t.tenantId, t.isFirstTouch, t.capturedAt),
+]);
+
+export const trackingLinks = sqliteTable("tracking_links", {
+  shortCode: text("short_code").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  source: text("source").notNull(),
+  medium: text("medium"),
+  campaign: text("campaign"),
+  content: text("content"),
+  payloadHash: text("payload_hash").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_tl_tenant_hash").on(t.tenantId, t.payloadHash),
+  index("idx_tl_tenant_code").on(t.tenantId, t.shortCode),
 ]);
 
 export const masters = sqliteTable("masters", {

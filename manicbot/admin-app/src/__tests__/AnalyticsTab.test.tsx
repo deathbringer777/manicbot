@@ -40,9 +40,10 @@ let topCampaignsMock: { data: { campaigns: unknown[] } | undefined; isLoading: b
   data: { campaigns: [] },
   isLoading: false,
 };
-let buildLinksMock: { data: { token: string; links: Array<{ label: string; url: string }> } | undefined; isLoading: boolean; isError: boolean; error: { message: string } | null } = {
-  data: { token: "eyJzIjoicXIifQ", links: [] },
-  isLoading: false,
+let buildLinksMock: { mutate: ReturnType<typeof vi.fn>; data: { shortCode: string; links: Array<{ label: string; url: string }> } | undefined; isPending: boolean; isError: boolean; error: { message: string } | null } = {
+  mutate: vi.fn(),
+  data: { shortCode: "ab12cd34", links: [] },
+  isPending: false,
   isError: false,
   error: null,
 };
@@ -57,7 +58,7 @@ vi.mock("~/trpc/react", () => ({
       getFunnel: { useQuery: () => funnelMock },
       getAcquisition: { useQuery: () => acquisitionMock },
       getTopCampaigns: { useQuery: () => topCampaignsMock },
-      buildTrackingLinks: { useQuery: () => buildLinksMock },
+      buildTrackingLinks: { useMutation: () => buildLinksMock },
     },
     salon: {
       getMyMetrics: { useQuery: () => myMetricsMock },
@@ -102,8 +103,9 @@ beforeEach(() => {
   };
   topCampaignsMock = { data: { campaigns: [] }, isLoading: false };
   buildLinksMock = {
-    data: { token: "eyJzIjoicXIifQ", links: [] },
-    isLoading: false,
+    mutate: vi.fn(),
+    data: { shortCode: "ab12cd34", links: [] },
+    isPending: false,
     isError: false,
     error: null,
   };

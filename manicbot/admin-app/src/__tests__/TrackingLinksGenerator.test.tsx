@@ -1,43 +1,37 @@
 // @vitest-environment happy-dom
 /**
- * TrackingLinksGenerator — UTM-style deep-link builder.
+ * TrackingLinksGenerator — tracking-link builder.
  *
- * Pins the post-2026-05-16 UX contract (PR #85):
- *   - The form starts with Source + Campaign visible only; Channel and
- *     Content sit behind a collapsed "Дополнительно" toggle (à la
- *     Mailchimp Campaign URL Builder / Bitly Campaigns).
- *   - The raw `Токен: eyJzIjoicXIifQ · 14/64` debug row is GONE — that
- *     was the most-complained-about element in production feedback.
- *   - A token warning chip appears ONLY when the generated /start payload
- *     would exceed Telegram's 64-byte limit. Below the limit, no chip.
- *   - All placeholders are human-readable RU strings, not UTM jargon
- *     (`cpc / organic / social`, `button_a / creative_1`).
+ * Pins the UX contract:
+ *   - Source + Campaign visible by default; Channel + Content sit behind the
+ *     collapsed "Дополнительно" toggle (à la Mailchimp / Bitly campaign builders).
+ *   - No raw `Токен: … · N/64` debug row.
+ *   - Human-readable RU placeholders, not UTM jargon.
+ *   - Links carry a persisted SHORT CODE (e.g. ?start=ab12cd34), not an inline
+ *     base64 payload — so there is no 64-char limit and no length warning, and a
+ *     server failure surfaces a friendly localized message (not the raw error).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { renderWithLang } from "./helpers/renderWithLang";
 
 type BuildLinksData = {
-  token: string;
+  shortCode: string;
   links: Array<{ label: string; url: string }>;
 };
 
 let buildLinksMock: {
+  mutate: ReturnType<typeof vi.fn>;
   data: BuildLinksData | undefined;
-  isLoading: boolean;
+  isPending: boolean;
   isError: boolean;
   error: { message: string } | null;
-} = {
-  data: { token: "eyJzIjoicXIifQ", links: [{ label: "Telegram", url: "https://t.me/manicbot?start=eyJzIjoicXIifQ" }] },
-  isLoading: false,
-  isError: false,
-  error: null,
 };
 
 vi.mock("~/trpc/react", () => ({
   api: {
     analytics: {
-      buildTrackingLinks: { useQuery: () => buildLinksMock },
+      buildTrackingLinks: { useMutation: () => buildLinksMock },
     },
   },
 }));
@@ -52,11 +46,12 @@ import { TrackingLinksGenerator } from "~/components/salon/TrackingLinksGenerato
 
 beforeEach(() => {
   buildLinksMock = {
+    mutate: vi.fn(),
     data: {
-      token: "eyJzIjoicXIifQ",
-      links: [{ label: "Telegram", url: "https://t.me/manicbot?start=eyJzIjoicXIifQ" }],
+      shortCode: "ab12cd34",
+      links: [{ label: "Telegram", url: "https://t.me/manicbot?start=ab12cd34" }],
     },
-    isLoading: false,
+    isPending: false,
     isError: false,
     error: null,
   };
@@ -121,41 +116,39 @@ describe("TrackingLinksGenerator — human placeholders (no UTM jargon)", () => 
   });
 });
 
-describe("TrackingLinksGenerator — no raw token row", () => {
+describe("TrackingLinksGenerator — short-code links", () => {
   it("does NOT render the 'Токен: xxx · N/64' debug row anywhere", () => {
     renderWithLang(
       <TrackingLinksGenerator tenantId="t_demo" botUsername="manicbot" slug="demo" />,
     );
 
-    // Looking for the "/64" length suffix that the old implementation rendered.
     const body = document.body.textContent ?? "";
     expect(body).not.toMatch(/Токен:\s*eyJ/);
     expect(body).not.toMatch(/·\s*\d+\/64/);
   });
-});
 
-describe("TrackingLinksGenerator — token-length warning", () => {
-  it("hides the warning chip when token fits the 64-byte Telegram /start limit", () => {
-    buildLinksMock.data = {
-      token: "a".repeat(64),
-      links: [{ label: "Telegram", url: "https://t.me/bot?start=" + "a".repeat(64) }],
-    };
+  it("renders the short Telegram link and no length-warning chip", () => {
+    renderWithLang(
+      <TrackingLinksGenerator tenantId="t_demo" botUsername="manicbot" slug="demo" />,
+    );
 
-    renderWithLang(<TrackingLinksGenerator tenantId="t_demo" botUsername="manicbot" />);
-
+    expect(screen.getByText("https://t.me/manicbot?start=ab12cd34")).toBeTruthy();
+    // The 64-char token warning is obsolete — short codes never overflow.
     expect(screen.queryByTestId("tracking-token-warning")).toBeNull();
   });
 
-  it("shows the warning chip when token exceeds 64 bytes", () => {
-    buildLinksMock.data = {
-      token: "a".repeat(80),
-      links: [{ label: "Telegram", url: "https://t.me/bot?start=" + "a".repeat(80) }],
-    };
+  it("surfaces a friendly localized error, never the raw server message", () => {
+    buildLinksMock.data = undefined;
+    buildLinksMock.isError = true;
+    buildLinksMock.error = { message: "Internal server error" };
 
-    renderWithLang(<TrackingLinksGenerator tenantId="t_demo" botUsername="manicbot" />);
+    renderWithLang(
+      <TrackingLinksGenerator tenantId="t_demo" botUsername="manicbot" slug="demo" />,
+    );
 
-    const chip = screen.getByTestId("tracking-token-warning");
-    expect(chip).toBeTruthy();
-    expect(chip.textContent).toContain("Метка слишком длинная");
+    const err = screen.getByTestId("tracking-error");
+    expect(err).toBeTruthy();
+    expect(err.textContent).not.toContain("Internal server error");
+    expect(err.textContent).toContain("Не удалось создать ссылку");
   });
 });

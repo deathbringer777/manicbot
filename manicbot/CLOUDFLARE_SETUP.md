@@ -70,9 +70,10 @@ Code tries REST with token first; if token and Account ID are set — binding is
 The code uses:
 
 - primary: `@cf/openai/gpt-oss-120b`;
-- fallback: `@cf/meta/llama-3.1-8b-instruct`.
+- fallback: `@cf/meta/llama-4-scout-17b-16e-instruct`;
+- fallback 2: `@cf/meta/llama-3.1-8b-instruct`.
 
-If the primary model is unavailable in your account/region, responses will go through the fallback.
+If the primary model is unavailable in your account/region, responses will go through the fallbacks in order.
 
 ## 5. "Connect a consultant" notifications
 
@@ -132,8 +133,6 @@ After the first deploy, you need to run the migration once and reconfigure the w
    The response will contain the required webhook URL — copy it and update in the bot settings (BotFather / setWebhook) if necessary.
 
 3. **Cron** is already configured in wrangler (`*/15 * * * *`): reminders and cleanup run per tenant.
-
-Detailed code analysis and conflicts — in **CODE_ANALYSIS.md**.
 
 ---
 

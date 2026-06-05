@@ -29,7 +29,7 @@ Once connected, ManicBot pushes each booking into the calendar via
   **calendar-only**: it pushes the event but does NOT message the client, so a
   staff-entered booking stays silent to the client.
 
-The `phaseGcalSync` cron (every ~10 min) is the **fallback** that retries any
+The `phaseGcalSync` cron (every 15 min) is the **fallback** that retries any
 `status='confirmed'` row still missing `google_event_id` (e.g. the immediate
 push failed, or the Worker was unreachable). All outbound paths are gated by the
 `calendar` plan feature (`canUse(ctx, 'calendar')` — `pro`/`max` only).

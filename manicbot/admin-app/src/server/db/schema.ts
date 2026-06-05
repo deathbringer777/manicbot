@@ -21,6 +21,13 @@ export const tenants = sqliteTable("tenants", {
   nextPaymentDate: integer("next_payment_date"),
   billingEmail: text("billing_email"),
   cancelAtPeriodEnd: integer("cancel_at_period_end").notNull().default(0),
+  // Scheduled downgrade (no refund; applies at period end via Stripe schedule) +
+  // optional timed-pause resume. See migration 0109.
+  pendingPlan: text("pending_plan"),
+  pendingPriceId: text("pending_price_id"),
+  pendingPlanEffectiveAt: integer("pending_plan_effective_at"),
+  pendingScheduleId: text("pending_schedule_id"),
+  pauseResumesAt: integer("pause_resumes_at"),
   slug: text("slug"),
   description: text("description"),
   lat: real("lat"),

@@ -75,6 +75,10 @@ export const users = sqliteTable("users", {
   notes: text("notes"),
   tags: text("tags"),
   marketingContactId: integer("marketing_contact_id"),
+  // 0109: chat email-capture opt-in / anti-nag state (NULL=unasked, 1=in, 0=out).
+  emailOptIn: integer("email_opt_in"),
+  emailPromptLastAt: integer("email_prompt_last_at"),
+  emailPromptCount: integer("email_prompt_count").notNull().default(0),
   isBlockedGlobal: integer("is_blocked_global").notNull().default(0),
   blockedGlobalReason: text("blocked_global_reason"),
   blockedGlobalAt: integer("blocked_global_at"),

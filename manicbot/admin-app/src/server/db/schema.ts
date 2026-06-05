@@ -288,6 +288,9 @@ export const appointments = sqliteTable("appointments", {
   visitConfirmedAt: integer("visit_confirmed_at"),
   visitConfirmedBy: text("visit_confirmed_by"),
   reviewRequestedAt: integer("review_requested_at"),
+  /** Post-visit follow-up (24h sweep) idempotency marker; epoch seconds,
+   *  null = not yet sent. See phasePostVisitFollowup + migration 0112. */
+  followup24hSentAt: integer("followup_24h_sent_at"),
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_apt_tenant_date").on(t.tenantId, t.date),

@@ -10,9 +10,15 @@
  *      placeholder — just now actually clickable.
  *   2. Real automations list — toggle / Run Now / Edit / Delete.
  *
- * Out of scope (deferred): the cron engine that auto-fires triggered
- * automations on birthday / inactive_30d / booking. Only manual "Run Now"
- * actually sends; the trigger picker is captured for the future cron PR.
+ * ⚠ PARKED — DO NOT DELETE. This surface is complete and works (manual
+ * "Run Now" sends end-to-end), but it is hidden from users behind
+ * MARKETING_AUTOMATIONS_ENABLED (see ~/lib/featureFlags). The tab is dropped
+ * from the marketing sub-nav (~/lib/nav/marketingTabs) and the route's
+ * page.tsx redirects direct hits to /marketing. It is parked — not dead —
+ * because the cron engine that would auto-fire these triggers (birthday /
+ * inactive_30d / new-contact / booking) isn't built yet, and pre-launch there
+ * are ~0 consented contacts so a manual run resolves to "0 of 0". The full
+ * unlock runbook lives in ~/lib/featureFlags.
  */
 
 import { useState } from "react";

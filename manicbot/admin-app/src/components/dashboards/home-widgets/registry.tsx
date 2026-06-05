@@ -29,6 +29,18 @@ import {
 } from "lucide-react";
 import type { Lang, TranslationKey } from "~/lib/i18n";
 import type { AppRole } from "~/server/api/routers/auth";
+import { TodayAppointmentsWidget } from "./widgets/TodayAppointmentsWidget";
+import {
+  KpiTotalClientsWidget,
+  KpiWeekAppointmentsWidget,
+  KpiMonthRevenueWidget,
+  KpiNewClientsWidget,
+  KpiNoShowRateWidget,
+} from "./widgets/KpiWidgets";
+import { CalendarHeatmapWidget } from "./widgets/CalendarHeatmapWidget";
+import { TopServicesWidget, TopMastersWidget } from "./widgets/TopListWidgets";
+import { ActivityFeedWidget } from "./widgets/ActivityFeedWidget";
+import { QuickActionsWidget } from "./widgets/QuickActionsWidget";
 
 /** Every widget available in catalog v1. */
 export type HomeWidgetType =
@@ -166,17 +178,6 @@ const LIMIT_OPTION: WidgetOptionSpec = {
   ],
 };
 
-/**
- * Phase-0 placeholder. Agent B swaps each entry's `Component` for the real
- * widget. Kept dependency-free (no imports of not-yet-existing widget files)
- * so the registry typechecks on its own.
- */
-const StubWidget: FC<WidgetRenderProps> = ({ item }) => (
-  <div className="flex h-full items-center justify-center text-xs text-slate-400">
-    {item.type}
-  </div>
-);
-
 export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
   today_appointments: {
     type: "today_appointments",
@@ -186,7 +187,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     defaultSize: { w: 6, h: 6 },
     minSize: { w: 4, h: 4 },
     singleton: true,
-    Component: StubWidget,
+    Component: TodayAppointmentsWidget,
   },
   kpi_total_clients: {
     type: "kpi_total_clients",
@@ -196,7 +197,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     singleton: true,
-    Component: StubWidget,
+    Component: KpiTotalClientsWidget,
   },
   kpi_week_appointments: {
     type: "kpi_week_appointments",
@@ -206,7 +207,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     singleton: true,
-    Component: StubWidget,
+    Component: KpiWeekAppointmentsWidget,
   },
   kpi_month_revenue: {
     type: "kpi_month_revenue",
@@ -216,7 +217,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
     singleton: true,
-    Component: StubWidget,
+    Component: KpiMonthRevenueWidget,
   },
   kpi_new_clients: {
     type: "kpi_new_clients",
@@ -227,7 +228,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     minSize: { w: 2, h: 2 },
     options: [PERIOD_OPTION],
     singleton: true,
-    Component: StubWidget,
+    Component: KpiNewClientsWidget,
   },
   kpi_no_show_rate: {
     type: "kpi_no_show_rate",
@@ -238,7 +239,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     minSize: { w: 2, h: 2 },
     options: [PERIOD_OPTION],
     singleton: true,
-    Component: StubWidget,
+    Component: KpiNoShowRateWidget,
   },
   calendar_heatmap: {
     type: "calendar_heatmap",
@@ -249,7 +250,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     minSize: { w: 4, h: 4 },
     options: [VIEW_OPTION],
     singleton: true,
-    Component: StubWidget,
+    Component: CalendarHeatmapWidget,
   },
   top_services: {
     type: "top_services",
@@ -260,7 +261,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     minSize: { w: 3, h: 3 },
     options: [PERIOD_OPTION, LIMIT_OPTION],
     singleton: true,
-    Component: StubWidget,
+    Component: TopServicesWidget,
   },
   top_masters: {
     type: "top_masters",
@@ -271,7 +272,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     minSize: { w: 3, h: 3 },
     options: [PERIOD_OPTION, LIMIT_OPTION],
     singleton: true,
-    Component: StubWidget,
+    Component: TopMastersWidget,
   },
   activity_feed: {
     type: "activity_feed",
@@ -282,7 +283,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     minSize: { w: 3, h: 3 },
     options: [LIMIT_OPTION],
     singleton: true,
-    Component: StubWidget,
+    Component: ActivityFeedWidget,
   },
   quick_actions: {
     type: "quick_actions",
@@ -292,7 +293,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     defaultSize: { w: 3, h: 4 },
     minSize: { w: 2, h: 3 },
     singleton: true,
-    Component: StubWidget,
+    Component: QuickActionsWidget,
   },
 };
 

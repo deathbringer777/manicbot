@@ -38,6 +38,7 @@ import {
   deriveWorkDaysFromSchedule,
 } from "~/lib/workHours";
 import { MASTER_SCHEDULE_POLICIES } from "~/lib/masterSchedulePolicy";
+import { getTenantMetrics } from "~/server/metrics/tenant";
 import { t } from "~/lib/i18n";
 import { sanitizeText } from "~/server/security/sanitize";
 import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
@@ -152,6 +153,17 @@ function stripePriceId(plan: "start" | "pro" | "max", cycle: "monthly" | "annual
 }
 
 export const salonRouter = createTRPCRouter({
+  /**
+   * Per-salon operational metrics (clients processed, appointments) — the
+   * tenant-facing half of the metrics split. Uses the SAME getTenantMetrics
+   * the God-Mode per-tenant view does, so the owner sees identical numbers.
+   * Tenant-isolated via assertTenantOwner.
+   */
+  getMyMetrics: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+    return getTenantMetrics(ctx.db, input.tenantId, Math.floor(Date.now() / 1000));
+  }),
+
   getOverview: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const today = new Date().toISOString().slice(0, 10);

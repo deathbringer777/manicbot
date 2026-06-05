@@ -19,6 +19,8 @@ import {
   CalendarDays,
   CreditCard,
   Clock,
+  Gift,
+  Hourglass,
   ArrowRight,
   Zap,
   Activity,
@@ -99,17 +101,17 @@ export default function DashboardClient() {
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard
-              label={t("gmHome.totalUsers", lang)}
-              value={s?.totalUsers ?? 0}
+              label={t("gmHome.ourCustomers", lang)}
+              value={s?.ourCustomers ?? 0}
               icon={Users}
               iconBg="bg-violet-50 dark:bg-violet-500/15"
               iconColor="text-violet-600 dark:text-violet-400"
-              href="/users"
+              href="/system/customers"
             />
             <KpiCard
               label={t("gmHome.salons", lang)}
               value={s?.totalTenants ?? 0}
-              subtext={`${s?.trialingCount ?? 0} ${t("gmHome.trialing", lang)}`}
+              subtext={`${s?.activeTrials ?? 0} ${t("gmHome.trialing", lang)}`}
               icon={Building2}
               iconBg="bg-blue-50 dark:bg-blue-500/15"
               iconColor="text-blue-600 dark:text-blue-400"
@@ -118,7 +120,7 @@ export default function DashboardClient() {
             <KpiCard
               label={t("gmHome.mrr", lang)}
               value={formatPlnWhole(s?.mrr ?? 0)}
-              subtext={t("gmHome.estimatedPLN", lang)}
+              subtext={`${t("gmHome.arr", lang)} ${formatPlnWhole(s?.arr ?? 0)}`}
               icon={TrendingUp}
               iconBg="bg-accent-50 dark:bg-accent-500/15"
               iconColor="text-accent-600 dark:text-accent-400"
@@ -136,16 +138,33 @@ export default function DashboardClient() {
           </div>
         )}
 
-        {/* ── Second KPI row: subscriptions + billing ── */}
+        {/* ── Second KPI row: paying vs comped vs trials (the separation) ── */}
         {!isLoading && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard
-              label={t("gmHome.activeSubs", lang)}
-              value={s?.activeSubscriptions ?? 0}
+              label={t("gmHome.paying", lang)}
+              value={s?.paying ?? 0}
               icon={CreditCard}
               iconBg="bg-emerald-50 dark:bg-emerald-500/15"
               iconColor="text-emerald-600 dark:text-emerald-400"
               href="/billing"
+            />
+            <KpiCard
+              label={t("gmHome.comped", lang)}
+              value={s?.comped ?? 0}
+              subtext={t("gmHome.compedHint", lang)}
+              icon={Gift}
+              iconBg="bg-fuchsia-50 dark:bg-fuchsia-500/15"
+              iconColor="text-fuchsia-600 dark:text-fuchsia-400"
+              href="/system/customers"
+            />
+            <KpiCard
+              label={t("gmHome.activeTrials", lang)}
+              value={s?.activeTrials ?? 0}
+              icon={Hourglass}
+              iconBg="bg-sky-50 dark:bg-sky-500/15"
+              iconColor="text-sky-600 dark:text-sky-400"
+              href="/system/customers"
             />
             <KpiCard
               label={t("gmHome.totalBookings", lang)}
@@ -159,8 +178,8 @@ export default function DashboardClient() {
           </div>
         )}
         {isLoading && (
-          <div className="grid grid-cols-2 gap-4">
-            <KpiCardSkeleton /><KpiCardSkeleton />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCardSkeleton /><KpiCardSkeleton /><KpiCardSkeleton /><KpiCardSkeleton />
           </div>
         )}
 

@@ -931,6 +931,10 @@ const translations = {
   "analytics.empty.text":                { ru: "Аналитика появится, когда клиенты начнут взаимодействовать с ботом или публичным профилем. Создайте трекинг-ссылку и поделитесь ею, чтобы отслеживать источники привлечения.", ua: "Аналітика з'явиться, коли клієнти почнуть взаємодіяти з ботом або публічним профілем. Створіть трекінг-посилання та поділіться ним, щоб відстежувати джерела залучення.", en: "Analytics will appear once clients start interacting with the bot or your public profile. Create a tracking link and share it to track acquisition sources.", pl: "Analityka pojawi się, gdy klienci zaczną korzystać z bota lub profilu publicznego. Utwórz link śledzący i udostępnij go, aby śledzić źródła pozyskania." },
   "analytics.createLink":                { ru: "Создать трекинг-ссылку", ua: "Створити трекінг-посилання", en: "Create tracking link", pl: "Utwórz link śledzący" },
   "analytics.newClients":                { ru: "Новых клиентов", ua: "Нових клієнтів", en: "New clients", pl: "Nowi klienci" },
+  "salon.metrics.clientsProcessed":      { ru: "Обработано клиентов", ua: "Оброблено клієнтів", en: "Clients served", pl: "Obsłużeni klienci" },
+  "salon.metrics.appointmentsTotal":     { ru: "Записей всего",  ua: "Записів усього",  en: "Total bookings", pl: "Wizyt łącznie" },
+  "salon.metrics.appointmentsThisMonth": { ru: "Записей за месяц", ua: "Записів за місяць", en: "Bookings this month", pl: "Wizyt w tym miesiącu" },
+  "salon.metrics.last30":                { ru: "за 30 дней", ua: "за 30 днів", en: "last 30 days", pl: "ost. 30 dni" },
   "analytics.lastNDays":                 { ru: "за",        ua: "за",        en: "in last",   pl: "w ostatnich" },
   "analytics.daysWord":                  { ru: "дней",      ua: "днів",      en: "days",      pl: "dni" },
   "analytics.bookings":                  { ru: "Записей",   ua: "Записів",   en: "Bookings",  pl: "Rezerwacje" },
@@ -1538,6 +1542,8 @@ const translations = {
   "gmTenants.cancelAllPending":   { ru: "Отменить все pending",   ua: "Скасувати всі pending",  en: "Cancel all pending",     pl: "Anuluj wszystkie pending" },
   "gmTenants.grantRole":          { ru: "Выдать роль",            ua: "Видати роль",            en: "Grant role",             pl: "Nadaj rolę" },
   "gmTenants.linkBot":            { ru: "Привязать бота",         ua: "Прив'язати бота",        en: "Link bot",               pl: "Połącz bota" },
+  "gmTenants.markTest":           { ru: "Пометить тестом",        ua: "Позначити тестом",       en: "Mark test",              pl: "Oznacz jako test" },
+  "gmTenants.markReal":           { ru: "Пометить реальным",      ua: "Позначити реальним",     en: "Mark real",              pl: "Oznacz jako realny" },
   "gmTenants.rolesInTenant":      { ru: "Роли в тенанте",         ua: "Ролі в тенанті",         en: "Roles in tenant",        pl: "Role w najemcy" },
   "gmTenants.confirmYes":         { ru: "Да, точно",              ua: "Так, точно",             en: "Yes, sure",              pl: "Tak, na pewno" },
   "gmTenants.confirmNo":          { ru: "Нет",                    ua: "Ні",                     en: "No",                     pl: "Nie" },
@@ -1572,6 +1578,88 @@ const translations = {
   "gmTenants.qoBotId":            { ru: "Bot ID",                 ua: "Bot ID",                 en: "Bot ID",                 pl: "Bot ID" },
   "gmTenants.qoWebhook":          { ru: "Webhook",                ua: "Webhook",                en: "Webhook",                pl: "Webhook" },
   "gmTenants.close":              { ru: "Закрыть",                ua: "Закрити",                en: "Close",                  pl: "Zamknij" },
+
+  // ── God Mode: Platform Customers page ──────────────────────────────────────
+  "gmCustomers.title":            { ru: "Клиенты платформы",      ua: "Клієнти платформи",      en: "Platform customers",     pl: "Klienci platformy" },
+  "gmCustomers.subtitlePlatform": { ru: "Платформа",              ua: "Платформа",              en: "Platform",               pl: "Platforma" },
+  "gmCustomers.subtitleFull":     { ru: "Аккаунты салонов · Подписчики рассылки", ua: "Акаунти салонів · Підписники розсилки", en: "Salon accounts · Newsletter subscribers", pl: "Konta salonów · Subskrybenci newslettera" },
+  "gmCustomers.forbidden":        { ru: "Эта страница доступна только системному администратору.", ua: "Ця сторінка доступна лише системному адміністратору.", en: "This page is available to the system administrator only.", pl: "Ta strona jest dostępna tylko dla administratora systemu." },
+  "gmCustomers.heroTitle":        { ru: "Клиенты ManicBot",       ua: "Клієнти ManicBot",       en: "ManicBot customers",     pl: "Klienci ManicBot" },
+  "gmCustomers.heroDesc":         { ru: "Зарегистрированные владельцы салонов, их тарифы и платёжный статус, плюс подписчики email-рассылки. Только чтение — действия с подпиской через Stripe.", ua: "Зареєстровані власники салонів, їхні тарифи та платіжний статус, плюс підписники email-розсилки. Лише читання — дії з підпискою через Stripe.", en: "Registered salon owners, their plans and billing status, plus email newsletter subscribers. Read-only — subscription actions via Stripe.", pl: "Zarejestrowani właściciele salonów, ich plany i status płatności oraz subskrybenci newslettera. Tylko do odczytu — operacje subskrypcji przez Stripe." },
+
+  // KPI cards
+  "gmCustomers.statTotal":        { ru: "Всего аккаунтов",        ua: "Усього акаунтів",        en: "Total accounts",         pl: "Wszystkie konta" },
+  "gmCustomers.statPaying":       { ru: "Платят",                 ua: "Платять",                en: "Paying",                 pl: "Płacący" },
+  "gmCustomers.statComped":       { ru: "Бесплатно",              ua: "Безкоштовно",            en: "Free",                   pl: "Bezpłatnie" },
+  "gmCustomers.statTrialing":     { ru: "На триале",              ua: "На пробному",            en: "On trial",               pl: "W trialu" },
+  "gmCustomers.statChurned":      { ru: "Churned",                ua: "Churned",                en: "Churned",                pl: "Churned" },
+  "gmCustomers.statMrr":          { ru: "MRR",                    ua: "MRR",                    en: "MRR",                    pl: "MRR" },
+  "gmCustomers.statSubs":         { ru: "Подписчики",             ua: "Підписники",             en: "Subscribers",            pl: "Subskrybenci" },
+
+  // Tabs
+  "gmCustomers.tabAccounts":      { ru: "Аккаунты салонов",       ua: "Акаунти салонів",        en: "Salon accounts",         pl: "Konta salonów" },
+  "gmCustomers.tabSubscribers":   { ru: "Подписчики рассылки",    ua: "Підписники розсилки",    en: "Newsletter subscribers", pl: "Subskrybenci newslettera" },
+
+  // Status filter labels
+  "gmCustomers.statusTrialing":   { ru: "Триал",                  ua: "Пробний",                en: "Trial",                  pl: "Trial" },
+  "gmCustomers.statusActive":     { ru: "Активен",                ua: "Активний",               en: "Active",                 pl: "Aktywny" },
+  "gmCustomers.statusGrace":      { ru: "Грейс",                  ua: "Грейс",                  en: "Grace",                  pl: "Grace" },
+  "gmCustomers.statusPastDue":    { ru: "Просрочка",              ua: "Прострочення",           en: "Past due",               pl: "Zaległość" },
+  "gmCustomers.statusExpired":    { ru: "Истёк",                  ua: "Закінчився",             en: "Expired",                pl: "Wygasł" },
+  "gmCustomers.statusCancelled":  { ru: "Отменён",                ua: "Скасовано",              en: "Cancelled",              pl: "Anulowany" },
+
+  // Multi-select filter chrome
+  "gmCustomers.filterAll":        { ru: "Все",                    ua: "Усі",                    en: "All",                    pl: "Wszystkie" },
+  "gmCustomers.filterSelected":   { ru: "выбрано",                ua: "вибрано",                en: "selected",               pl: "wybrano" },
+  "gmCustomers.filterReset":      { ru: "Сбросить",               ua: "Скинути",                en: "Reset",                  pl: "Resetuj" },
+  "gmCustomers.filterPlan":       { ru: "План",                   ua: "План",                   en: "Plan",                   pl: "Plan" },
+  "gmCustomers.filterStatus":     { ru: "Статус",                 ua: "Статус",                 en: "Status",                 pl: "Status" },
+
+  // Accounts filters + table
+  "gmCustomers.searchAccounts":   { ru: "Поиск по email или имени…", ua: "Пошук за email або ім'ям…", en: "Search by email or name…", pl: "Szukaj po email lub imieniu…" },
+  "gmCustomers.loading":          { ru: "загрузка…",              ua: "завантаження…",          en: "loading…",               pl: "ładowanie…" },
+  "gmCustomers.totalSuffix":      { ru: "всего",                  ua: "усього",                 en: "total",                  pl: "łącznie" },
+  "gmCustomers.colName":          { ru: "Имя",                    ua: "Ім'я",                   en: "Name",                   pl: "Imię" },
+  "gmCustomers.colEmail":         { ru: "Email",                  ua: "Email",                  en: "Email",                  pl: "Email" },
+  "gmCustomers.colPlan":          { ru: "План",                   ua: "План",                   en: "Plan",                   pl: "Plan" },
+  "gmCustomers.colStatus":        { ru: "Статус",                 ua: "Статус",                 en: "Status",                 pl: "Status" },
+  "gmCustomers.colTrialUntil":    { ru: "Триал до",               ua: "Пробний до",             en: "Trial until",            pl: "Trial do" },
+  "gmCustomers.colMrr":           { ru: "MRR",                    ua: "MRR",                    en: "MRR",                    pl: "MRR" },
+  "gmCustomers.colRegistered":    { ru: "Регистрация",            ua: "Реєстрація",             en: "Registered",             pl: "Rejestracja" },
+  "gmCustomers.colLastLogin":     { ru: "Последний вход",         ua: "Останній вхід",          en: "Last login",             pl: "Ostatnie logowanie" },
+  "gmCustomers.colMasters":       { ru: "Мастеров",               ua: "Майстрів",               en: "Masters",                pl: "Mistrzów" },
+  "gmCustomers.colBookings30d":   { ru: "Записей 30д",            ua: "Записів 30д",            en: "Bookings 30d",           pl: "Rezerwacje 30d" },
+  "gmCustomers.noTenant":         { ru: "нет тенанта",            ua: "немає тенанта",          en: "no tenant",              pl: "brak najemcy" },
+  "gmCustomers.accountsEmpty":    { ru: "Под выбранные фильтры аккаунтов нет.", ua: "Під обрані фільтри акаунтів немає.", en: "No accounts match the selected filters.", pl: "Brak kont pasujących do wybranych filtrów." },
+
+  // Pagination
+  "gmCustomers.paginationOf":     { ru: "из",                     ua: "з",                      en: "of",                     pl: "z" },
+  "gmCustomers.paginationPrev":   { ru: "Назад",                  ua: "Назад",                  en: "Back",                   pl: "Wstecz" },
+  "gmCustomers.paginationNext":   { ru: "Вперёд",                 ua: "Вперед",                 en: "Next",                   pl: "Dalej" },
+
+  // Subscribers tab
+  "gmCustomers.tableMissingTitle":{ ru: "Таблица ещё не создана.", ua: "Таблиця ще не створена.", en: "Table not created yet.",  pl: "Tabela jeszcze nie utworzona." },
+  "gmCustomers.tableMissingDesc": { ru: "Миграция таблицы подписчиков рассылки в работе. Подождите и обновите страницу.", ua: "Міграція таблиці підписників розсилки в роботі. Зачекайте та оновіть сторінку.", en: "The newsletter subscribers table migration is in progress. Wait and refresh the page.", pl: "Migracja tabeli subskrybentów newslettera jest w toku. Poczekaj i odśwież stronę." },
+  "gmCustomers.allSources":       { ru: "Все источники",          ua: "Усі джерела",            en: "All sources",            pl: "Wszystkie źródła" },
+  "gmCustomers.allLangs":         { ru: "Все языки",              ua: "Усі мови",               en: "All languages",          pl: "Wszystkie języki" },
+  "gmCustomers.confirmedOnly":    { ru: "Только подтверждённые",  ua: "Лише підтверджені",      en: "Confirmed only",         pl: "Tylko potwierdzeni" },
+  "gmCustomers.fromTable":        { ru: "из",                     ua: "з",                      en: "from",                   pl: "z" },
+  "gmCustomers.colSource":        { ru: "Источник",               ua: "Джерело",                en: "Source",                 pl: "Źródło" },
+  "gmCustomers.colLang":          { ru: "Язык",                   ua: "Мова",                   en: "Language",               pl: "Język" },
+  "gmCustomers.colConfirmed":     { ru: "Подтверждён",            ua: "Підтверджений",          en: "Confirmed",              pl: "Potwierdzony" },
+  "gmCustomers.colUnsubscribed":  { ru: "Отписан",                ua: "Відписаний",             en: "Unsubscribed",           pl: "Wypisany" },
+  "gmCustomers.colCreated":       { ru: "Создан",                 ua: "Створений",              en: "Created",                pl: "Utworzony" },
+  "gmCustomers.yes":              { ru: "да",                     ua: "так",                    en: "yes",                    pl: "tak" },
+  "gmCustomers.no":               { ru: "нет",                    ua: "ні",                     en: "no",                     pl: "nie" },
+  "gmCustomers.subscribersEmpty": { ru: "Подписчиков пока нет.",  ua: "Підписників поки немає.", en: "No subscribers yet.",    pl: "Brak subskrybentów." },
+
+  // Relative-time helper (fmtRel / fmtDate)
+  "gmCustomers.relInH":           { ru: "через",                  ua: "через",                  en: "in",                     pl: "za" },
+  "gmCustomers.relInD":           { ru: "через",                  ua: "через",                  en: "in",                     pl: "za" },
+  "gmCustomers.relUnitH":         { ru: "ч",                      ua: "год",                    en: "h",                      pl: "godz" },
+  "gmCustomers.relUnitD":         { ru: "дн",                     ua: "дн",                     en: "d",                      pl: "dni" },
+  "gmCustomers.relUnitMin":       { ru: "мин",                    ua: "хв",                     en: "min",                    pl: "min" },
+  "gmCustomers.relJustNow":       { ru: "только что",             ua: "щойно",                  en: "just now",               pl: "przed chwilą" },
 
   // ── God Mode: Users page ───────────────────────────────────────────────────
   "gmUsers.title":                { ru: "Пользователи",           ua: "Користувачі",            en: "Users",                  pl: "Użytkownicy" },
@@ -1909,6 +1997,13 @@ const translations = {
   "gmHome.pluginMarketplace":   { ru: "Магазин плагинов",       ua: "Магазин плагінів",       en: "Plugin Marketplace",     pl: "Sklep z wtyczkami" },
   "gmHome.signupsInPeriod":     { ru: "регистраций за",         ua: "реєстрацій за",          en: "signups in",             pl: "rejestracji w" },
   "gmHome.daysShort":           { ru: "д",                      ua: "д",                      en: "d",                      pl: "d" },
+  "gmHome.ourCustomers":        { ru: "Наши клиенты",           ua: "Наші клієнти",           en: "Our customers",          pl: "Nasi klienci" },
+  "gmHome.paying":              { ru: "Платящих",               ua: "Платять",                en: "Paying",                 pl: "Płacący" },
+  "gmHome.comped":              { ru: "Бесплатный доступ",      ua: "Безкоштовний доступ",    en: "Comped",                 pl: "Dostęp gratis" },
+  "gmHome.compedHint":          { ru: "доступ без оплаты",      ua: "доступ без оплати",      en: "free access",            pl: "dostęp bez opłat" },
+  "gmHome.activeTrials":        { ru: "Активные триалы",        ua: "Активні тріали",         en: "Active trials",          pl: "Aktywne triale" },
+  "gmHome.arr":                 { ru: "ARR",                    ua: "ARR",                    en: "ARR",                    pl: "ARR" },
+  "gmHome.realRevenue":         { ru: "реальная · PLN",         ua: "реальна · PLN",          en: "real · PLN",             pl: "realne · PLN" },
 
   // ── Common dashboard labels ────────────────────────────────────────────────
   "common.search":                { ru: "Поиск",                  ua: "Пошук",                  en: "Search",                 pl: "Szukaj" },

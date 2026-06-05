@@ -361,6 +361,7 @@ CREATE INDEX IF NOT EXISTS idx_tenant_city ON tenants(city);
 CREATE INDEX IF NOT EXISTS idx_tenant_location ON tenants(lat, lng);
 CREATE INDEX IF NOT EXISTS idx_tenant_public ON tenants(public_active, city);
 CREATE INDEX IF NOT EXISTS idx_tenant_is_test ON tenants(is_test);
+CREATE INDEX IF NOT EXISTS idx_tenant_billing_status ON tenants(billing_status);
 
 CREATE TABLE IF NOT EXISTS bots (
   bot_id TEXT PRIMARY KEY,

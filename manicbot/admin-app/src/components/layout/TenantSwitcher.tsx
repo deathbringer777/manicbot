@@ -17,10 +17,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Building2, Check, ChevronDown, Loader2 } from "lucide-react";
+import { Building2, Check, ChevronDown, Loader2, Plus } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
+import { CreateSalonModal } from "~/components/salon/CreateSalonModal";
 
 function roleLabel(role: string, lang: string): string {
   const map: Record<string, Record<string, string>> = {
@@ -38,6 +39,13 @@ const HEADER_LABEL: Record<string, string> = {
   en: "Your salons",
 };
 
+const CREATE_LABEL: Record<string, string> = {
+  ru: "Создать салон",
+  ua: "Створити салон",
+  pl: "Utwórz salon",
+  en: "Create salon",
+};
+
 export function TenantSwitcher() {
   const { lang } = useLang();
   const router = useRouter();
@@ -49,6 +57,15 @@ export function TenantSwitcher() {
 
   const memberships = api.auth.listMyTenants.useQuery(undefined, { staleTime: 60_000 });
   const switchTenant = api.auth.switchTenant.useMutation();
+  const [createOpen, setCreateOpen] = useState(false);
+
+  // Multi-salon (MAX plan): a MAX owner can create additional salons. Fetch the
+  // active tenant's plan only for owners (the procedure is owner-scoped).
+  const billing = api.salon.getBillingStatus.useQuery(
+    { tenantId: activeTenantId ?? "" },
+    { enabled: !!activeTenantId && role === "tenant_owner", staleTime: 60_000 },
+  );
+  const canCreate = role === "tenant_owner" && billing.data?.plan === "max";
 
   // Outside-click + Escape close (mirrors NotificationBell).
   useEffect(() => {
@@ -70,11 +87,11 @@ export function TenantSwitcher() {
 
   const items = memberships.data ?? [];
 
-  // Fewer than 2 salons to switch between → no dropdown. A master still sees a
-  // non-interactive salon label (context: "which salon am I working in?") —
-  // this is the badge that used to live standalone in WebShell. Everyone else
-  // (e.g. an owner on their single salon) sees nothing.
-  if (items.length < 2) {
+  // Nothing to switch between AND can't create → keep the header clean. A master
+  // still sees a non-interactive salon label ("which salon am I working in?").
+  // A MAX owner with a single salon DOES see the dropdown, so they can create a
+  // second salon straight from the header.
+  if (items.length < 2 && !canCreate) {
     if (role === "master" && tenantName) {
       return (
         <div
@@ -89,6 +106,8 @@ export function TenantSwitcher() {
     return null;
   }
 
+  // Owners always have at least their home tenant in the list.
+  if (items.length === 0) return null;
   const active = items.find((m) => m.tenantId === activeTenantId) ?? items[0]!;
 
   async function choose(tenantId: string) {
@@ -162,8 +181,26 @@ export function TenantSwitcher() {
               );
             })}
           </ul>
+          {canCreate && (
+            <div className="border-t border-slate-100 dark:border-white/10 p-1">
+              <button
+                type="button"
+                onClick={() => { setOpen(false); setCreateOpen(true); }}
+                data-testid="tenant-switcher-create"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-left rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.05]"
+              >
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Plus className="h-3.5 w-3.5" />
+                </div>
+                <span className="text-[13px] font-medium text-slate-900 dark:text-white">
+                  {CREATE_LABEL[lang] ?? CREATE_LABEL.en}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       )}
+      {createOpen && <CreateSalonModal onClose={() => setCreateOpen(false)} />}
     </div>
   );
 }

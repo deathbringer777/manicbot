@@ -9,12 +9,12 @@
  */
 
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { TRPCError } from "@trpc/server";
+import { createTRPCRouter, publicProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
-import { users, userOrigins, appointments } from "~/server/db/schema";
+import { users, userOrigins, appointments, trackingLinks } from "~/server/db/schema";
 import { and, eq, gte, sql, desc } from "drizzle-orm";
 import { env } from "~/env";
-import { encodeStartPayload } from "~/lib/trackingPayload";
 
 const tenantDaysInput = z.object({
   tenantId: z.string(),
@@ -25,9 +25,29 @@ function nowSec(): number {
   return Math.floor(Date.now() / 1000);
 }
 
+/** 8-char lowercase-hex code for a tracking link (matches the Worker's /^[0-9a-f]{8}$/). */
+function genShortCode(): string {
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+}
+
+/** Stable SHA-256 hex of the normalized attribution tuple — the idempotency key. */
+async function hashTrackingPayload(
+  source: string,
+  medium: string | null,
+  campaign: string | null,
+  content: string | null,
+): Promise<string> {
+  const norm = [source, medium ?? "", campaign ?? "", content ?? ""].join("\n");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(norm));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export const analyticsRouter = createTRPCRouter({
   /**
-   * Daily acquisition stacked by first_source for the given window.
+   * Daily first-touch acquisition by source for the given window, across ALL
+   * channels (Telegram + web). Reads the unified `user_origins` ledger filtered
+   * to first touches — `users.first_*` would be Telegram-only (web visits have no
+   * Telegram chat_id, so they never produce a `users` row).
    * Returns one row per (day, source) and the unique-sources list.
    */
   getAcquisition: publicProcedure
@@ -38,22 +58,23 @@ export const analyticsRouter = createTRPCRouter({
 
       const rows = await ctx.db
         .select({
-          day: sql<string>`strftime('%Y-%m-%d', ${users.firstTouchAt}, 'unixepoch')`,
-          source: sql<string>`coalesce(${users.firstSource}, 'direct')`,
+          day: sql<string>`strftime('%Y-%m-%d', ${userOrigins.capturedAt}, 'unixepoch')`,
+          source: sql<string>`coalesce(${userOrigins.source}, 'direct')`,
           count: sql<number>`count(*)`,
         })
-        .from(users)
+        .from(userOrigins)
         .where(
           and(
-            eq(users.tenantId, input.tenantId),
-            gte(users.firstTouchAt, since),
+            eq(userOrigins.tenantId, input.tenantId),
+            eq(userOrigins.isFirstTouch, 1),
+            gte(userOrigins.capturedAt, since),
           ),
         )
         .groupBy(
-          sql`strftime('%Y-%m-%d', ${users.firstTouchAt}, 'unixepoch')`,
-          sql`coalesce(${users.firstSource}, 'direct')`,
+          sql`strftime('%Y-%m-%d', ${userOrigins.capturedAt}, 'unixepoch')`,
+          sql`coalesce(${userOrigins.source}, 'direct')`,
         )
-        .orderBy(sql`strftime('%Y-%m-%d', ${users.firstTouchAt}, 'unixepoch')`);
+        .orderBy(sql`strftime('%Y-%m-%d', ${userOrigins.capturedAt}, 'unixepoch')`);
 
       // Build day axis filled with zeros so charts are continuous.
       type DailyRow = { date: string; total: number } & Record<string, number | string>;
@@ -113,12 +134,15 @@ export const analyticsRouter = createTRPCRouter({
             ),
           ),
         ctx.db
-          .select({ count: sql<number>`count(*)` })
-          .from(users)
+          .select({
+            count: sql<number>`count(distinct coalesce(${userOrigins.webUserId}, cast(${userOrigins.chatId} as text)))`,
+          })
+          .from(userOrigins)
           .where(
             and(
-              eq(users.tenantId, input.tenantId),
-              gte(users.firstTouchAt, since),
+              eq(userOrigins.tenantId, input.tenantId),
+              eq(userOrigins.isFirstTouch, 1),
+              gte(userOrigins.capturedAt, since),
             ),
           ),
         ctx.db
@@ -170,8 +194,11 @@ export const analyticsRouter = createTRPCRouter({
     }),
 
   /**
-   * Top campaigns by booked-user count. Joins user_origins (first_touch only) to
-   * appointments via chat_id — requires CREATE INDEX idx_uo_tenant_first.
+   * Top campaigns by booked-user count, across ALL channels (Telegram + web).
+   * Reads first-touch rows from the unified `user_origins` ledger and LEFT JOINs
+   * appointments via chat_id — web touches use chat_id=0, so they correctly show
+   * touches/visitors with zero bookings (a web visitor hasn't booked via Telegram
+   * under that touch). Uses CREATE INDEX idx_uo_tenant_first.
    */
   getTopCampaigns: publicProcedure
     .input(tenantDaysInput)
@@ -181,28 +208,29 @@ export const analyticsRouter = createTRPCRouter({
 
       const rows = await ctx.db
         .select({
-          source: sql<string>`coalesce(${users.firstSource}, 'direct')`,
-          campaign: sql<string>`coalesce(${users.firstCampaign}, '')`,
-          users: sql<number>`count(distinct ${users.chatId})`,
+          source: sql<string>`coalesce(${userOrigins.source}, 'direct')`,
+          campaign: sql<string>`coalesce(${userOrigins.campaign}, '')`,
+          users: sql<number>`count(distinct coalesce(${userOrigins.webUserId}, cast(${userOrigins.chatId} as text)))`,
           bookings: sql<number>`count(distinct ${appointments.id})`,
         })
-        .from(users)
+        .from(userOrigins)
         .leftJoin(
           appointments,
           and(
-            eq(appointments.tenantId, users.tenantId),
-            eq(appointments.chatId, users.chatId),
+            eq(appointments.tenantId, userOrigins.tenantId),
+            eq(appointments.chatId, userOrigins.chatId),
           ),
         )
         .where(
           and(
-            eq(users.tenantId, input.tenantId),
-            gte(users.firstTouchAt, since),
+            eq(userOrigins.tenantId, input.tenantId),
+            eq(userOrigins.isFirstTouch, 1),
+            gte(userOrigins.capturedAt, since),
           ),
         )
         .groupBy(
-          sql`coalesce(${users.firstSource}, 'direct')`,
-          sql`coalesce(${users.firstCampaign}, '')`,
+          sql`coalesce(${userOrigins.source}, 'direct')`,
+          sql`coalesce(${userOrigins.campaign}, '')`,
         )
         .orderBy(desc(sql`count(distinct ${appointments.id})`))
         .limit(20);
@@ -219,52 +247,89 @@ export const analyticsRouter = createTRPCRouter({
     }),
 
   /**
-   * Returns ready-to-share tracking links for the given source/medium/campaign.
-   * Encodes the payload on the server so the Worker's /start parser can decode
-   * it without a lookup table. Fails if the generated token would exceed
-   * Telegram's 64-char /start limit — caller should shorten the inputs.
+   * Mint (or reuse) a persisted short code for the given attribution and return
+   * ready-to-share links. The Telegram link carries only the opaque short code
+   * (e.g. `?start=ab12cd34`) — the Worker's /start handler looks it up — so the
+   * campaign/medium/content can be any length or alphabet (Cyrillic included) and
+   * never hits Telegram's 64-char /start limit. Idempotent per (tenant, payload):
+   * re-generating the same meta returns the same code rather than spawning rows.
    */
-  buildTrackingLinks: publicProcedure
+  buildTrackingLinks: tenantOwnerProcedure
     .input(z.object({
       tenantId: z.string(),
-      source: z.string().min(1).max(64),
-      medium: z.string().max(64).optional(),
-      campaign: z.string().max(64).optional(),
-      content: z.string().max(64).optional(),
+      source: z.string().min(1).max(120),
+      medium: z.string().max(120).optional(),
+      campaign: z.string().max(120).optional(),
+      content: z.string().max(120).optional(),
       botUsername: z.string().optional(),
       slug: z.string().optional(),
     }))
-    .query(async ({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
-      let token: string;
-      try {
-        token = encodeStartPayload({
-          source: input.source,
-          medium: input.medium,
-          campaign: input.campaign,
-          content: input.content,
-        });
-      } catch (e) {
-        throw new Error(
-          e instanceof Error
-            ? e.message
-            : "Failed to encode tracking token",
-        );
+
+      const source = input.source.trim();
+      const medium = input.medium?.trim() || null;
+      const campaign = input.campaign?.trim() || null;
+      const content = input.content?.trim() || null;
+      const payloadHash = await hashTrackingPayload(source, medium, campaign, content);
+
+      // Create-or-get: one short code per (tenant, payload). Re-read after an
+      // ON CONFLICT DO NOTHING insert so a concurrent insert of the same payload
+      // resolves to the winner's code; a short_code PK collision (astronomically
+      // rare) leaves the row absent → we retry with a fresh code.
+      const findByHash = () =>
+        ctx.db
+          .select({ shortCode: trackingLinks.shortCode })
+          .from(trackingLinks)
+          .where(
+            and(
+              eq(trackingLinks.tenantId, input.tenantId),
+              eq(trackingLinks.payloadHash, payloadHash),
+            ),
+          )
+          .limit(1);
+
+      let shortCode = (await findByHash())[0]?.shortCode;
+      for (let attempt = 0; !shortCode && attempt < 5; attempt++) {
+        const code = genShortCode();
+        await ctx.db
+          .insert(trackingLinks)
+          .values({
+            shortCode: code,
+            tenantId: input.tenantId,
+            source,
+            medium,
+            campaign,
+            content,
+            payloadHash,
+            createdAt: nowSec(),
+          })
+          .onConflictDoNothing();
+        shortCode = (await findByHash())[0]?.shortCode;
       }
+      if (!shortCode) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Could not allocate a tracking code",
+        });
+      }
+
       const base = (env.WORKER_PUBLIC_URL ?? "https://manicbot.com").replace(/\/$/, "");
       const links: { label: string; url: string }[] = [];
       if (input.botUsername) {
         links.push({
           label: "Telegram",
-          url: `https://t.me/${input.botUsername.replace(/^@/, "")}?start=${token}`,
+          url: `https://t.me/${input.botUsername.replace(/^@/, "")}?start=${shortCode}`,
         });
       }
       if (input.slug) {
+        const params = new URLSearchParams({ s: source });
+        if (campaign) params.set("c", campaign);
         links.push({
           label: "Публичный профиль",
-          url: `${base}/salon/${input.slug}?s=${encodeURIComponent(input.source)}${input.campaign ? `&c=${encodeURIComponent(input.campaign)}` : ""}`,
+          url: `${base}/salon/${input.slug}?${params.toString()}`,
         });
       }
-      return { token, links };
+      return { shortCode, links };
     }),
 });

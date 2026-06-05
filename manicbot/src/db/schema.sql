@@ -145,12 +145,26 @@ CREATE TABLE IF NOT EXISTS user_origins (
   referer         TEXT,
   raw_payload     TEXT,
   captured_at     INTEGER NOT NULL,
-  is_first_touch  INTEGER NOT NULL DEFAULT 0
+  is_first_touch  INTEGER NOT NULL DEFAULT 0,
+  web_user_id     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_uo_tenant_chat ON user_origins(tenant_id, chat_id);
 CREATE INDEX IF NOT EXISTS idx_uo_tenant_source ON user_origins(tenant_id, source, captured_at);
 CREATE INDEX IF NOT EXISTS idx_uo_tenant_campaign ON user_origins(tenant_id, campaign, captured_at);
 CREATE INDEX IF NOT EXISTS idx_uo_tenant_first ON user_origins(tenant_id, is_first_touch, captured_at);
+
+CREATE TABLE IF NOT EXISTS tracking_links (
+  short_code    TEXT PRIMARY KEY,
+  tenant_id     TEXT NOT NULL,
+  source        TEXT NOT NULL,
+  medium        TEXT,
+  campaign      TEXT,
+  content       TEXT,
+  payload_hash  TEXT NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tl_tenant_hash ON tracking_links(tenant_id, payload_hash);
+CREATE INDEX IF NOT EXISTS idx_tl_tenant_code ON tracking_links(tenant_id, short_code);
 
 CREATE TABLE IF NOT EXISTS masters (
   tenant_id TEXT NOT NULL,

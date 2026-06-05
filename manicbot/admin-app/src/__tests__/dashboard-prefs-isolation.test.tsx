@@ -93,6 +93,7 @@ describe("loadDashboardPrefs / saveDashboardPrefs", () => {
       pinnedTabs: [],
       bottomNavOrder: [],
       bottomNavLayout: "default" as const,
+      homeWidgets: [],
     };
     saveDashboardPrefs(prefs, "t_a");
     const loaded = loadDashboardPrefs("t_a");
@@ -109,6 +110,7 @@ describe("loadDashboardPrefs / saveDashboardPrefs", () => {
       pinnedTabs: [],
       bottomNavOrder: [],
       bottomNavLayout: "default" as const,
+      homeWidgets: [],
     };
     saveDashboardPrefs(prefs, "t_a");
     const b = loadDashboardPrefs("t_b");

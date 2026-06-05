@@ -71,8 +71,9 @@ describe("SettingsShell — section contract by role", () => {
   // live in a rarely-opened "danger zone". See getSettingsSectionIds.
   // NOTE: the standalone "public" tab was folded into «Мой салон» (its publish
   // toggle + preview now live under the salon's «Публикация» sub-tab). «Отзывы»
-  // (reviews) moved into Settings (PR #296). Owner/manager set = 10.
-  it("tenant_owner sees the 10 headline sections, salon first and account second-to-last", () => {
+  // (reviews) moved into Settings (PR #296). «Виджеты» (home-widget board
+  // config) added after «appearance» — owner/manager only. Owner/manager set = 11.
+  it("tenant_owner sees the 11 headline sections, salon first and account second-to-last", () => {
     mount("tenant_owner");
     expect(sectionIds()).toEqual([
       "salon",
@@ -82,6 +83,7 @@ describe("SettingsShell — section contract by role", () => {
       "billing",
       "notifications",
       "appearance",
+      "widgets",
       "referrals",
       "account",
       "help",
@@ -98,6 +100,7 @@ describe("SettingsShell — section contract by role", () => {
       "billing",
       "notifications",
       "appearance",
+      "widgets",
       "referrals",
       "account",
       "help",

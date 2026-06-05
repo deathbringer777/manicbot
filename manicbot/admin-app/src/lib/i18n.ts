@@ -1515,6 +1515,8 @@ const translations = {
   "gmTenants.cancelAllPending":   { ru: "Отменить все pending",   ua: "Скасувати всі pending",  en: "Cancel all pending",     pl: "Anuluj wszystkie pending" },
   "gmTenants.grantRole":          { ru: "Выдать роль",            ua: "Видати роль",            en: "Grant role",             pl: "Nadaj rolę" },
   "gmTenants.linkBot":            { ru: "Привязать бота",         ua: "Прив'язати бота",        en: "Link bot",               pl: "Połącz bota" },
+  "gmTenants.markTest":           { ru: "Пометить тестом",        ua: "Позначити тестом",       en: "Mark test",              pl: "Oznacz jako test" },
+  "gmTenants.markReal":           { ru: "Пометить реальным",      ua: "Позначити реальним",     en: "Mark real",              pl: "Oznacz jako realny" },
   "gmTenants.rolesInTenant":      { ru: "Роли в тенанте",         ua: "Ролі в тенанті",         en: "Roles in tenant",        pl: "Role w najemcy" },
   "gmTenants.confirmYes":         { ru: "Да, точно",              ua: "Так, точно",             en: "Yes, sure",              pl: "Tak, na pewno" },
   "gmTenants.confirmNo":          { ru: "Нет",                    ua: "Ні",                     en: "No",                     pl: "Nie" },
@@ -1886,6 +1888,13 @@ const translations = {
   "gmHome.pluginMarketplace":   { ru: "Магазин плагинов",       ua: "Магазин плагінів",       en: "Plugin Marketplace",     pl: "Sklep z wtyczkami" },
   "gmHome.signupsInPeriod":     { ru: "регистраций за",         ua: "реєстрацій за",          en: "signups in",             pl: "rejestracji w" },
   "gmHome.daysShort":           { ru: "д",                      ua: "д",                      en: "d",                      pl: "d" },
+  "gmHome.ourCustomers":        { ru: "Наши клиенты",           ua: "Наші клієнти",           en: "Our customers",          pl: "Nasi klienci" },
+  "gmHome.paying":              { ru: "Платящих",               ua: "Платять",                en: "Paying",                 pl: "Płacący" },
+  "gmHome.comped":              { ru: "Бесплатный доступ",      ua: "Безкоштовний доступ",    en: "Comped",                 pl: "Dostęp gratis" },
+  "gmHome.compedHint":          { ru: "доступ без оплаты",      ua: "доступ без оплати",      en: "free access",            pl: "dostęp bez opłat" },
+  "gmHome.activeTrials":        { ru: "Активные триалы",        ua: "Активні тріали",         en: "Active trials",          pl: "Aktywne triale" },
+  "gmHome.arr":                 { ru: "ARR",                    ua: "ARR",                    en: "ARR",                    pl: "ARR" },
+  "gmHome.realRevenue":         { ru: "реальная · PLN",         ua: "реальна · PLN",          en: "real · PLN",             pl: "realne · PLN" },
 
   // ── Common dashboard labels ────────────────────────────────────────────────
   "common.search":                { ru: "Поиск",                  ua: "Пошук",                  en: "Search",                 pl: "Szukaj" },

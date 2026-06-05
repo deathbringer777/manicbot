@@ -112,4 +112,20 @@ export const tenantsRouter = createTRPCRouter({
         .where(eq(tenants.id, input.id));
       return { success: true };
     }),
+
+  /**
+   * Mark a tenant as test / real. Test tenants are excluded from every
+   * business metric (see `~/server/metrics`). Use this to flag synthetic or
+   * QA salons that were created through the normal prod signup flow (and so
+   * never got the seed script's `is_test=1`).
+   */
+  setTestMode: adminProcedure
+    .input(z.object({ id: z.string(), isTest: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db
+        .update(tenants)
+        .set({ isTest: input.isTest ? 1 : 0, updatedAt: Math.floor(Date.now() / 1000) })
+        .where(eq(tenants.id, input.id));
+      return { success: true, isTest: input.isTest };
+    }),
 });

@@ -171,10 +171,10 @@ describe("platformCustomers router — auth", () => {
   });
 
   it("stats accepts system_admin", async () => {
-    // count rows for total_accounts + tenants list for MRR + newsletter count
+    // getPlatformMetrics issues a single owner⋈tenant join; newsletter count
+    // comes from db.run (returns empty → 0).
     const { db } = buildDb([
-      [{ count: 0 }], // total accounts
-      [], // tenants
+      [], // join rows (no real tenants)
     ]);
     const caller = callerFor(makeAdminCtx(db) as never);
     const res = await caller.stats();
@@ -189,31 +189,45 @@ describe("platformCustomers router — auth", () => {
 describe("platformCustomers router — stats math", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("sums MRR only for active/grace tenants and counts trialing/churned separately", async () => {
+  const FAR_FUTURE = 9_999_999_999; // trial that has not expired
+
+  it("MRR only from real paying tenants; comped / trial / expired excluded", async () => {
     const { db } = buildDb([
-      [{ count: 6 }],
       [
-        { plan: "start", billingStatus: "active" }, // +45 paying
-        { plan: "pro", billingStatus: "active" }, // +60 paying
-        { plan: "max", billingStatus: "grace" }, // +90 paying
-        { plan: "pro", billingStatus: "trialing" }, // trialing, no MRR
-        { plan: "max", billingStatus: "expired" }, // churned, no MRR
-        { plan: "start", billingStatus: "cancelled" }, // churned, no MRR
+        { plan: "start", billingStatus: "active", trialEndsAt: null, stripeSubscriptionId: "sub_1", isTest: 0 }, // +45
+        { plan: "pro", billingStatus: "active", trialEndsAt: null, stripeSubscriptionId: "sub_2", isTest: 0 }, // +60
+        { plan: "max", billingStatus: "grace_period", trialEndsAt: null, stripeSubscriptionId: "sub_3", isTest: 0 }, // +90 (grace, real sub)
+        { plan: "max", billingStatus: "active", trialEndsAt: null, stripeSubscriptionId: null, isTest: 0 }, // comped (grant)
+        { plan: "pro", billingStatus: "trialing", trialEndsAt: FAR_FUTURE, stripeSubscriptionId: null, isTest: 0 }, // trial
+        { plan: "max", billingStatus: "expired", trialEndsAt: null, stripeSubscriptionId: null, isTest: 0 }, // churned
+        { plan: "start", billingStatus: "cancelled", trialEndsAt: null, stripeSubscriptionId: null, isTest: 0 }, // churned
       ],
     ]);
     const caller = callerFor(makeAdminCtx(db) as never);
     const res = await caller.stats();
-    expect(res.total_accounts).toBe(6);
+    expect(res.total_accounts).toBe(7);
     expect(res.paying).toBe(3);
+    expect(res.comped).toBe(1);
     expect(res.trialing).toBe(1);
     expect(res.churned).toBe(2);
     expect(res.mrr_total_pln).toBe(45 + 60 + 90);
+    expect(res.arr_total_pln).toBe((45 + 60 + 90) * 12);
+  });
+
+  it("a granted 'active' tenant with no Stripe sub is comped, not paying MRR", async () => {
+    const { db } = buildDb([
+      [{ plan: "max", billingStatus: "active", trialEndsAt: null, stripeSubscriptionId: null, isTest: 0 }],
+    ]);
+    const caller = callerFor(makeAdminCtx(db) as never);
+    const res = await caller.stats();
+    expect(res.paying).toBe(0);
+    expect(res.comped).toBe(1);
+    expect(res.mrr_total_pln).toBe(0);
   });
 
   it("ignores unknown plan names in MRR math (defaults to 0)", async () => {
     const { db } = buildDb([
-      [{ count: 1 }],
-      [{ plan: "enterprise" as any, billingStatus: "active" }],
+      [{ plan: "enterprise" as any, billingStatus: "active", trialEndsAt: null, stripeSubscriptionId: "sub_x", isTest: 0 }],
     ]);
     const caller = callerFor(makeAdminCtx(db) as never);
     const res = await caller.stats();
@@ -223,7 +237,7 @@ describe("platformCustomers router — stats math", () => {
 
   it("newsletter_subs uses safeCountSubscribers — 0 when both tables missing", async () => {
     const { db } = buildDb(
-      [[{ count: 2 }], []],
+      [[]],
       {
         runImpl: () => {
           throw new Error("SQLITE_ERROR: no such table: newsletter_subscribers");
@@ -335,6 +349,7 @@ describe("platformCustomers router — listAccounts filters", () => {
           billingStatus: "active",
           trialEndsAt: null,
           stripeCustomerId: "cus_X",
+          stripeSubscriptionId: "sub_X",
           isTest: 0,
           isPersonal: 0,
         },
@@ -623,13 +638,16 @@ describe("platformCustomers — pure helpers", () => {
     expect(__testing.planPricePln("enterprise" as never)).toBe(0);
   });
 
-  it("mrrFor only returns price for paying statuses", () => {
-    expect(__testing.mrrFor("pro", "active")).toBe(60);
-    expect(__testing.mrrFor("pro", "grace")).toBe(60);
-    expect(__testing.mrrFor("pro", "trialing")).toBe(0);
-    expect(__testing.mrrFor("pro", "expired")).toBe(0);
-    expect(__testing.mrrFor("pro", "cancelled")).toBe(0);
-    expect(__testing.mrrFor("pro", null)).toBe(0);
+  it("rowMrrPln only returns price for real paying tenants", () => {
+    const base = { plan: "pro", trialEndsAt: null, isTest: 0 } as const;
+    expect(__testing.rowMrrPln({ ...base, billingStatus: "active", stripeSubscriptionId: "sub" })).toBe(60);
+    expect(__testing.rowMrrPln({ ...base, billingStatus: "grace_period", stripeSubscriptionId: "sub" })).toBe(60);
+    // active but no real Stripe subscription → comped, no MRR
+    expect(__testing.rowMrrPln({ ...base, billingStatus: "active", stripeSubscriptionId: null })).toBe(0);
+    expect(__testing.rowMrrPln({ ...base, billingStatus: "trialing", stripeSubscriptionId: null })).toBe(0);
+    expect(__testing.rowMrrPln({ ...base, billingStatus: "expired", stripeSubscriptionId: null })).toBe(0);
+    // test tenant never contributes
+    expect(__testing.rowMrrPln({ ...base, billingStatus: "active", stripeSubscriptionId: "sub", isTest: 1 })).toBe(0);
   });
 
   it("isNoSuchTableError matches SQLite + Drizzle variants", () => {

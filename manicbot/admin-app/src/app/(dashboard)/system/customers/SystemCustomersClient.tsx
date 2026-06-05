@@ -19,7 +19,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
-  Users, Mail, Activity, TrendingUp, Search, Building2,
+  Users, Mail, Activity, TrendingUp, Search, Building2, Gift,
   CheckCircle2, XCircle, ExternalLink, Filter, ArrowLeftCircle, ArrowRightCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -323,7 +323,7 @@ function StatsRow() {
   });
   const s = statsQ.data;
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
       <StatCard
         icon={Users}
         label="Всего аккаунтов"
@@ -335,6 +335,12 @@ function StatsRow() {
         label="Платят"
         value={(s?.paying ?? 0).toLocaleString()}
         tone="good"
+        loading={statsQ.isLoading}
+      />
+      <StatCard
+        icon={Gift}
+        label="Бесплатно"
+        value={(s?.comped ?? 0).toLocaleString()}
         loading={statsQ.isLoading}
       />
       <StatCard

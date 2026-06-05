@@ -5,6 +5,7 @@ import { eq, and, desc, gte } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { PLAN_PRICES_PLN } from "~/lib/money";
+import { classifyTenant } from "~/server/metrics/status";
 import { writeAudit, ctxIp } from "~/server/security/audit";
 import { env } from "~/env";
 import {
@@ -81,36 +82,79 @@ function isAllowedPhotoUrl(url: string): boolean {
   }
 }
 
+/**
+ * The Stripe account is currently SHARED with a previous, unrelated project, so
+ * account-global figures (balance, payouts, recent charges, disputes) may
+ * include activity that is NOT ManicBot revenue. We expose this flag so the UI
+ * labels those widgets as raw shared-account data and never adds them into MRR.
+ * Flip to false once ManicBot moves to a dedicated Stripe account.
+ */
+const STRIPE_ACCOUNT_SHARED = true;
+
 export const billingRouter = createTRPCRouter({
   getOverview: adminProcedure.query(async ({ ctx }) => {
+    const now = Math.floor(Date.now() / 1000);
     const allTenants = await ctx.db.select().from(tenants).orderBy(desc(tenants.createdAt));
 
-    const active = allTenants.filter((t) => t.billingStatus === "active");
-    const trialing = allTenants.filter((t) => t.billingStatus === "trialing");
-    const grace = allTenants.filter((t) => t.billingStatus === "grace_period");
-    const inactive = allTenants.filter(
-      (t) => !t.billingStatus || t.billingStatus === "inactive"
-    );
-
-    const mrr = active.reduce(
-      (sum, t) => sum + (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0),
-      0
-    );
-
+    // Classify every tenant through the shared metrics module so test tenants,
+    // expired trials and grant/promo "active" tenants never inflate revenue.
+    // Real MRR == active billing_status WITH a real Stripe subscription only.
+    let comped = 0;
+    let activeTrials = 0;
+    let churned = 0;
+    let testCount = 0;
+    let mrr = 0;
     const planBreakdown: Record<string, number> = {};
-    active.forEach((t) => {
-      const plan = t.plan ?? "start";
-      planBreakdown[plan] = (planBreakdown[plan] ?? 0) + 1;
-    });
+
+    for (const t of allTenants) {
+      const c = classifyTenant(t, now);
+      if (c.isTest) {
+        testCount += 1;
+        continue;
+      }
+      switch (c.bucket) {
+        case "paying": {
+          // Real recurring revenue (active or in-dunning with a Stripe sub).
+          mrr += c.mrrPln;
+          const plan = t.plan ?? "start";
+          planBreakdown[plan] = (planBreakdown[plan] ?? 0) + 1;
+          break;
+        }
+        case "comped":
+          comped += 1;
+          break;
+        case "trialing":
+          activeTrials += 1;
+          break;
+        case "churned":
+          churned += 1;
+          break;
+      }
+    }
+
+    // Ops-table status tallies (non-test, raw status). `activeSubscribers` is
+    // clean active subs only; dunning states (grace_period / past_due) are
+    // shown under `grace`, not folded into active.
+    const activeSubscribers = allTenants.filter(
+      (t) => !t.isTest && t.billingStatus === "active" && !!t.stripeSubscriptionId,
+    ).length;
+    const grace = allTenants.filter((t) => !t.isTest && t.billingStatus === "grace_period").length;
+    const inactive = allTenants.filter(
+      (t) => !t.isTest && (!t.billingStatus || t.billingStatus === "inactive"),
+    ).length;
 
     return {
       metrics: {
         mrr,
+        arr: mrr * 12,
         totalTenants: allTenants.length,
-        activeSubscribers: active.length,
-        trialing: trialing.length,
-        grace: grace.length,
-        inactive: inactive.length,
+        testTenants: testCount,
+        activeSubscribers, // clean active subs (non-test, real Stripe sub)
+        comped, // granted/promo access, zero revenue
+        trialing: activeTrials, // non-expired trials only
+        grace,
+        inactive,
+        churned,
         planBreakdown,
       },
       tenants: allTenants.map((t) => ({
@@ -118,6 +162,7 @@ export const billingRouter = createTRPCRouter({
         name: t.name,
         plan: t.plan ?? "start",
         billingStatus: t.billingStatus ?? "inactive",
+        isTest: t.isTest ?? 0,
         email: t.billingEmail,
         stripeCustomerId: t.stripeCustomerId,
         stripeSubscriptionId: t.stripeSubscriptionId,
@@ -125,8 +170,8 @@ export const billingRouter = createTRPCRouter({
         currentPeriodEnd: t.currentPeriodEnd,
         cancelAtPeriodEnd: t.cancelAtPeriodEnd,
         createdAt: t.createdAt,
-        monthlyRevenue:
-          t.billingStatus === "active" ? (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0) : 0,
+        // Real recurring revenue for this row (0 unless truly paying).
+        monthlyRevenue: classifyTenant(t, now).mrrPln,
       })),
     };
   }),
@@ -230,6 +275,7 @@ export const billingRouter = createTRPCRouter({
       return {
         configured: false,
         liveMode: null as boolean | null,
+        sharedAccount: STRIPE_ACCOUNT_SHARED,
         balance: null as StripeBalanceResult | null,
         payouts: { rows: [] as StripePayoutRow[], error: false },
         charges: { rows: [] as StripeChargeRow[], error: false },
@@ -260,6 +306,7 @@ export const billingRouter = createTRPCRouter({
     return {
       configured: true,
       liveMode: secretKey.startsWith("sk_live_"),
+      sharedAccount: STRIPE_ACCOUNT_SHARED,
       balance: balanceR.status === "fulfilled" ? balanceR.value : null,
       payouts: { rows: payoutsR.status === "fulfilled" ? payoutsR.value.data : [], error: payoutsR.status === "rejected" },
       charges: { rows: chargesR.status === "fulfilled" ? chargesR.value.data : [], error: chargesR.status === "rejected" },

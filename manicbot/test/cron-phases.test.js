@@ -62,7 +62,6 @@ function makeDb() {
 
 describe('PHASE_WINDOWS (P1-1)', () => {
   it('declares the expected per-phase windows', () => {
-    expect(PHASE_WINDOWS.reminders).toBe(10 * 60);
     expect(PHASE_WINDOWS.reviews).toBe(24 * 60 * 60);
     expect(PHASE_WINDOWS.gcalSync).toBe(10 * 60);
     expect(PHASE_WINDOWS.postVisit).toBe(60 * 60);
@@ -76,7 +75,7 @@ describe('shouldRunPhase idempotency (P1-1)', () => {
   it('returns true when no prior run is recorded', async () => {
     const ctx = { db: makeDb(), tenantId: 't_1', globalKv: makeKv() };
     const nowSec = Math.floor(Date.now() / 1000);
-    expect(await shouldRunPhase(ctx, 'reminders', nowSec)).toBe(true);
+    expect(await shouldRunPhase(ctx, 'gcalSync', nowSec)).toBe(true);
   });
 
   it('returns false when last-run is inside the window', async () => {

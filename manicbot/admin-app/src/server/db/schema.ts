@@ -1574,44 +1574,6 @@ export const referralEvents = sqliteTable("referral_events", {
   index("idx_ref_events_referral").on(t.referralId, t.createdAt),
 ]);
 
-// ─── Reminders plugin (migration 0070) ──────────────────────────────────
-// Definitions live here; expansion + delivery happen worker-side
-// (plugins/reminders/cron.js + src/services/userNotify.js). Recurrence
-// is stored as JSON validated by zod at the tRPC boundary; channelsJson
-// is a subset of ['inapp', 'telegram'].
-export const pluginReminders = sqliteTable("plugin_reminders", {
-  id: text("id").primaryKey(),
-  tenantId: text("tenant_id").notNull(),
-  createdByWebUserId: text("created_by_web_user_id").notNull(),
-  targetMasterId: integer("target_master_id"),
-  kind: text("kind").notNull().default("reminder"),
-  title: text("title").notNull(),
-  note: text("note"),
-  startsOn: text("starts_on").notNull(),
-  time: text("time").notNull(),
-  recurrenceJson: text("recurrence_json").notNull(),
-  channelsJson: text("channels_json").notNull().default('["inapp"]'),
-  archivedAt: integer("archived_at"),
-  createdAt: integer("created_at").notNull(),
-  updatedAt: integer("updated_at").notNull(),
-}, (t) => [
-  index("idx_reminders_tenant_active").on(t.tenantId, t.startsOn),
-  index("idx_reminders_target").on(t.tenantId, t.targetMasterId, t.startsOn),
-]);
-
-// Idempotent fire log. The UNIQUE (reminder_id, fires_at_epoch) is the
-// contract — INSERT OR IGNORE in the cron handler short-circuits dupes.
-export const pluginReminderFires = sqliteTable("plugin_reminder_fires", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  reminderId: text("reminder_id").notNull().references(() => pluginReminders.id, { onDelete: "cascade" }),
-  firesAtEpoch: integer("fires_at_epoch").notNull(),
-  firedAtEpoch: integer("fired_at_epoch"),
-  deliveryState: text("delivery_state").notNull().default("pending"),
-  deliveryError: text("delivery_error"),
-}, (t) => [
-  uniqueIndex("uq_reminder_fires_occurrence").on(t.reminderId, t.firesAtEpoch),
-]);
-
 // ─── User notifications (migration 0070) ────────────────────────────────
 // Platform-wide in-app feed driving the header bell. Generic by design —
 // `kind` is the discriminator (e.g. 'reminder.fired', future: 'checklist.due').

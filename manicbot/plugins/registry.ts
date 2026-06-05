@@ -33,11 +33,16 @@
  *     - message-templates       → localStorage-only template store (no server
  *                                 sync, no core equivalent — dropped as low-value)
  *
+ * 2026-06-06 — also dropped `reminders`: it duplicated the system-level
+ * notification bell + the core `phaseReminders` appointment-reminder cron, and
+ * its calendar-chip UI was never wired. The worker `phasePluginCron`
+ * orchestrator stays (now with zero dispatchers) for the next cron plugin.
+ *
  * See the earlier 2026-05-16 drop list in
  * `admin-app/src/__tests__/plugins-removed-duplicates.test.ts` for prior cleanups.
  *
- * The 5 retained plugins below are genuinely modular, server-backed (or
- * cron-backed) capabilities with no core duplication.
+ * The 4 retained plugins below are genuinely modular, server-backed
+ * capabilities with no core duplication.
  */
 
 import type { PluginManifest, PluginModule } from "./types";
@@ -56,9 +61,6 @@ import reviewCollectorManifest from "./review-collector/manifest";
 // ── Variant A (Phase 3) — operations plugins ────────────────────────────────
 import inventoryLiteManifest from "./inventory-lite/manifest";
 
-// ── productivity / cron-backed (wired to phasePluginCron) ───────────────────
-import remindersManifest from "./reminders/manifest";
-
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // tenant_owner
   loyaltyStampsManifest,
@@ -68,8 +70,6 @@ const RAW_MANIFESTS: readonly PluginManifest[] = [
   reviewCollectorManifest,
   // Variant A operations
   inventoryLiteManifest,
-  // productivity / cron-backed (wired to phasePluginCron)
-  remindersManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────

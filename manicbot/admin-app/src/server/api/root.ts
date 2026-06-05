@@ -41,7 +41,6 @@ import { subscriptionGrantCodesRouter } from "~/server/api/routers/subscriptionG
 import { messengerRouter } from "~/server/api/routers/messenger";
 import { platformMessengerRouter } from "~/server/api/routers/platformMessenger";
 import { platformBroadcastsRouter } from "~/server/api/routers/platformBroadcasts";
-import { pluginRemindersRouter } from "~/server/api/routers/pluginReminders";
 import { notificationsRouter } from "~/server/api/routers/notifications";
 import { pushSubscriptionsRouter } from "~/server/api/routers/pushSubscriptions";
 import { metaOAuthRouter } from "~/server/api/routers/metaOAuth";
@@ -98,7 +97,6 @@ export const appRouter = createTRPCRouter({
   messenger: messengerRouter,
   platformMessenger: platformMessengerRouter,
   platformBroadcasts: platformBroadcastsRouter,
-  pluginReminders: pluginRemindersRouter,
   notifications: notificationsRouter,
   pushSubscriptions: pushSubscriptionsRouter,
   metaOAuth: metaOAuthRouter,

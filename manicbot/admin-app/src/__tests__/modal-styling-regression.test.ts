@@ -35,8 +35,6 @@ const MODAL_FILES = [
   "src/components/marketing/TemplateFormModal.tsx",
   "src/components/marketing/CampaignFormModal.tsx",
   "src/components/marketing/AutomationFormModal.tsx",
-  // Reminders plugin (PR #125)
-  "src/components/plugins/reminders/ReminderModal.tsx",
   // Master detail modal — owner-side edit (2026-05-17, parity with Clients tab)
   "src/components/salon/tabs/masters/MasterDetailModal.tsx",
   // Master avatar picker — emoji + photo picker (0075)

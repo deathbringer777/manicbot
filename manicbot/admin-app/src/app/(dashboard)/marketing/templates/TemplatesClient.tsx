@@ -3,12 +3,18 @@
 import { useState } from "react";
 import { MarketingShell } from "../MarketingShell";
 import { api } from "~/trpc/react";
-import { FileText, Pencil, Trash2, Plus } from "lucide-react";
+import { FileText, Pencil, Trash2, Plus, Mail, Gift, Star, Calendar, Sparkles, MessageSquare, Bell, HeartHandshake } from "lucide-react";
 import { useMarketingScope } from "../useMarketingScope";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
-import { TemplateFormModal, type TemplateInitial } from "~/components/marketing/TemplateFormModal";
+import { TemplateFormModal, type TemplateInitial, type TemplateSeed } from "~/components/marketing/TemplateFormModal";
+import { getExampleTemplates } from "~/components/marketing/templateStarterPack";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+
+/** Lucide icons referenced by the starter pack, keyed by StarterTemplate.icon name. */
+const EXAMPLE_ICONS: Record<string, typeof FileText> = {
+  Mail, Gift, Star, Calendar, Sparkles, MessageSquare, Bell, HeartHandshake,
+};
 
 export default function TemplatesClient() {
   const { lang } = useLang();
@@ -20,6 +26,16 @@ export default function TemplatesClient() {
     { enabled: mode === "tenant" && !!tenantId },
   );
   const listQ = mode === "admin" ? adminListQ : tenantListQ;
+
+  // Default example tiles are a Pro/Max nicety. getBillingStatus shares the
+  // same assertTenantOwner guard as the templates list above, so it adds no
+  // new authorization surface; on any failure plan falls back to "start".
+  const billingQ = api.salon.getBillingStatus.useQuery(
+    { tenantId: tenantId ?? "" },
+    { enabled: mode === "tenant" && !!tenantId },
+  );
+  const plan = billingQ.data?.plan ?? "start";
+  const showExamples = mode === "tenant" && (plan === "pro" || plan === "max");
 
   const utils = api.useUtils();
   function invalidate() {
@@ -33,6 +49,7 @@ export default function TemplatesClient() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<TemplateInitial | null>(null);
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
+  const [seed, setSeed] = useState<TemplateSeed | null>(null);
 
   const scope = mode === "admin"
     ? ({ mode: "admin" } as const)
@@ -140,11 +157,74 @@ export default function TemplatesClient() {
         )}
       </div>
 
+      {showExamples && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900/50">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("marketing.template.examples.title", lang)}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              {t("marketing.template.examples.subtitle", lang)}
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {getExampleTemplates(lang).map((ex) => {
+              const Icon = EXAMPLE_ICONS[ex.icon] ?? FileText;
+              return (
+                <button
+                  key={ex.id}
+                  type="button"
+                  onClick={() =>
+                    setSeed({
+                      name: ex.name,
+                      channel: ex.channel,
+                      subject: ex.subject,
+                      body: ex.body,
+                      locale: lang,
+                    })
+                  }
+                  className="group flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-violet-300 hover:bg-violet-50/40 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:border-violet-400/40 dark:hover:bg-violet-500/5"
+                  data-testid={`tpl-example-${ex.id}`}
+                >
+                  <span className="mt-0.5 shrink-0 rounded-md bg-violet-100 p-1.5 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
+                        {ex.title}
+                      </span>
+                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                        {t("marketing.template.examples.badge", lang)}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                      {ex.blurb}
+                    </span>
+                    <span className="mt-1 inline-block rounded bg-slate-200/60 px-1.5 py-0.5 text-[9px] uppercase text-slate-500 dark:bg-slate-800/60">
+                      {ex.channel}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {showCreate && scope && (
         <TemplateFormModal
           scope={scope}
           onClose={() => setShowCreate(false)}
           onSaved={() => setShowCreate(false)}
+        />
+      )}
+      {seed && scope && (
+        <TemplateFormModal
+          scope={scope}
+          presetSeed={seed}
+          onClose={() => setSeed(null)}
+          onSaved={() => setSeed(null)}
         />
       )}
       {editing && scope && (

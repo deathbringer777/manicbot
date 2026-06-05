@@ -283,7 +283,6 @@ const NAKED_WHITE_TEXT_SKIP = new Set([
   // Solid white/pale text rendered on a colored-or-dark PARENT surface that is
   // not present in the element's own className. Verified intentional; each is
   // correct in BOTH themes.
-  "components/dashboards/dashboard-ui/ReminderChip.tsx", // hover label inside a colored bg-{emerald,indigo}-500/85 chip
   "app/(dashboard)/messages/_components/PlatformOwnerView.tsx", // timestamps on colored bubbles (system-admin pane)
   "app/(dashboard)/messages/_components/PlatformAdminPane.tsx", // timestamps on colored bubbles (system-admin pane)
   "app/(dashboard)/marketing-autopilot/MarketingAutopilotClient.tsx", // system-admin tool, intentionally dark-only surfaces (bg-slate-900 modals)

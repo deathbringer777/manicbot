@@ -120,7 +120,8 @@ describe("getOverview", () => {
     const tenants = [
       makeTenant({ id: "t1", billingStatus: "active" }),
       makeTenant({ id: "t2", billingStatus: "active" }),
-      makeTenant({ id: "t3", billingStatus: "trialing" }),
+      // trialing only counts while not expired → give it a future trial end.
+      makeTenant({ id: "t3", billingStatus: "trialing", trialEndsAt: now + 7 * 86400 }),
       makeTenant({ id: "t4", billingStatus: "grace_period" }),
       makeTenant({ id: "t5", billingStatus: "inactive" }),
       makeTenant({ id: "t6", billingStatus: null }), // null = inactive bucket

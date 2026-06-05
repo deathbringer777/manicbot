@@ -1,0 +1,14 @@
+-- 0111_metrics_indexes.sql — 2026-06-06 (renumbered from 0109 after #365/#366 landed 0109/0110)
+--
+-- Supporting index for the corrected metrics layer. The Platform Customers list
+-- filters salon accounts by billing_status (inArray), and the future stored-
+-- metrics layer (Phase 2) will bucket tenants by status — index it so those
+-- scans don't walk the whole table.
+--
+-- Intentionally NOT indexing trial_ends_at / stripe_subscription_id: the metrics
+-- classifier (admin-app/src/server/metrics/status.ts) reads them per-row AFTER
+-- the is_test pre-filter rather than filtering on them in SQL, so an index there
+-- would only add write cost. The columns the metric queries DO scan on
+-- (tenants.is_test, web_users.tenant_id, appointments(tenant_id, *)) already
+-- have indexes in schema.sql.
+CREATE INDEX IF NOT EXISTS idx_tenant_billing_status ON tenants(billing_status);

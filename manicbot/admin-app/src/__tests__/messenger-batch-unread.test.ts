@@ -73,21 +73,23 @@ describe("messengerRouter.listThreads — batch unread COUNT (fix #3)", () => {
   const createCaller = createCallerFactory(messengerRouter);
   beforeEach(() => vi.clearAllMocks());
 
-  it("issues constant SELECTs regardless of thread count (no N+1)", async () => {
-    // Non-admin: 4 selects total:
+  it("issues constant SELECTs regardless of thread count (no N+1) and resolves DM titles", async () => {
+    // Non-admin: a CONSTANT number of selects (never per-thread):
     //   1. threadMembers (member thread ids)
     //   2. threads (main query)
     //   3. threadMembers (caller's last_read per thread, for unread batch)
     //   4. ONE batch unread count query (not N individual COUNTs)
+    //   5. threadMembers (DM counterparts, for staff_dm title resolution)
+    //   6. web_users (counterpart names) — only when there are web_user DM peers
     const memberRows = [
       { threadId: "th_1" },
       { threadId: "th_2" },
       { threadId: "th_3" },
     ];
     const threadRows = [
-      { id: "th_1", tenantId: TENANT, kind: "staff_dm", archived: 0, lastMessageAt: 1000, createdAt: 900 },
-      { id: "th_2", tenantId: TENANT, kind: "staff_dm", archived: 0, lastMessageAt: 999, createdAt: 898 },
-      { id: "th_3", tenantId: TENANT, kind: "staff_group", archived: 0, lastMessageAt: 998, createdAt: 897 },
+      { id: "th_1", tenantId: TENANT, kind: "staff_dm", title: null, archived: 0, lastMessageAt: 1000, createdAt: 900 },
+      { id: "th_2", tenantId: TENANT, kind: "staff_dm", title: null, archived: 0, lastMessageAt: 999, createdAt: 898 },
+      { id: "th_3", tenantId: TENANT, kind: "staff_group", title: "Команда", archived: 0, lastMessageAt: 998, createdAt: 897 },
     ];
     const callerMemberRows = [
       { threadId: "th_1", lastRead: "msg_10" },
@@ -100,18 +102,29 @@ describe("messengerRouter.listThreads — batch unread COUNT (fix #3)", () => {
       { threadId: "th_2", unreadCount: 7 },
       { threadId: "th_3", unreadCount: 0 },
     ];
+    // DM counterpart members (the non-caller side of each staff_dm).
+    const dmMemberRows = [
+      { threadId: "th_1", memberKind: "web_user", memberRef: "w_bob" },
+      { threadId: "th_2", memberKind: "web_user", memberRef: "w_carol" },
+    ];
+    const dmNameRows = [
+      { id: "w_bob", name: "Bob", email: null },
+      { id: "w_carol", name: "Carol", email: null },
+    ];
 
     const { db, selectSpy } = buildDb([
       memberRows,        // 1: member thread ids
       threadRows,        // 2: threads
       callerMemberRows,  // 3: caller's last_read
       batchUnreadRows,   // 4: batch unread counts
+      dmMemberRows,      // 5: DM counterpart members
+      dmNameRows,        // 6: counterpart names
     ]);
     const caller = createCaller(makeTenantOwnerCtx(db, TENANT) as never);
     const result = await caller.listThreads({ tenantId: TENANT });
 
     // Constant query count regardless of N threads — NOT N+1
-    expect(selectSpy).toHaveBeenCalledTimes(4);
+    expect(selectSpy).toHaveBeenCalledTimes(6);
     expect(result.items).toHaveLength(3);
     // Unread counts correctly plumbed through
     const th1 = result.items.find((i) => i.id === "th_1");
@@ -120,6 +133,11 @@ describe("messengerRouter.listThreads — batch unread COUNT (fix #3)", () => {
     expect(th1?.unreadCount).toBe(3);
     expect(th2?.unreadCount).toBe(7);
     expect(th3?.unreadCount).toBe(0);
+    // staff_dm titles resolved to the counterpart's name (Telegram-style);
+    // an explicitly-titled group is left untouched.
+    expect(th1?.title).toBe("Bob");
+    expect(th2?.title).toBe("Carol");
+    expect(th3?.title).toBe("Команда");
   });
 
   it("returns empty list quickly when member has no threads (0 selects after membership check)", async () => {

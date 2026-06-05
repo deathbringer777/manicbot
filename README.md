@@ -24,6 +24,8 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **CSV export** — clients and appointments
 - **Test accounts** — reproducible 8-account roster (3 salons + 3 masters with annual plans + 1 salon + 1 master with expired trials). See [SEED_TEST_DATA.md](manicbot/SEED_TEST_DATA.md); run `npm run seed:test-accounts` to populate.
 
+> **Parked features** (complete code, hidden on purpose — _not_ dead code): **Marketing → Automations** is finished and its manual "Run Now" works, but it's hidden behind the `MARKETING_AUTOMATIONS_ENABLED` flag in `manicbot/admin-app/src/lib/featureFlags.ts` until the cron trigger-engine is built. The tab is dropped from the marketing sub-nav and the route redirects to `/marketing`. Do not delete the gated code — the unlock runbook is in that flag file.
+
 ---
 
 ## Stack

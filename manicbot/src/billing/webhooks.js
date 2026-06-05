@@ -180,6 +180,13 @@ function subscriptionToBillingUpdates(sub, cfg) {
     cancelAtPeriodEnd: sub.cancel_at_period_end === true,
     updatedAt: nowSec(),
   };
+  // Stripe `pause_collection` does NOT change sub.status (it stays 'active'), so
+  // reflect a paused subscription as our own 'paused' billing_status here — both
+  // to pause service via feature-gating and so a subsequent subscription.updated
+  // doesn't reset an intentionally-paused tenant back to 'active'.
+  if (sub.pause_collection) {
+    updates.billingStatus = 'paused';
+  }
   if (planKey) updates.plan = planKey;
   return updates;
 }
@@ -342,9 +349,18 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
       let newPlanForUpgrade = null;
       if (type === 'customer.subscription.updated' && updates.plan) {
         try {
-          const current = await dbGet(ctx, 'SELECT plan FROM tenants WHERE id = ?', tenantId);
+          const current = await dbGet(ctx, 'SELECT plan, pending_plan FROM tenants WHERE id = ?', tenantId);
           oldPlanForUpgrade = current?.plan ?? null;
           newPlanForUpgrade = updates.plan;
+          // A scheduled downgrade has landed (the live plan now equals the
+          // pending target) → clear the denormalized pending-downgrade fields so
+          // the dashboard stops showing "downgrades on <date>".
+          if (current?.pending_plan && updates.plan === current.pending_plan) {
+            updates.pendingPlan = null;
+            updates.pendingPriceId = null;
+            updates.pendingPlanEffectiveAt = null;
+            updates.pendingScheduleId = null;
+          }
         } catch { /* best-effort */ }
       }
 

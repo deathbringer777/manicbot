@@ -1129,6 +1129,29 @@ const translations = {
   "clients.block.confirm":              { ru: "Заблокировать клиента для всего салона?", ua: "Заблокувати клієнта для всього салону?", en: "Block this client across the whole salon?", pl: "Zablokować klienta w całym salonie?" },
   "clients.block.reasonPh":             { ru: "Причина (необяз.)", ua: "Причина (необов'язково)", en: "Reason (optional)", pl: "Powód (opcjonalnie)" },
 
+  // ── Clients: Filters dropdown + bulk actions (0109) ──────────────────────────
+  "clients.filter.button":              { ru: "Фильтры", ua: "Фільтри", en: "Filters", pl: "Filtry" },
+  "clients.filter.reset":               { ru: "Сбросить", ua: "Скинути", en: "Reset", pl: "Resetuj" },
+  "clients.bulk.selectAll":             { ru: "Выделить всех", ua: "Виділити всіх", en: "Select all", pl: "Zaznacz wszystkich" },
+  "clients.bulk.selectedOnPage":        { ru: "Выбрано {count} на странице", ua: "Вибрано {count} на сторінці", en: "Selected {count} on this page", pl: "Zaznaczono {count} na stronie" },
+  "clients.bulk.selectAllMatching":     { ru: "Выбрать все {total}", ua: "Вибрати всі {total}", en: "Select all {total}", pl: "Zaznacz wszystkie {total}" },
+  "clients.bulk.allSelected":           { ru: "Выбраны все {total}", ua: "Вибрані всі {total}", en: "All {total} selected", pl: "Zaznaczono wszystkie: {total}" },
+  "clients.bulk.selectAllCapped":       { ru: "Выбраны первые {count}", ua: "Вибрані перші {count}", en: "Selected the first {count}", pl: "Zaznaczono pierwsze {count}" },
+  "clients.bulk.more":                  { ru: "Ещё", ua: "Ще", en: "More", pl: "Więcej" },
+  "clients.bulk.newListFromSelection":  { ru: "Новый список из выбранных", ua: "Новий список з вибраних", en: "New list from selection", pl: "Nowa lista z zaznaczonych" },
+  "clients.bulk.block":                 { ru: "Заблокировать", ua: "Заблокувати", en: "Block", pl: "Zablokuj" },
+  "clients.bulk.unblock":               { ru: "Разблокировать", ua: "Розблокувати", en: "Unblock", pl: "Odblokuj" },
+  "clients.bulk.delete":                { ru: "Удалить выбранных", ua: "Видалити вибраних", en: "Delete selected", pl: "Usuń zaznaczonych" },
+  "clients.bulk.exportSelected":        { ru: "Экспорт выбранных", ua: "Експорт вибраних", en: "Export selected", pl: "Eksport zaznaczonych" },
+  "clients.bulk.createBroadcast":       { ru: "Создать рассылку", ua: "Створити розсилку", en: "Create broadcast", pl: "Utwórz wysyłkę" },
+  "clients.bulk.deleted":               { ru: "Удалено: {count}", ua: "Видалено: {count}", en: "Deleted: {count}", pl: "Usunięto: {count}" },
+  "clients.bulk.blocked":               { ru: "Заблокировано: {count}", ua: "Заблоковано: {count}", en: "Blocked: {count}", pl: "Zablokowano: {count}" },
+  "clients.bulk.unblocked":             { ru: "Разблокировано: {count}", ua: "Розблоковано: {count}", en: "Unblocked: {count}", pl: "Odblokowano: {count}" },
+  "clients.bulk.deleteConfirm.title":   { ru: "Удалить выбранных клиентов?", ua: "Видалити вибраних клієнтів?", en: "Delete selected clients?", pl: "Usunąć zaznaczonych klientów?" },
+  "clients.bulk.deleteConfirm.body":    { ru: "Будет удалено {count}. Имя, контакты и заметки сотрутся безвозвратно; история визитов сохранится обезличенной.", ua: "Буде видалено {count}. Ім'я, контакти та нотатки зітруться безповоротно; історія візитів збережеться знеособленою.", en: "{count} will be deleted. Name, contacts and notes are erased permanently; visit history is kept anonymized.", pl: "Zostanie usuniętych: {count}. Imię, kontakty i notatki zostaną trwale wymazane; historia wizyt pozostanie zanonimizowana." },
+  "clients.bulk.blockConfirm.title":    { ru: "Заблокировать выбранных?", ua: "Заблокувати вибраних?", en: "Block selected?", pl: "Zablokować zaznaczonych?" },
+  "clients.bulk.blockConfirm.body":     { ru: "Будет заблокировано {count}. Заблокированные клиенты не смогут записаться онлайн и у мастеров.", ua: "Буде заблоковано {count}. Заблоковані клієнти не зможуть записатися онлайн і в майстрів.", en: "{count} will be blocked. Blocked clients can't book online or with masters.", pl: "Zostanie zablokowanych: {count}. Zablokowani klienci nie mogą rezerwować online ani u mistrzów." },
+
   // ── Master avatar picker (0075) ─────────────────────────────────────────────
   "master.avatar.title":                { ru: "Аватар мастера", ua: "Аватар майстра", en: "Master avatar", pl: "Awatar mistrza" },
   "master.avatar.tabEmoji":             { ru: "Эмодзи", ua: "Емодзі", en: "Emoji", pl: "Emoji" },
@@ -2197,6 +2220,7 @@ const translations = {
   // ── Messenger / MessagesClient shell (P0-UX + P1-UX) ─────────────────────
   "messenger.noSalon":             { ru: "Нет привязанного салона — мессенджер недоступен", ua: "Немає прив'язаного салону — месенджер недоступний", en: "No salon linked — messenger unavailable", pl: "Brak salonu — komunikator niedostępny" },
   "messenger.platformSubtitle":    { ru: "Новости и объявления платформы", ua: "Новини та оголошення платформи", en: "Platform news and announcements", pl: "Aktualności i ogłoszenia platformy" },
+  "messenger.platformUnread":      { ru: "Есть непрочитанные сообщения", ua: "Є непрочитані повідомлення", en: "Unread messages", pl: "Nieprzeczytane wiadomości" },
   "messenger.platformEmpty":       { ru: "Здесь будут появляться новости и объявления от платформы.", ua: "Тут з'являтимуться новини та оголошення від платформи.", en: "Platform news and announcements will appear here.", pl: "Tutaj będą pojawiać się aktualności i ogłoszenia od platformy." },
   "messenger.selectChat":          { ru: "Выберите чат или создайте новый", ua: "Оберіть чат або створіть новий", en: "Select a chat or start a new one", pl: "Wybierz czat lub utwórz nowy" },
   "messenger.selectChatHint":      { ru: "Сообщения между сотрудниками и клиентами в одном месте", ua: "Повідомлення між співробітниками та клієнтами в одному місці", en: "Messages between staff and clients in one place", pl: "Wiadomości między pracownikami a klientami w jednym miejscu" },

@@ -94,11 +94,18 @@ node scripts/restore-d1.mjs --latest --local
 Тогда дамп взять негде, ситуация фатальная. Превентивно убедиться, что
 этого никогда не случится:
 
-- Каждое утро (или раз в неделю) посмотреть в God Mode → System →
-  D1 backup status — там показывается дата последнего успешного бэкапа
-- Алерт: если последний успешный бэкап старше 8 часов — в системе
-  есть проблема (на `vdovin.kyrylo@gmail.com` приходит письмо через
-  `captureError`-канал)
+- Каждое утро (или раз в неделю) проверять дату последнего успешного
+  бэкапа. Два способа:
+  - быстрый список снапшотов из R2: `node scripts/restore-d1.mjs --list`;
+  - точный лог в самой D1 (таблица `d1_backup_log`):
+    ```bash
+    npx wrangler d1 execute manicbot-db --remote \
+      --command "SELECT finished_at, kind, status, row_count FROM d1_backup_log ORDER BY finished_at DESC LIMIT 5"
+    ```
+- Бэкап идёт каждые 6 ч. Если последний успешный (`status='success'`)
+  старше ~6-7 ч — в системе проблема: смотри `wrangler tail` / Cloudflare
+  Logs на `worker.d1Backup` (ошибки рана) и строки `status='failed'`
+  в `d1_backup_log` с `error_message`.
 
 ## Если `wrangler` ругается на auth
 

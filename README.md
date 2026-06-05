@@ -9,7 +9,7 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 ## Features
 
 - **Online booking** — choose service, master, date, and time directly in Telegram
-- **AI assistant** — Workers AI (Llama) handles free-form dialogue and understands client intent
+- **AI assistant** — Workers AI (gpt-oss-120b, Llama fallbacks) handles free-form dialogue and understands client intent
 - **Roles** — system_admin / technical_support / support / tenant_owner / master / client
 - **Multi-tenancy** — D1 (primary tenant/bot registry) + KV for state; prefix `t:{tenantId}:`*; legacy mode `b:{botId}:*` with a single `BOT_TOKEN`
 - **Unified inbox** — WhatsApp / Instagram (Meta webhooks) merged with Telegram in one conversation view via shared `handlers/inbound.js` → same `onMsg` / `onCb`
@@ -33,10 +33,10 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 | --------- | ----------------------------------------------------------------------------------------------- |
 | Runtime   | Cloudflare Workers                                                                              |
 | Storage   | Cloudflare D1 (SQL) + KV                                                                        |
-| AI        | Cloudflare Workers AI (REST, `@cf/meta/llama-3.1-8b-instruct`)                                  |
+| AI        | Cloudflare Workers AI (REST, `@cf/openai/gpt-oss-120b`, fallbacks `llama-4-scout-17b` / `llama-3.1-8b`; marketing images `flux-1-schnell`) |
 | Billing   | Stripe API                                                                                      |
 | Messenger | Telegram Bot API                                                                                |
-| Tests     | Vitest 4.x + `@cloudflare/vitest-pool-workers` (Worker ~826 tests); admin-app — separate Vitest |
+| Tests     | Vitest 4.x + `@cloudflare/vitest-pool-workers` (Worker ~240 test files); admin-app — separate Vitest |
 | Deploy    | Wrangler 4.x → `manicbot.com`                                                                   |
 
 
@@ -200,7 +200,7 @@ wrangler secret put STRIPE_WEBHOOK_SECRET
 wrangler secret put CLOUDFLARE_ACCOUNT_ID
 wrangler secret put WORKERS_AI_API_TOKEN
 
-# Deploy
+# Deploy (manual / first deploy). Production deploys run via `git push origin main` → GitHub Actions → Cloudflare.
 npx wrangler deploy
 
 # Register bot webhook

@@ -53,6 +53,13 @@ MARKETING_ASSETS_PUBLIC_URL = "https://pub-1dff67fc0bd644c59f1677cb5d553ce6.r2.d
 # ignore this flag (always run, useful for testing before flipping live).
 MARKETING_AUTOPILOT_ENABLED = "0"
 
+# Tenant whose `channel_configs` Instagram row holds the @manicbot_com publishing
+# token (connected via the product's Instagram-login OAuth: long-lived, auto-refreshed,
+# encrypted). The autopilot reads + decrypts it from here when the MARKETING_IG_*
+# Worker secrets are not set — so no manual token paste is needed. See
+# src/marketing/autopilot.js → getIgCredentials.
+MARKETING_IG_TENANT_ID = "t_1c305v2g5011"
+
 # ⚠️  ADMIN_CHAT_ID перенесён в секрет:
 #   wrangler secret put ADMIN_CHAT_ID
 # (значение: Telegram chat_id создателя платформы — даёт полный root-доступ)

@@ -75,11 +75,11 @@ In Telegram, send the bot:
 ### Web Admin Panel
 
 - **Admin panel (clients, appointments, export):**
-  https://manicbot.vdovin-kyrylo.workers.dev/admin
+  https://manicbot.com/admin
   Login: `admin`, password: your `ADMIN_KEY`.
 
 - **Billing by tenants:**
-  https://manicbot.vdovin-kyrylo.workers.dev/admin/billing
+  https://manicbot.com/admin/billing
   (same Basic Auth).
 
 ---
@@ -171,10 +171,10 @@ The regular booking main menu will open.
 ## Webhook Setup and Migration (for developers)
 
 - **Setup (webhook + commands):**
-  https://manicbot.vdovin-kyrylo.workers.dev/setup?key=YOUR_ADMIN_KEY
+  https://manicbot.com/setup?key=YOUR_ADMIN_KEY
 
 - **Migration (once after deploy):**
-  https://manicbot.vdovin-kyrylo.workers.dev/admin/migrate?key=YOUR_ADMIN_KEY
+  https://manicbot.com/admin/migrate?key=YOUR_ADMIN_KEY
   Or from terminal: `ADMIN_KEY=... npm run migrate` (see MIGRATION.md).
 
 ---
@@ -183,10 +183,10 @@ The regular booking main menu will open.
 
 | Page | URL |
 |---------|-----|
-| Worker home | https://manicbot.vdovin-kyrylo.workers.dev/ |
-| Admin (Basic Auth) | https://manicbot.vdovin-kyrylo.workers.dev/admin |
-| Billing | https://manicbot.vdovin-kyrylo.workers.dev/admin/billing |
-| Setup | https://manicbot.vdovin-kyrylo.workers.dev/setup?key=ADMIN_KEY |
-| Stripe success page | https://manicbot.vdovin-kyrylo.workers.dev/stripe/success |
+| Worker home | https://manicbot.com/ |
+| Admin (Basic Auth) | https://manicbot.com/admin |
+| Billing | https://manicbot.com/admin/billing |
+| Setup | https://manicbot.com/setup?key=ADMIN_KEY |
+| Stripe success page | https://manicbot.com/stripe/success |
 
 Replace `ADMIN_KEY` in links with `?key=...`.

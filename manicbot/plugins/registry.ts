@@ -13,29 +13,31 @@
  * To add a plugin: create `manicbot/plugins/<slug>/manifest.ts` + optional
  * router/lifecycle/worker/ui files, then add one import line below.
  *
- * 2026-05-16 cleanup — dropped 13 slugs that duplicated already-shipped core
- * features or were pure marketing stubs. `google-calendar` was later
- * RESTORED as a marketplace-only facade over the existing core OAuth flow
- * (`googleCalendar.ts` router + `GoogleCalendarRuntime.tsx`); the surviving
- * DELETED list is 12.
- *   DELETED (capability already in core):
- *     - booking-reminder         → worker `phaseReminders` cron
- *     - client-crm-lite          → admin-app `clients.ts` router (0062)
- *     - quick-notes              → subset of task-board
- *   FOLDED INTO CORE (capability moves out of marketplace into core UI):
- *     - ai-abuse-monitor         → God Mode `/errors` filter tab
- *     - gdpr-center              → `consent.ts` + `/admin/gdpr` page
- *     - sla-tracker              → Support dashboard SLA tab
- *     - escalation-playbook      → Support dashboard playbook tab
- *     - kb-search                → Support dashboard FTS search
- *     - ticket-templates         → Support reply composer
- *     - keyboard-shortcuts       → `(dashboard)/layout.tsx` global hook
- *     - dark-plus                → `AppearanceSection` extra themes
- *     - portfolio-gallery        → public salon + master profile (uses
- *                                  existing `cover_photo` / `portfolio` cols)
+ * 2026-06-05 cleanup — dropped 7 more slugs that either duplicated
+ * already-shipped core UI or were non-functional facades / localStorage stubs.
+ * The marketplace now lists ONLY genuinely modular, custom capabilities with
+ * no native-UI equivalent.
+ *   REMOVED (capability already lives in core UI, or pure facade / stub):
+ *     - google-calendar         → core Settings GCal OAuth (SalonCalendarSection
+ *                                 + googleCalendar.ts router); facade, no runtime
+ *     - master-telegram-pairing → core Master profile + Salon → Channels pairing
+ *                                 UI (MasterTelegramPairingCard +
+ *                                 SalonMasterPairingTable); facade, no runtime
+ *     - availability-share      → only emits the existing public /salon/<id> link
+ *     - shift-planner           → core working hours + MasterScheduleEditor; the
+ *                                 plugin had no runtime at all (stub)
+ *     - earnings-goal           → core master earnings (MasterDashboard);
+ *                                 plugin was a localStorage-only toy
+ *     - export-hub              → core CSV export (clients.exportCsv / export.ts);
+ *                                 plugin only dumped localStorage junk
+ *     - message-templates       → localStorage-only template store (no server
+ *                                 sync, no core equivalent — dropped as low-value)
  *
- * The 7 retained plugins below are genuinely modular and stay in the
- * marketplace. Variant A from the catalog strategy adds 10 more on top.
+ * See the earlier 2026-05-16 drop list in
+ * `admin-app/src/__tests__/plugins-removed-duplicates.test.ts` for prior cleanups.
+ *
+ * The 5 retained plugins below are genuinely modular, server-backed (or
+ * cron-backed) capabilities with no core duplication.
  */
 
 import type { PluginManifest, PluginModule } from "./types";
@@ -46,21 +48,7 @@ import type { PluginManifest, PluginModule } from "./types";
 import loyaltyStampsManifest from "./loyalty-stamps/manifest";
 
 // ── tenant_manager ──────────────────────────────────────────────────────────
-import shiftPlannerManifest from "./shift-planner/manifest";
 import taskBoardManifest from "./task-board/manifest";
-
-// ── master ──────────────────────────────────────────────────────────────────
-import availabilityShareManifest from "./availability-share/manifest";
-import earningsGoalManifest from "./earnings-goal/manifest";
-
-// ── universal ───────────────────────────────────────────────────────────────
-import exportHubManifest from "./export-hub/manifest";
-
-// ── master + tenant_owner ───────────────────────────────────────────────────
-import messageTemplatesManifest from "./message-templates/manifest";
-
-// ── tenant_owner + tenant_manager + master (core-backed facade) ─────────────
-import googleCalendarManifest from "./google-calendar/manifest";
 
 // ── Variant A (Phase 3) — growth plugins ────────────────────────────────────
 import reviewCollectorManifest from "./review-collector/manifest";
@@ -68,35 +56,20 @@ import reviewCollectorManifest from "./review-collector/manifest";
 // ── Variant A (Phase 3) — operations plugins ────────────────────────────────
 import inventoryLiteManifest from "./inventory-lite/manifest";
 
-// ── productivity / cron-backed (first plugin wired to phasePluginCron) ──────
+// ── productivity / cron-backed (wired to phasePluginCron) ───────────────────
 import remindersManifest from "./reminders/manifest";
-
-// ── operations / core-backed (UI facade only, no router/lifecycle) ──────────
-import masterTelegramPairingManifest from "./master-telegram-pairing/manifest";
 
 const RAW_MANIFESTS: readonly PluginManifest[] = [
   // tenant_owner
   loyaltyStampsManifest,
   // tenant_manager
-  shiftPlannerManifest,
   taskBoardManifest,
-  // master
-  availabilityShareManifest,
-  earningsGoalManifest,
-  // universal
-  exportHubManifest,
-  // master + tenant_owner
-  messageTemplatesManifest,
-  // tenant_owner + tenant_manager + master (core-backed facade)
-  googleCalendarManifest,
   // Variant A growth
   reviewCollectorManifest,
   // Variant A operations
   inventoryLiteManifest,
-  // productivity / cron-backed (first plugin wired to phasePluginCron)
+  // productivity / cron-backed (wired to phasePluginCron)
   remindersManifest,
-  // operations / core-backed UI facade (0072 — master Telegram pairing)
-  masterTelegramPairingManifest,
 ];
 
 // ─── Lazy loaders (optional per plugin) ─────────────────────────────────────

@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
+import { useLang } from "~/components/LangContext";
+import { t, localeFor, type Lang } from "~/lib/i18n";
 import { Shell } from "~/components/layout/Shell";
 import { PlatformCustomerDetailModal } from "~/components/system/PlatformCustomerDetailModal";
 
@@ -32,11 +34,15 @@ import { PlatformCustomerDetailModal } from "~/components/system/PlatformCustome
 
 const PAGE_SIZE = 50;
 
-const PLAN_OPTIONS: Array<{ value: "start" | "pro" | "max"; label: string }> = [
-  { value: "start", label: "Start" },
-  { value: "pro", label: "Pro" },
-  { value: "max", label: "Max" },
-];
+// Plan labels are brand names (Start/Pro/Max) — not translated, but the
+// builder is a function for symmetry with statusOptions().
+function planOptions(_lang: Lang): Array<{ value: "start" | "pro" | "max"; label: string }> {
+  return [
+    { value: "start", label: "Start" },
+    { value: "pro", label: "Pro" },
+    { value: "max", label: "Max" },
+  ];
+}
 
 type StatusFilter =
   | "trialing"
@@ -46,14 +52,16 @@ type StatusFilter =
   | "expired"
   | "cancelled";
 
-const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
-  { value: "trialing", label: "Триал" },
-  { value: "active", label: "Активен" },
-  { value: "grace", label: "Грейс" },
-  { value: "past_due", label: "Просрочка" },
-  { value: "expired", label: "Истёк" },
-  { value: "cancelled", label: "Отменён" },
-];
+function statusOptions(lang: Lang): Array<{ value: StatusFilter; label: string }> {
+  return [
+    { value: "trialing", label: t("gmCustomers.statusTrialing", lang) },
+    { value: "active", label: t("gmCustomers.statusActive", lang) },
+    { value: "grace", label: t("gmCustomers.statusGrace", lang) },
+    { value: "past_due", label: t("gmCustomers.statusPastDue", lang) },
+    { value: "expired", label: t("gmCustomers.statusExpired", lang) },
+    { value: "cancelled", label: t("gmCustomers.statusCancelled", lang) },
+  ];
+}
 
 // ─── helpers ──────────────────────────────────────────────────────────
 
@@ -66,24 +74,25 @@ function useDebouncedValue<T>(value: T, ms: number): T {
   return out;
 }
 
-function fmtRel(ts: number | null | undefined): string {
+function fmtRel(ts: number | null | undefined, lang: Lang): string {
   if (!ts) return "—";
   const diff = Math.floor(Date.now() / 1000) - ts;
   if (diff < 0) {
     const future = -diff;
-    if (future < 86400) return `через ${Math.round(future / 3600)} ч`;
-    return `через ${Math.round(future / 86400)} дн`;
+    if (future < 86400)
+      return `${t("gmCustomers.relInH", lang)} ${Math.round(future / 3600)} ${t("gmCustomers.relUnitH", lang)}`;
+    return `${t("gmCustomers.relInD", lang)} ${Math.round(future / 86400)} ${t("gmCustomers.relUnitD", lang)}`;
   }
-  if (diff < 60) return "только что";
-  if (diff < 3600) return `${Math.round(diff / 60)} мин`;
-  if (diff < 86400) return `${Math.round(diff / 3600)} ч`;
-  if (diff < 86400 * 30) return `${Math.round(diff / 86400)} дн`;
-  return new Date(ts * 1000).toLocaleDateString();
+  if (diff < 60) return t("gmCustomers.relJustNow", lang);
+  if (diff < 3600) return `${Math.round(diff / 60)} ${t("gmCustomers.relUnitMin", lang)}`;
+  if (diff < 86400) return `${Math.round(diff / 3600)} ${t("gmCustomers.relUnitH", lang)}`;
+  if (diff < 86400 * 30) return `${Math.round(diff / 86400)} ${t("gmCustomers.relUnitD", lang)}`;
+  return new Date(ts * 1000).toLocaleDateString(localeFor(lang));
 }
 
-function fmtDate(ts: number | null | undefined): string {
+function fmtDate(ts: number | null | undefined, lang: Lang): string {
   if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleDateString();
+  return new Date(ts * 1000).toLocaleDateString(localeFor(lang));
 }
 
 function statusTone(status: string | null | undefined): string {
@@ -163,13 +172,14 @@ function MultiCheckFilter<V extends string>({
   values: V[];
   onChange: (v: V[]) => void;
 }) {
+  const { lang } = useLang();
   const [open, setOpen] = useState(false);
   const summary =
     values.length === 0
-      ? "Все"
+      ? t("gmCustomers.filterAll", lang)
       : values.length === 1
       ? options.find((o) => o.value === values[0])?.label ?? "1"
-      : `${values.length} выбрано`;
+      : `${values.length} ${t("gmCustomers.filterSelected", lang)}`;
 
   // Close on outside click — minimal handler, no portal needed.
   useEffect(() => {
@@ -221,7 +231,7 @@ function MultiCheckFilter<V extends string>({
               onClick={() => onChange([])}
               className="mt-1 w-full rounded px-2 py-1 text-left text-[11px] text-violet-500 hover:bg-slate-100 dark:hover:bg-slate-700"
             >
-              Сбросить
+              {t("gmCustomers.filterReset", lang)}
             </button>
           )}
         </div>
@@ -234,6 +244,7 @@ function MultiCheckFilter<V extends string>({
 
 export default function SystemCustomersClient() {
   const { role } = useRole();
+  const { lang } = useLang();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -254,30 +265,29 @@ export default function SystemCustomersClient() {
   // Defensive gate — sysadmin only.
   if (role !== "system_admin") {
     return (
-      <Shell title="Клиенты платформы" subtitle="Платформа">
+      <Shell title={t("gmCustomers.title", lang)} subtitle={t("gmCustomers.subtitlePlatform", lang)}>
         <div
           className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6 text-sm text-red-700 dark:text-red-300"
           data-testid="customers-page-forbidden"
         >
-          Эта страница доступна только системному администратору.
+          {t("gmCustomers.forbidden", lang)}
         </div>
       </Shell>
     );
   }
 
   return (
-    <Shell title="Клиенты платформы" subtitle="Аккаунты салонов · Подписчики рассылки">
+    <Shell title={t("gmCustomers.title", lang)} subtitle={t("gmCustomers.subtitleFull", lang)}>
       <div className="space-y-5">
         {/* Hero strap — visually distinct from tenant surfaces. */}
         <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-transparent to-violet-500/5 p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                Клиенты ManicBot
+                {t("gmCustomers.heroTitle", lang)}
               </h2>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Зарегистрированные владельцы салонов, их тарифы и платёжный статус, плюс
-                подписчики email-рассылки. Только чтение — действия с подпиской через Stripe.
+                {t("gmCustomers.heroDesc", lang)}
               </p>
             </div>
           </div>
@@ -293,14 +303,14 @@ export default function SystemCustomersClient() {
           </span>
           <div className="ml-1 flex flex-wrap gap-1.5">
             <TabLink
-              label="Аккаунты салонов"
+              label={t("gmCustomers.tabAccounts", lang)}
               icon={Building2}
               active={activeTab === "accounts"}
               onClick={() => switchTab("accounts")}
               testId="customers-tab-accounts"
             />
             <TabLink
-              label="Подписчики рассылки"
+              label={t("gmCustomers.tabSubscribers", lang)}
               icon={Mail}
               active={activeTab === "subscribers"}
               onClick={() => switchTab("subscribers")}
@@ -318,6 +328,7 @@ export default function SystemCustomersClient() {
 // ─── stats row ────────────────────────────────────────────────────────
 
 function StatsRow() {
+  const { lang } = useLang();
   const statsQ = api.platformCustomers.stats.useQuery(undefined, {
     refetchInterval: 60_000,
   });
@@ -326,46 +337,46 @@ function StatsRow() {
     <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
       <StatCard
         icon={Users}
-        label="Всего аккаунтов"
+        label={t("gmCustomers.statTotal", lang)}
         value={(s?.total_accounts ?? 0).toLocaleString()}
         loading={statsQ.isLoading}
       />
       <StatCard
         icon={CheckCircle2}
-        label="Платят"
+        label={t("gmCustomers.statPaying", lang)}
         value={(s?.paying ?? 0).toLocaleString()}
         tone="good"
         loading={statsQ.isLoading}
       />
       <StatCard
         icon={Gift}
-        label="Бесплатно"
+        label={t("gmCustomers.statComped", lang)}
         value={(s?.comped ?? 0).toLocaleString()}
         loading={statsQ.isLoading}
       />
       <StatCard
         icon={Activity}
-        label="На триале"
+        label={t("gmCustomers.statTrialing", lang)}
         value={(s?.trialing ?? 0).toLocaleString()}
         loading={statsQ.isLoading}
       />
       <StatCard
         icon={XCircle}
-        label="Churned"
+        label={t("gmCustomers.statChurned", lang)}
         value={(s?.churned ?? 0).toLocaleString()}
         tone={(s?.churned ?? 0) > 0 ? "warn" : "neutral"}
         loading={statsQ.isLoading}
       />
       <StatCard
         icon={TrendingUp}
-        label="MRR"
+        label={t("gmCustomers.statMrr", lang)}
         value={`${(s?.mrr_total_pln ?? 0).toLocaleString()} PLN`}
         tone="good"
         loading={statsQ.isLoading}
       />
       <StatCard
         icon={Mail}
-        label="Подписчики"
+        label={t("gmCustomers.statSubs", lang)}
         value={(s?.newsletter_subs ?? 0).toLocaleString()}
         loading={statsQ.isLoading}
       />
@@ -406,6 +417,7 @@ function TabLink({
 // ─── Accounts tab ─────────────────────────────────────────────────────
 
 function AccountsTab() {
+  const { lang } = useLang();
   const [plans, setPlans] = useState<("start" | "pro" | "max")[]>([]);
   const [statuses, setStatuses] = useState<StatusFilter[]>([]);
   const [search, setSearch] = useState("");
@@ -445,24 +457,24 @@ function AccountsTab() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по email или имени…"
+            placeholder={t("gmCustomers.searchAccounts", lang)}
             className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs placeholder:text-slate-400 focus:border-violet-400 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           />
         </div>
         <MultiCheckFilter
-          label="План"
-          options={PLAN_OPTIONS}
+          label={t("gmCustomers.filterPlan", lang)}
+          options={planOptions(lang)}
           values={plans}
           onChange={setPlans}
         />
         <MultiCheckFilter
-          label="Статус"
-          options={STATUS_OPTIONS}
+          label={t("gmCustomers.filterStatus", lang)}
+          options={statusOptions(lang)}
           values={statuses}
           onChange={setStatuses}
         />
         <span className="ml-auto text-[11px] text-slate-500">
-          {listQ.isLoading ? "загрузка…" : `${total.toLocaleString()} всего`}
+          {listQ.isLoading ? t("gmCustomers.loading", lang) : `${total.toLocaleString()} ${t("gmCustomers.totalSuffix", lang)}`}
         </span>
       </div>
 
@@ -478,7 +490,7 @@ function AccountsTab() {
           <div className="px-4 py-12 text-center">
             <Building2 className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-700" />
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Под выбранные фильтры аккаунтов нет.
+              {t("gmCustomers.accountsEmpty", lang)}
             </p>
           </div>
         ) : (
@@ -486,16 +498,16 @@ function AccountsTab() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-left dark:border-white/5">
-                  <th className="px-4 py-2 font-medium text-slate-500">Имя</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Email</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">План</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Статус</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Триал до</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">MRR</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Регистрация</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Последний вход</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Мастеров</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Записей 30д</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colName", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colEmail", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colPlan", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colStatus", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colTrialUntil", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colMrr", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colRegistered", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colLastLogin", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colMasters", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colBookings30d", lang)}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -527,15 +539,15 @@ function AccountsTab() {
                           {r.billingStatus}
                         </span>
                       ) : (
-                        <span className="italic text-slate-400">нет тенанта</span>
+                        <span className="italic text-slate-400">{t("gmCustomers.noTenant", lang)}</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-slate-500">{fmtRel(r.trialEndsAt)}</td>
+                    <td className="px-4 py-2 text-slate-500">{fmtRel(r.trialEndsAt, lang)}</td>
                     <td className="px-4 py-2 font-medium text-slate-900 dark:text-slate-100">
                       {r.mrrPln > 0 ? `${r.mrrPln} PLN` : <span className="text-slate-400">—</span>}
                     </td>
-                    <td className="px-4 py-2 text-slate-500">{fmtRel(r.createdAt)}</td>
-                    <td className="px-4 py-2 text-slate-500">{fmtRel(r.lastLoginAt)}</td>
+                    <td className="px-4 py-2 text-slate-500">{fmtRel(r.createdAt, lang)}</td>
+                    <td className="px-4 py-2 text-slate-500">{fmtRel(r.lastLoginAt, lang)}</td>
                     <td className="px-4 py-2 text-center text-slate-700 dark:text-slate-200">
                       {r.mastersCount}
                     </td>
@@ -554,7 +566,7 @@ function AccountsTab() {
       {total > 0 && (
         <div className="flex items-center justify-between text-xs text-slate-500">
           <div>
-            {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} из {total.toLocaleString()}
+            {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} {t("gmCustomers.paginationOf", lang)} {total.toLocaleString()}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -563,7 +575,7 @@ function AccountsTab() {
               onClick={() => setPage(Math.max(0, page - 1))}
               className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800"
             >
-              <ArrowLeftCircle className="h-3.5 w-3.5" /> Назад
+              <ArrowLeftCircle className="h-3.5 w-3.5" /> {t("gmCustomers.paginationPrev", lang)}
             </button>
             <button
               type="button"
@@ -571,7 +583,7 @@ function AccountsTab() {
               onClick={() => setPage(page + 1)}
               className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800"
             >
-              Вперёд <ArrowRightCircle className="h-3.5 w-3.5" />
+              {t("gmCustomers.paginationNext", lang)} <ArrowRightCircle className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -590,21 +602,23 @@ function AccountsTab() {
 // ─── Subscribers tab ──────────────────────────────────────────────────
 
 function SubscribersTab() {
+  const { lang } = useLang();
   const [source, setSource] = useState("");
-  const [lang, setLang] = useState("");
+  // Subscriber's *content* language filter — distinct from the UI `lang`.
+  const [subLang, setSubLang] = useState("");
   const [confirmedOnly, setConfirmedOnly] = useState(false);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
     setPage(0);
-  }, [source, lang, confirmedOnly]);
+  }, [source, subLang, confirmedOnly]);
 
   const listQ = api.platformCustomers.listSubscribers.useQuery({
     page,
     pageSize: PAGE_SIZE,
     filters: {
       source: source || undefined,
-      lang: lang || undefined,
+      lang: subLang || undefined,
       confirmedOnly: confirmedOnly || undefined,
     },
   });
@@ -633,9 +647,9 @@ function SubscribersTab() {
   if (tableMissing) {
     return (
       <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6 text-sm text-amber-700 dark:text-amber-300">
-        <p className="font-semibold">Таблица ещё не создана.</p>
+        <p className="font-semibold">{t("gmCustomers.tableMissingTitle", lang)}</p>
         <p className="mt-1 text-xs">
-          Миграция таблицы подписчиков рассылки в работе. Подождите и обновите страницу.
+          {t("gmCustomers.tableMissingDesc", lang)}
         </p>
       </div>
     );
@@ -648,14 +662,14 @@ function SubscribersTab() {
         <SmallSelect
           value={source}
           onChange={setSource}
-          placeholder="Все источники"
+          placeholder={t("gmCustomers.allSources", lang)}
           options={sourceChoices.map((s) => ({ value: s, label: s }))}
           testId="subs-filter-source"
         />
         <SmallSelect
-          value={lang}
-          onChange={setLang}
-          placeholder="Все языки"
+          value={subLang}
+          onChange={setSubLang}
+          placeholder={t("gmCustomers.allLangs", lang)}
           options={langChoices.map((l) => ({ value: l, label: l.toUpperCase() }))}
           testId="subs-filter-lang"
         />
@@ -666,12 +680,12 @@ function SubscribersTab() {
             onChange={(e) => setConfirmedOnly(e.target.checked)}
             className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-violet-500"
           />
-          Только подтверждённые
+          {t("gmCustomers.confirmedOnly", lang)}
         </label>
         <span className="ml-auto text-[11px] text-slate-500">
           {listQ.isLoading
-            ? "загрузка…"
-            : `${total.toLocaleString()} всего${data?.table ? ` · из ${data.table}` : ""}`}
+            ? t("gmCustomers.loading", lang)
+            : `${total.toLocaleString()} ${t("gmCustomers.totalSuffix", lang)}${data?.table ? ` · ${t("gmCustomers.fromTable", lang)} ${data.table}` : ""}`}
         </span>
       </div>
 
@@ -687,7 +701,7 @@ function SubscribersTab() {
           <div className="px-4 py-12 text-center">
             <Mail className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-700" />
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Подписчиков пока нет.
+              {t("gmCustomers.subscribersEmpty", lang)}
             </p>
           </div>
         ) : (
@@ -695,12 +709,12 @@ function SubscribersTab() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-left dark:border-white/5">
-                  <th className="px-4 py-2 font-medium text-slate-500">Email</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Источник</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Язык</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Подтверждён</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Отписан</th>
-                  <th className="px-4 py-2 font-medium text-slate-500">Создан</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colEmail", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colSource", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colLang", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colConfirmed", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colUnsubscribed", lang)}</th>
+                  <th className="px-4 py-2 font-medium text-slate-500">{t("gmCustomers.colCreated", lang)}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -712,22 +726,22 @@ function SubscribersTab() {
                     <td className="px-4 py-2">
                       {r.confirmed ? (
                         <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="h-3 w-3" /> да
+                          <CheckCircle2 className="h-3 w-3" /> {t("gmCustomers.yes", lang)}
                         </span>
                       ) : (
-                        <span className="text-slate-400">нет</span>
+                        <span className="text-slate-400">{t("gmCustomers.no", lang)}</span>
                       )}
                     </td>
                     <td className="px-4 py-2">
                       {r.unsubscribed ? (
                         <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
-                          <XCircle className="h-3 w-3" /> да
+                          <XCircle className="h-3 w-3" /> {t("gmCustomers.yes", lang)}
                         </span>
                       ) : (
-                        <span className="text-slate-400">нет</span>
+                        <span className="text-slate-400">{t("gmCustomers.no", lang)}</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-slate-500">{fmtDate(r.createdAt)}</td>
+                    <td className="px-4 py-2 text-slate-500">{fmtDate(r.createdAt, lang)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -740,7 +754,7 @@ function SubscribersTab() {
       {total > 0 && (
         <div className="flex items-center justify-between text-xs text-slate-500">
           <div>
-            {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} из {total.toLocaleString()}
+            {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} {t("gmCustomers.paginationOf", lang)} {total.toLocaleString()}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -749,7 +763,7 @@ function SubscribersTab() {
               onClick={() => setPage(Math.max(0, page - 1))}
               className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800"
             >
-              <ArrowLeftCircle className="h-3.5 w-3.5" /> Назад
+              <ArrowLeftCircle className="h-3.5 w-3.5" /> {t("gmCustomers.paginationPrev", lang)}
             </button>
             <button
               type="button"
@@ -757,7 +771,7 @@ function SubscribersTab() {
               onClick={() => setPage(page + 1)}
               className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800"
             >
-              Вперёд <ArrowRightCircle className="h-3.5 w-3.5" />
+              {t("gmCustomers.paginationNext", lang)} <ArrowRightCircle className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>

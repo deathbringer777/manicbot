@@ -1,4 +1,4 @@
--- 0109_metrics_indexes.sql — 2026-06-05
+-- 0111_metrics_indexes.sql — 2026-06-06 (renumbered from 0109 after #365/#366 landed 0109/0110)
 --
 -- Supporting index for the corrected metrics layer. The Platform Customers list
 -- filters salon accounts by billing_status (inArray), and the future stored-

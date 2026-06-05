@@ -98,7 +98,9 @@ export function MySalonSection() {
     );
   }
 
-  if (profile.isError) {
+  // Guard null/undefined explicitly (previously masked by an `as any` cast that
+  // let undefined flow into child components typed as non-optional SalonProfile).
+  if (profile.isError || !profile.data) {
     return (
       <div className="glass-card rounded-2xl p-6 text-center">
         <p className="text-red-400">{t("common.errorLoading", lang)}</p>
@@ -106,9 +108,9 @@ export function MySalonSection() {
     );
   }
 
-  const data = profile.data as any;
+  const data = profile.data;
   const isPublic = !!data?.publicActive;
-  const slug = data?.slug as string | null;
+  const slug = data?.slug ?? null;
 
   return (
     <div className="space-y-3">

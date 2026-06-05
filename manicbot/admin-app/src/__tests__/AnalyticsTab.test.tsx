@@ -46,6 +46,10 @@ let buildLinksMock: { data: { token: string; links: Array<{ label: string; url: 
   isError: false,
   error: null,
 };
+let myMetricsMock: { data: { clientsProcessed: number; appointmentsTotal: number; appointmentsThisMonth: number } | undefined; isLoading: boolean } = {
+  data: { clientsProcessed: 0, appointmentsTotal: 0, appointmentsThisMonth: 0 },
+  isLoading: false,
+};
 
 vi.mock("~/trpc/react", () => ({
   api: {
@@ -54,6 +58,9 @@ vi.mock("~/trpc/react", () => ({
       getAcquisition: { useQuery: () => acquisitionMock },
       getTopCampaigns: { useQuery: () => topCampaignsMock },
       buildTrackingLinks: { useQuery: () => buildLinksMock },
+    },
+    salon: {
+      getMyMetrics: { useQuery: () => myMetricsMock },
     },
   },
 }));

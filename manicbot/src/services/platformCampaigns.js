@@ -31,6 +31,7 @@ import {
   renderAnnouncementBodies,
   formatRenewalDate,
 } from './platformCampaignStats.js';
+import { buildCampaignVars } from './platformCampaignVars.js';
 import { deliverEmail } from './platformCampaignEmail.js';
 
 const NOT_DUE = Object.freeze({ due: false, occurrenceKey: null });
@@ -261,7 +262,7 @@ async function loadTenantRow(ctx) {
 async function resolveTenantRecipients(ctx) {
   const rows = await dbAll(
     ctx,
-    "SELECT id, lang, email, email_verified FROM web_users WHERE tenant_id = ? AND role IN ('tenant_owner', 'tenant_manager') AND email NOT LIKE '%manicbot.local'",
+    "SELECT id, lang, email, email_verified, name FROM web_users WHERE tenant_id = ? AND role IN ('tenant_owner', 'tenant_manager') AND email NOT LIKE '%manicbot.local'",
     ctx.tenantId,
   ).catch(() => []);
   return rows || [];
@@ -436,7 +437,8 @@ async function buildBodies(ctx, campaign, tenant, recipient, occurrenceKey) {
       locale, ctx,
     );
   }
-  return renderAnnouncementBodies(campaign, locale, ctx);
+  const vars = buildCampaignVars(tenant, recipient);
+  return renderAnnouncementBodies(campaign, locale, ctx, vars);
 }
 
 async function maybeFinalizeOnce(ctx, campaign, nowSec) {

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Megaphone, MessageSquare } from "lucide-react";
+import { ArrowLeft, MessageSquare } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useMessagesTenantId } from "./useMessagesTenantId";
 import { useMessengerSocket } from "~/hooks/useMessengerSocket";
@@ -135,8 +136,21 @@ export default function MessagesClient() {
             }`}
             data-testid="platform-owner-entry"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-fuchsia-500/15 text-fuchsia-600">
-              <Megaphone className="h-4 w-4" />
+            <div className="relative shrink-0">
+              <Image
+                src="/manicbot-mark-ui.png"
+                alt="ManicBot"
+                width={36}
+                height={36}
+                className="h-9 w-9 rounded-full object-cover"
+              />
+              {platformUnread > 0 && (
+                <span
+                  className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-rose-500 dark:border-slate-900"
+                  data-testid="platform-avatar-dot"
+                  aria-label={t("messenger.platformUnread", lang)}
+                />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">

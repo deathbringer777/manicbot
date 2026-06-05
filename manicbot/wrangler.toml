@@ -43,15 +43,13 @@ RETENTION_DRY_RUN = "0"
 # pinned here so the Worker doesn't have to query R2 for the URL.
 MARKETING_ASSETS_PUBLIC_URL = "https://pub-1dff67fc0bd644c59f1677cb5d553ce6.r2.dev"
 # Master kill switch for the @manicbot_com IG autopilot cron phase.
-# Default "0" — cron will SKIP the phase, no captions/images/posts created.
-# Flip to "1" via Cloudflare dashboard once these are all in place:
-#   - Meta App approved for `instagram_content_publish`
-#   - wrangler secret put ANTHROPIC_API_KEY
-#   - wrangler secret put MARKETING_IG_PAGE_ID
-#   - wrangler secret put MARKETING_IG_ACCESS_TOKEN
-# Manual triggers via /admin/marketing-tick + /admin/marketing-publish-one
-# ignore this flag (always run, useful for testing before flipping live).
-MARKETING_AUTOPILOT_ENABLED = "0"
+# "0" — cron SKIPs the phase (no captions/images/posts). "1" — live.
+# Enabled 2026-06-05: the autopilot is now self-sufficient, no external keys —
+#   - IG publish token read + decrypted from channel_configs (MARKETING_IG_TENANT_ID, #367)
+#   - captions on Workers AI when ANTHROPIC_API_KEY unset (#368); images on flux (env.AI)
+#   - IGAA tokens auto-route to graph.instagram.com
+# Manual triggers /admin/marketing-tick + /admin/marketing-publish-one ignore this flag.
+MARKETING_AUTOPILOT_ENABLED = "1"
 
 # Tenant whose `channel_configs` Instagram row holds the @manicbot_com publishing
 # token (connected via the product's Instagram-login OAuth: long-lived, auto-refreshed,

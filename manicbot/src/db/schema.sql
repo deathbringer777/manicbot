@@ -1721,7 +1721,7 @@ CREATE INDEX IF NOT EXISTS idx_platform_campaigns_kind
   ON platform_campaigns(kind);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_campaigns_singleton_kind
   ON platform_campaigns(kind)
-  WHERE kind IN ('monthly_report', 'subscription_reminder');
+  WHERE kind IN ('monthly_report', 'subscription_reminder', 'welcome');
 
 CREATE TABLE IF NOT EXISTS platform_campaign_deliveries (
   id                    TEXT PRIMARY KEY,

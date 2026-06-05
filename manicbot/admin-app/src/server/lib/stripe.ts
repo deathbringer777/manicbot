@@ -218,12 +218,28 @@ export interface StripeSubscription {
   status: string;
   cancel_at_period_end?: boolean;
   current_period_end?: number;
+  /** Attached subscription_schedule id when a phased change (e.g. a downgrade) is pending. */
+  schedule?: string | null;
+  /** Present (non-null) while payment collection is paused. */
+  pause_collection?: { behavior?: string; resumes_at?: number | null } | null;
   items?: {
     data?: Array<{
+      id?: string;
       plan?: { interval?: "month" | "year"; interval_count?: number };
-      price?: { recurring?: { interval?: "month" | "year" } };
+      price?: { id?: string; recurring?: { interval?: "month" | "year" } };
     }>;
   };
+}
+
+/** Minimal shape of a Stripe subscription_schedule we read back. */
+interface StripeSchedule {
+  id: string;
+  status?: string;
+  phases?: Array<{
+    start_date?: number;
+    end_date?: number;
+    items?: Array<{ price?: string | { id?: string }; quantity?: number }>;
+  }>;
 }
 
 export async function retrieveSubscription(
@@ -515,4 +531,134 @@ export async function cancelSubscriptionAtPeriodEnd(
   return await stripePost(secretKey, `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
     cancel_at_period_end: "true",
   });
+}
+
+// ─── In-app subscription self-service (plan change + pause) ──────────────────
+
+/**
+ * UPGRADE — replace the subscription item's price immediately and bill the
+ * prorated difference now. `proration_behavior=always_invoice` invoices the
+ * delta straight away; `payment_behavior=error_if_incomplete` makes a failed
+ * charge throw (so the caller can surface it) instead of silently leaving the
+ * subscription in an incomplete/past_due state. We pass `items[0][id]` so the
+ * existing item is REPLACED — omitting it would add a second active price.
+ */
+export async function changeSubscriptionPlanImmediate(
+  secretKey: string,
+  subscriptionId: string,
+  itemId: string,
+  newPriceId: string,
+): Promise<StripeSubscription> {
+  return await stripePost(secretKey, `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    "items[0][id]": itemId,
+    "items[0][price]": newPriceId,
+    proration_behavior: "always_invoice",
+    payment_behavior: "error_if_incomplete",
+  });
+}
+
+/**
+ * DOWNGRADE at the period boundary, no refund. Stripe can only defer a price
+ * change to period end via a subscription_schedule:
+ *   1. create a schedule FROM the subscription → one phase mirroring it now;
+ *   2. append a 2nd phase at the cheaper price with `proration_behavior=none`,
+ *      echoing phase 0 exactly (price IDs only, per Stripe's guidance) and
+ *      `end_behavior=release` so the sub continues normally on the new price.
+ * The subscription keeps its current (higher) plan until `effectiveAt`
+ * (= the current period end); the cheaper price then takes over with no credit.
+ */
+export async function scheduleDowngradeAtPeriodEnd(
+  secretKey: string,
+  subscriptionId: string,
+  newPriceId: string,
+): Promise<{ scheduleId: string; effectiveAt: number }> {
+  const created = await stripePost<StripeSchedule>(secretKey, "/subscription_schedules", {
+    from_subscription: subscriptionId,
+  });
+  const phase0 = created.phases?.[0];
+  const rawPrice = phase0?.items?.[0]?.price;
+  const currentPriceId = typeof rawPrice === "string" ? rawPrice : rawPrice?.id;
+  if (!phase0?.start_date || !phase0?.end_date || !currentPriceId) {
+    throw new Error("subscription_schedule_phase_incomplete");
+  }
+  const updated = await stripePost<StripeSchedule>(
+    secretKey,
+    `/subscription_schedules/${encodeURIComponent(created.id)}`,
+    {
+      end_behavior: "release",
+      "phases[0][items][0][price]": currentPriceId,
+      "phases[0][items][0][quantity]": "1",
+      "phases[0][start_date]": String(phase0.start_date),
+      "phases[0][end_date]": String(phase0.end_date),
+      "phases[1][items][0][price]": newPriceId,
+      "phases[1][items][0][quantity]": "1",
+      "phases[1][proration_behavior]": "none",
+    },
+  );
+  return { scheduleId: updated.id, effectiveAt: phase0.end_date };
+}
+
+/**
+ * Undo a pending downgrade: release the schedule and leave the underlying
+ * subscription unchanged. Valid while the schedule is `not_started`/`active`.
+ */
+export async function releaseScheduledChange(
+  secretKey: string,
+  scheduleId: string,
+): Promise<{ id: string; status?: string }> {
+  return await stripePost(
+    secretKey,
+    `/subscription_schedules/${encodeURIComponent(scheduleId)}/release`,
+    {},
+  );
+}
+
+/**
+ * PAUSE payment collection (`void` — no charges and no draft invoices accrue
+ * during the pause). The Stripe subscription `status` stays `active`; we treat
+ * the presence of `pause_collection` as our own `paused` billing_status via the
+ * webhook. Optional `resumesAt` auto-resumes collection at that time.
+ */
+export async function pauseSubscription(
+  secretKey: string,
+  subscriptionId: string,
+  resumesAt?: number | null,
+): Promise<StripeSubscription> {
+  const data: Record<string, string> = { "pause_collection[behavior]": "void" };
+  if (resumesAt) data["pause_collection[resumes_at]"] = String(resumesAt);
+  return await stripePost(secretKey, `/subscriptions/${encodeURIComponent(subscriptionId)}`, data);
+}
+
+/** RESUME billing — clear `pause_collection` (empty string unsets the field). */
+export async function resumeSubscription(
+  secretKey: string,
+  subscriptionId: string,
+): Promise<StripeSubscription> {
+  return await stripePost(secretKey, `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    pause_collection: "",
+  });
+}
+
+/**
+ * Preview the prorated amount an UPGRADE would charge now, without modifying the
+ * subscription — Stripe's upcoming-invoice preview. Used to show "you'll be
+ * charged ~X" before the user confirms.
+ */
+export async function previewPlanChange(
+  secretKey: string,
+  subscriptionId: string,
+  itemId: string,
+  newPriceId: string,
+): Promise<{ amountDue: number; currency: string }> {
+  const inv = await stripeGet<{ amount_due?: number; currency?: string }>(
+    secretKey,
+    "/invoices/upcoming",
+    {
+      subscription: subscriptionId,
+      "subscription_items[0][id]": itemId,
+      "subscription_items[0][price]": newPriceId,
+      subscription_proration_behavior: "always_invoice",
+    },
+  );
+  return { amountDue: inv.amount_due ?? 0, currency: inv.currency ?? "pln" };
 }

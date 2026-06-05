@@ -84,7 +84,10 @@ describe("clients router — cross-tenant isolation", () => {
   // ≠ input.tenantId for tenant_owner role.
   const procedures: Array<{ name: keyof ReturnType<typeof createCaller>; input: any }> = [
     { name: "list", input: { tenantId: FOREIGN_TENANT } },
+    { name: "listMatchingIds", input: { tenantId: FOREIGN_TENANT } },
     { name: "get", input: { tenantId: FOREIGN_TENANT, chatId: 1 } },
+    { name: "bulkDelete", input: { tenantId: FOREIGN_TENANT, chatIds: [1] } },
+    { name: "bulkSetGlobalBlock", input: { tenantId: FOREIGN_TENANT, chatIds: [1], blocked: true } },
     { name: "create", input: { tenantId: FOREIGN_TENANT, name: "X", contacts: { phone: "+48000" } } },
     { name: "update", input: { tenantId: FOREIGN_TENANT, chatId: 1, patch: { name: "Y" } } },
     { name: "delete", input: { tenantId: FOREIGN_TENANT, chatId: 1 } },

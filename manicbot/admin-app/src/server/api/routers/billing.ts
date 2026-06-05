@@ -510,6 +510,27 @@ export const billingRouter = createTRPCRouter({
         throw new TRPCError({ code: "FORBIDDEN", message: "offer_not_eligible" });
       }
 
+      // STRIPE-OFFER-01 — re-derive the offer from the LIVE subscription; never
+      // trust the client's `offerType`. The two offers carry different coupon
+      // economics (monthly = 50% repeating for 3 months; annual = 25% once). A
+      // repeating-3-month coupon applied to a YEARLY invoice discounts the whole
+      // year (the single invoice that falls inside the 3-month window), so an
+      // annual subscriber sending `monthly_50_3m` would get 50% off a full year
+      // instead of 25%. Reject any offerType that doesn't match the real billing
+      // interval BEFORE minting or applying anything.
+      const sub = await retrieveSubscription(stripeKey, tenant.stripeSubscriptionId);
+      if (!sub) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "stripe_subscription_missing" });
+      }
+      const subItem = sub.items?.data?.[0];
+      const subInterval =
+        subItem?.price?.recurring?.interval ?? subItem?.plan?.interval ?? "month";
+      const expectedOfferType: RetentionOfferType =
+        subInterval === "year" ? "annual_25_1y" : "monthly_50_3m";
+      if (input.offerType !== expectedOfferType) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "offer_type_mismatch" });
+      }
+
       const offer = RETENTION_OFFERS[input.offerType];
       await ensureCoupon(stripeKey, offer.code, offer.percentOff, {
         duration: offer.duration,
@@ -517,7 +538,7 @@ export const billingRouter = createTRPCRouter({
       });
       await applyCouponToSubscription(stripeKey, tenant.stripeSubscriptionId, offer.code);
 
-      const intervalAtCancel = input.offerType === "annual_25_1y" ? "year" : "month";
+      const intervalAtCancel = subInterval === "year" ? "year" : "month";
 
       await ctx.db.insert(subscriptionCancellations).values({
         tenantId: input.tenantId,

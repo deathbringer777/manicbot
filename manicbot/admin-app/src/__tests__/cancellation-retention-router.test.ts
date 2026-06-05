@@ -275,6 +275,12 @@ describe("acceptRetentionOffer — happy path + edges", () => {
   it("mints idempotent coupon then applies it to subscription (monthly path)", async () => {
     // select #1 → tenant row; select #2 → cooldown probe (empty = eligible)
     const { db, insertCalls } = createDbMock([[tenantRow()], []]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
     vi.mocked(ensureCoupon).mockResolvedValueOnce({
       id: "RETENTION_MONTHLY_50_3M",
       percent_off: 50,
@@ -323,6 +329,12 @@ describe("acceptRetentionOffer — happy path + edges", () => {
   it("annual coupon uses duration=once, not repeating", async () => {
     // select #1 → tenant row; select #2 → cooldown probe (empty = eligible)
     const { db } = createDbMock([[tenantRow()], []]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "year" } } }] },
+    });
     vi.mocked(ensureCoupon).mockResolvedValueOnce({
       id: "RETENTION_ANNUAL_25_1Y",
       percent_off: 25,
@@ -359,6 +371,14 @@ describe("acceptRetentionOffer — happy path + edges", () => {
       [tenantRow()], [],            // call 1 selects
       [tenantRow()], [{ id: 99 }],  // call 2 selects (cooldown hit)
     ]);
+    // Only call 1 reaches the live-sub fetch (call 2 is blocked at the cooldown
+    // check before retrieve), so a single once-mock is enough.
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
     vi.mocked(ensureCoupon).mockResolvedValue({
       id: "RETENTION_MONTHLY_50_3M",
       percent_off: 50,
@@ -400,6 +420,58 @@ describe("acceptRetentionOffer — happy path + edges", () => {
 
     expect(ensureCoupon).not.toHaveBeenCalled();
     expect(applyCouponToSubscription).not.toHaveBeenCalled();
+  });
+
+  // STRIPE-OFFER-01 — anti-exploit: the accept step must re-derive the offer
+  // from the LIVE subscription interval, not trust the client's `offerType`.
+  // A repeating-3-month 50% coupon applied to a YEARLY invoice discounts the
+  // entire year (the single invoice that falls inside the 3-month window) — so
+  // an annual subscriber sending `monthly_50_3m` would get 50% off a full year
+  // instead of the intended 25%. The mutation must reject an offerType that
+  // does not match the subscription's billing interval, BEFORE minting/applying.
+  it("rejects monthly offer on a YEARLY sub (the 50%-off-a-year exploit) — coupon never minted", async () => {
+    const { db, insertCalls } = createDbMock([[tenantRow()], []]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "year" } } }] },
+    });
+
+    const caller = ownerCaller(db);
+    await expect(
+      caller.acceptRetentionOffer({ tenantId: TENANT, offerType: "monthly_50_3m" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "offer_type_mismatch" });
+
+    expect(ensureCoupon).not.toHaveBeenCalled();
+    expect(applyCouponToSubscription).not.toHaveBeenCalled();
+    expect(insertCalls.length).toBe(0);
+  });
+
+  it("rejects annual offer on a MONTHLY sub (offer_type_mismatch)", async () => {
+    const { db } = createDbMock([[tenantRow()], []]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
+
+    const caller = ownerCaller(db);
+    await expect(
+      caller.acceptRetentionOffer({ tenantId: TENANT, offerType: "annual_25_1y" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "offer_type_mismatch" });
+    expect(applyCouponToSubscription).not.toHaveBeenCalled();
+  });
+
+  it("throws stripe_subscription_missing when the live sub is gone", async () => {
+    const { db } = createDbMock([[tenantRow()], []]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce(null);
+    const caller = ownerCaller(db);
+    await expect(
+      caller.acceptRetentionOffer({ tenantId: TENANT, offerType: "monthly_50_3m" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "stripe_subscription_missing" });
+    expect(ensureCoupon).not.toHaveBeenCalled();
   });
 });
 

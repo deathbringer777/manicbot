@@ -33,19 +33,22 @@ export function MasterProfileSection() {
 
   useEffect(() => {
     if (profile.data) {
-      setBio((profile.data as any).bio ?? "");
-      setPortfolio(Array.isArray((profile.data as any).portfolio) ? (profile.data as any).portfolio : []);
+      setBio(profile.data.bio ?? "");
+      setPortfolio(Array.isArray(profile.data.portfolio) ? profile.data.portfolio : []);
     }
   }, [profile.data]);
 
   if (profile.isLoading) {
     return <Loader2 className="animate-spin text-brand-400 mx-auto mt-8" />;
   }
-  if (profile.isError) {
+  // Guard the null/undefined case explicitly (getMyProfile returns null when
+  // no master row exists) — previously masked by an `as any` cast, which let
+  // unguarded `data.*` accesses through and could render a broken section.
+  if (profile.isError || !profile.data) {
     return <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>;
   }
 
-  const data = profile.data as any;
+  const data = profile.data;
 
   return (
     <div className="space-y-4">

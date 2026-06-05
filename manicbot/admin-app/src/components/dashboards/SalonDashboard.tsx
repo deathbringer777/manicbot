@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
   Settings, ChevronLeft, ChevronRight, AlertCircle,
-  Loader2, Plus, Pencil, Trash2, Save, X,
+  Loader2, Plus, Pencil, Trash2, Save, X, Search,
   Eye, EyeOff, Globe, ExternalLink, MapPin, ToggleLeft, ToggleRight,
   Star, MessageSquare, Reply, Camera, Tag, ImageIcon, Copy,
   Palette, Phone, Instagram as InstagramIcon, Clock,
@@ -1531,6 +1531,11 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   const [showTemplates, setShowTemplates] = useState(false);
   const [masterModal, setMasterModal] = useState<"telegram" | "create" | "invite" | null>(null);
   const [masterDetailChatId, setMasterDetailChatId] = useState<number | null>(null);
+  // Masters tab — search + filters (client-side; the list is tiny, <~20 rows).
+  const [masterSearch, setMasterSearch] = useState("");
+  const [masterStatus, setMasterStatus] = useState<"all" | "active" | "hidden" | "vacation">("all");
+  const [masterType, setMasterType] = useState<"all" | "web" | "telegram">("all");
+  const [masterSort, setMasterSort] = useState<"default" | "name">("default");
   const [deleteSvcConfirm, setDeleteSvcConfirm] = useState<{ active: boolean; svcId: string | null }>({ active: false, svcId: null });
   // 2026-05-17: master-row deletion moved into MasterDetailModal (Clients-tab
   // parity). The previous inline trash button is gone; the standalone confirm
@@ -1679,6 +1684,42 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
       enabled: tab === "masters" || tab === "appointments" || tab === "overview",
     },
   );
+  // Masters tab — derived view after search/status/type filters + sort. Pure
+  // client-side: the master list is small, so no server round-trip is needed.
+  const visibleMasters = useMemo(() => {
+    let rows = (mastersList.data ?? []) as Array<Record<string, any>>;
+    const q = masterSearch.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((m) =>
+        (m.name ?? `#${m.chatId}`).toString().toLowerCase().includes(q),
+      );
+    }
+    if (masterType !== "all") {
+      rows = rows.filter(
+        (m) => (Number(m.chatId) >= 10_000_000_000 ? "web" : "telegram") === masterType,
+      );
+    }
+    if (masterStatus !== "all") {
+      const nowSec = Math.floor(Date.now() / 1000);
+      rows = rows.filter((m) => {
+        const onVac =
+          m.onVacation === 1 ||
+          (typeof m.vacationFrom === "number" &&
+            typeof m.vacationUntil === "number" &&
+            m.vacationFrom <= nowSec &&
+            nowSec <= m.vacationUntil);
+        if (masterStatus === "hidden") return m.publicHidden === 1;
+        if (masterStatus === "vacation") return onVac;
+        return m.publicHidden !== 1 && !onVac; // "active"
+      });
+    }
+    if (masterSort === "name") {
+      rows = [...rows].sort((a, b) =>
+        (a.name ?? "").toString().localeCompare((b.name ?? "").toString()),
+      );
+    }
+    return rows;
+  }, [mastersList.data, masterSearch, masterStatus, masterType, masterSort]);
   // Auto-confirm settings — surfaced in the calendar left rail so the
   // owner can flip channels without leaving the appointments view.
   // Auto-confirm settings used to live on the appointments rail; they
@@ -2696,8 +2737,103 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           <PendingInvitationsStrip tenantId={tenantId} />
           {mastersList.isLoading && <Loader2 className="animate-spin text-brand-400 mx-auto" />}
           {mastersList.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
+
+          {/* Search + filters — shown only when the salon has masters to filter. */}
+          {(mastersList.data?.length ?? 0) > 0 && (
+            <div className="space-y-2" data-testid="masters-filter-bar">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={masterSearch}
+                  onChange={(e) => setMasterSearch(e.target.value)}
+                  placeholder={t("masters.search.placeholder", lang)}
+                  data-testid="masters-search"
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-8 text-sm text-slate-900 outline-none transition focus:border-brand-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:focus:border-violet-400"
+                />
+                {masterSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setMasterSearch("")}
+                    aria-label={t("common.close", lang)}
+                    data-testid="masters-search-clear"
+                    className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {/* Status + account-type chips */}
+              <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 scrollbar-none">
+                {([
+                  { value: "all", key: "masters.filter.status.all" },
+                  { value: "active", key: "masters.filter.status.active" },
+                  { value: "hidden", key: "masters.filter.status.hidden" },
+                  { value: "vacation", key: "masters.filter.status.vacation" },
+                ] as const).map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => setMasterStatus(o.value)}
+                    data-testid={`masters-filter-status-${o.value}`}
+                    data-active={masterStatus === o.value ? "1" : "0"}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-medium transition ${
+                      masterStatus === o.value
+                        ? "border border-brand-500/30 bg-brand-500/20 text-brand-400"
+                        : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300"
+                    }`}
+                  >
+                    {t(o.key, lang)}
+                  </button>
+                ))}
+                <span className="mx-0.5 h-4 w-px shrink-0 self-center bg-slate-200 dark:bg-white/10" />
+                {([
+                  { value: "all", key: "masters.filter.type.all" },
+                  { value: "web", key: "masters.filter.type.web" },
+                  { value: "telegram", key: "masters.filter.type.telegram" },
+                ] as const).map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => setMasterType(o.value)}
+                    data-testid={`masters-filter-type-${o.value}`}
+                    data-active={masterType === o.value ? "1" : "0"}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-medium transition ${
+                      masterType === o.value
+                        ? "border border-brand-500/30 bg-brand-500/20 text-brand-400"
+                        : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300"
+                    }`}
+                  >
+                    {t(o.key, lang)}
+                  </button>
+                ))}
+              </div>
+              {/* Sort */}
+              <div className="-mx-1 flex gap-1 overflow-x-auto px-1 scrollbar-none">
+                {([
+                  { value: "default", key: "masters.sort.default" },
+                  { value: "name", key: "masters.sort.name" },
+                ] as const).map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => setMasterSort(o.value)}
+                    data-testid={`masters-sort-${o.value}`}
+                    className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs transition ${
+                      masterSort === o.value
+                        ? "bg-brand-500/15 text-brand-400"
+                        : "text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5"
+                    }`}
+                  >
+                    {t(o.key, lang)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
-            {mastersList.data?.map((m: any) => {
+            {visibleMasters.map((m: any) => {
               const isWebAccount = m.chatId >= 10_000_000_000;
               const isHidden = m.publicHidden === 1;
               // Live vacation derivation — mirrors publicSalon.getProfile so the
@@ -2760,6 +2896,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                 icon={UserCheck}
                 title={t("salon.noMasters", lang)}
                 description={t("salon.empty.masters", lang)}
+              />
+            )}
+            {(mastersList.data?.length ?? 0) > 0 && visibleMasters.length === 0 && (
+              <EmptyState
+                icon={Search}
+                title={t("masters.noMatches", lang)}
+                description={t("masters.noMatches.hint", lang)}
               />
             )}
           </div>

@@ -1,4 +1,11 @@
--- 0112_appointments_followup_marker.sql — 2026-06-06
+-- 0112a_appointments_followup_marker.sql — 2026-06-06
+--
+-- Renumbered 0112 → 0112a (a-suffix slot-in, like 0012a) to resolve a duplicate
+-- migration number: #379 landed this as 0112 while #377 had already taken 0112
+-- with 0112_drop_reminders_tables.sql, which red-lined check-migrations and
+-- silently skipped every deploy since. wrangler orders 0112 < 0112a < 0113, and
+-- this migration had never applied to prod (deploys were blocked), so the rename
+-- is safe — it applies fresh as 0112a.
 --
 -- Post-visit follow-up (24h after a visit): idempotency marker for the new
 -- `phasePostVisitFollowup` cron sweep. NULL = no follow-up sent yet; the sweep

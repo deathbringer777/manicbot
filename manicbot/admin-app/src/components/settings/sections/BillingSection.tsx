@@ -34,6 +34,17 @@ const LABELS: Record<Lang, {
   trialExpiredTitle: string;
   trialExpiredDesc: string;
   trialExpiredCta: string;
+  lockedBadge: string;
+  compedUntil: string;
+  renewsOn: string;
+  activeUntil: string;
+  cancellingNote: string;
+  trialEndsOn: string;
+  paymentIssueUntil: string;
+  usageMasters: string;
+  usageUnlimited: string;
+  invoicesTitle: string;
+  invoiceReceipt: string;
   godMode: string;
   godModeDesc: string;
 }> = {
@@ -42,7 +53,7 @@ const LABELS: Record<Lang, {
     subscribe: "Попробовать",
     current: "Текущий",
     upgrade: "Перейти",
-    manageSub: "Управление подпиской",
+    manageSub: "Платёжные данные и карта",
     cancelSub: "Отменить подписку",
     perMonth: "/мес",
     popular: "Популярный",
@@ -52,9 +63,20 @@ const LABELS: Record<Lang, {
     paySuccess: "Оплата прошла успешно",
     paySuccessDesc: "Ваша подписка активна.",
     close: "Закрыть",
-    trialExpiredTitle: "Пробный период завершён",
-    trialExpiredDesc: "Выберите тариф ниже, чтобы продолжить пользоваться ManicBot. Бот и все функции приостановлены до активации подписки.",
+    trialExpiredTitle: "Доступ к панели ограничен",
+    trialExpiredDesc: "Выберите тариф ниже, чтобы вернуть доступ к панели. Бот и все функции приостановлены до активации подписки.",
     trialExpiredCta: "Выберите тариф",
+    lockedBadge: "Доступ ограничен",
+    compedUntil: "Бесплатный доступ до",
+    renewsOn: "Следующее списание",
+    activeUntil: "Активна до",
+    cancellingNote: "Подписка отменяется",
+    trialEndsOn: "Пробный период до",
+    paymentIssueUntil: "Проблема с оплатой · доступ до",
+    usageMasters: "Мастеров",
+    usageUnlimited: "без лимита",
+    invoicesTitle: "История платежей",
+    invoiceReceipt: "Чек",
     godMode: "God Mode",
     godModeDesc: "Все функции платформы разблокированы. Подписка не требуется.",
   },
@@ -63,7 +85,7 @@ const LABELS: Record<Lang, {
     subscribe: "Спробувати",
     current: "Поточний",
     upgrade: "Перейти",
-    manageSub: "Керування підпискою",
+    manageSub: "Платіжні дані та картка",
     cancelSub: "Скасувати підписку",
     perMonth: "/міс",
     popular: "Популярний",
@@ -73,9 +95,20 @@ const LABELS: Record<Lang, {
     paySuccess: "Оплата пройшла успішно",
     paySuccessDesc: "Ваша підписка активна.",
     close: "Закрити",
-    trialExpiredTitle: "Пробний період завершено",
-    trialExpiredDesc: "Оберіть тариф нижче, щоб продовжити користуватися ManicBot. Бот та всі функції призупинено до активації підписки.",
+    trialExpiredTitle: "Доступ до панелі обмежено",
+    trialExpiredDesc: "Оберіть тариф нижче, щоб повернути доступ до панелі. Бот та всі функції призупинено до активації підписки.",
     trialExpiredCta: "Оберіть тариф",
+    lockedBadge: "Доступ обмежено",
+    compedUntil: "Безкоштовний доступ до",
+    renewsOn: "Наступне списання",
+    activeUntil: "Активна до",
+    cancellingNote: "Підписка скасовується",
+    trialEndsOn: "Пробний період до",
+    paymentIssueUntil: "Проблема з оплатою · доступ до",
+    usageMasters: "Майстрів",
+    usageUnlimited: "без ліміту",
+    invoicesTitle: "Історія платежів",
+    invoiceReceipt: "Чек",
     godMode: "God Mode",
     godModeDesc: "Всі функції платформи розблоковано. Підписка не потрібна.",
   },
@@ -84,7 +117,7 @@ const LABELS: Record<Lang, {
     subscribe: "Try it",
     current: "Current",
     upgrade: "Upgrade",
-    manageSub: "Manage subscription",
+    manageSub: "Payment details & card",
     cancelSub: "Cancel subscription",
     perMonth: "/mo",
     popular: "Popular",
@@ -94,9 +127,20 @@ const LABELS: Record<Lang, {
     paySuccess: "Payment successful",
     paySuccessDesc: "Your subscription is now active.",
     close: "Close",
-    trialExpiredTitle: "Trial period ended",
-    trialExpiredDesc: "Choose a plan below to continue using ManicBot. Your bot and all features are paused until a subscription is active.",
+    trialExpiredTitle: "Dashboard access is limited",
+    trialExpiredDesc: "Choose a plan below to restore dashboard access. Your bot and all features are paused until a subscription is active.",
     trialExpiredCta: "Choose a plan",
+    lockedBadge: "Access limited",
+    compedUntil: "Free access until",
+    renewsOn: "Next charge",
+    activeUntil: "Active until",
+    cancellingNote: "Subscription is ending",
+    trialEndsOn: "Trial ends",
+    paymentIssueUntil: "Payment issue · access until",
+    usageMasters: "Specialists",
+    usageUnlimited: "unlimited",
+    invoicesTitle: "Payment history",
+    invoiceReceipt: "Receipt",
     godMode: "God Mode",
     godModeDesc: "All platform features are unlocked. No subscription required.",
   },
@@ -105,7 +149,7 @@ const LABELS: Record<Lang, {
     subscribe: "Wypróbuj",
     current: "Obecny",
     upgrade: "Zmień",
-    manageSub: "Zarządzanie subskrypcją",
+    manageSub: "Dane płatności i karta",
     cancelSub: "Anuluj subskrypcję",
     perMonth: "/mies",
     popular: "Popularny",
@@ -115,9 +159,20 @@ const LABELS: Record<Lang, {
     paySuccess: "Płatność zakończona sukcesem",
     paySuccessDesc: "Twoja subskrypcja jest aktywna.",
     close: "Zamknij",
-    trialExpiredTitle: "Okres próbny zakończony",
-    trialExpiredDesc: "Wybierz plan poniżej, aby kontynuować korzystanie z ManicBot. Bot i wszystkie funkcje są wstrzymane do aktywacji subskrypcji.",
+    trialExpiredTitle: "Dostęp do panelu jest ograniczony",
+    trialExpiredDesc: "Wybierz plan poniżej, aby przywrócić dostęp do panelu. Bot i wszystkie funkcje są wstrzymane do aktywacji subskrypcji.",
     trialExpiredCta: "Wybierz plan",
+    lockedBadge: "Dostęp ograniczony",
+    compedUntil: "Darmowy dostęp do",
+    renewsOn: "Następne obciążenie",
+    activeUntil: "Aktywna do",
+    cancellingNote: "Subskrypcja jest anulowana",
+    trialEndsOn: "Okres próbny do",
+    paymentIssueUntil: "Problem z płatnością · dostęp do",
+    usageMasters: "Specjalistów",
+    usageUnlimited: "bez limitu",
+    invoicesTitle: "Historia płatności",
+    invoiceReceipt: "Paragon",
     godMode: "God Mode",
     godModeDesc: "Wszystkie funkcje platformy są odblokowane. Subskrypcja nie jest wymagana.",
   },
@@ -205,6 +260,11 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
   const utils = api.useUtils();
   const billing = api.salon.getBillingStatus.useQuery({ tenantId });
   const plans = api.salon.getPlans.useQuery();
+  // Inline payment history — only fetched once we know a Stripe customer exists.
+  const invoices = api.salon.listInvoices.useQuery(
+    { tenantId },
+    { enabled: !!billing.data?.stripeCustomerId },
+  );
 
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [retentionOpen, setRetentionOpen] = useState(false);
@@ -259,13 +319,68 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
   const currentPlan = billing.data?.plan ?? "start";
   const billingStatus = billing.data?.billingStatus ?? "trialing";
   const hasStripeCustomer = !!billing.data?.stripeCustomerId;
-  const isTrialExpired = billingStatus === "inactive" && !hasStripeCustomer;
+  // A real Stripe subscription must back the plan for "Cancel subscription" to
+  // mean anything. A comped grant may have a customer but no subscription.
+  const hasActiveSubscription = !!billing.data?.hasActiveSubscription;
+  const isComped = !!billing.data?.isComped;
+  // "Locked" = access has lapsed (expired trial, churned/cancelled, or any
+  // terminal inactive state). Comped grants are `active`, so never locked.
+  const isBillingLocked = billingStatus === "inactive" || billingStatus === "canceled";
 
   const trialDaysLeft = (() => {
     if (billingStatus !== "trialing" || !billing.data?.trialEndsAt) return null;
     const diff = billing.data.trialEndsAt - Math.floor(Date.now() / 1000);
     return Math.max(0, Math.ceil(diff / 86400));
   })();
+
+  // Shared short-date formatter (locale-aware; 'ua' → 'uk' for Intl).
+  const fmtDate = (sec: number) =>
+    new Date(sec * 1000).toLocaleDateString(lang === "ua" ? "uk" : lang, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+  // Comped "free until <date>" badge in the status card.
+  const compedUntil =
+    isComped && billing.data?.currentPeriodEnd ? fmtDate(billing.data.currentPeriodEnd) : null;
+
+  // One human line describing what this account IS and the date that matters —
+  // the heart of "is this paid / trial / comped / lapsed, and until when".
+  const accountSummary: { label: string; value: string } | null = (() => {
+    const d = billing.data;
+    if (!d || isComped) return null; // comped handled by the badge above
+    if (billingStatus === "trialing" && d.trialEndsAt) {
+      return { label: l.trialEndsOn, value: fmtDate(d.trialEndsAt) };
+    }
+    if (billingStatus === "grace_period" && d.graceEndsAt) {
+      return { label: l.paymentIssueUntil, value: fmtDate(d.graceEndsAt) };
+    }
+    if (d.cancelAtPeriodEnd && d.currentPeriodEnd) {
+      return { label: `${l.cancellingNote} · ${l.activeUntil}`, value: fmtDate(d.currentPeriodEnd) };
+    }
+    if (hasActiveSubscription && (d.nextPaymentDate || d.currentPeriodEnd)) {
+      return { label: l.renewsOn, value: fmtDate((d.nextPaymentDate || d.currentPeriodEnd)!) };
+    }
+    return null;
+  })();
+
+  // Plan utilisation: active staff vs the plan's seat limit (∞ on Max).
+  const mastersLimit = currentPlan === "start" ? 1 : currentPlan === "pro" ? 5 : null;
+  const mastersUsed = billing.data?.mastersCount ?? null;
+
+  // Currency formatter for invoice amounts (minor units → locale currency).
+  const fmtMoney = (minor: number, currency: string) => {
+    try {
+      return new Intl.NumberFormat(lang === "ua" ? "uk" : lang, {
+        style: "currency",
+        currency: currency || "PLN",
+        maximumFractionDigits: 2,
+      }).format(minor / 100);
+    } catch {
+      return `${(minor / 100).toFixed(2)} ${currency}`;
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -290,8 +405,8 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
         </section>
       )}
 
-      {/* Trial expired — hard block */}
-      {isTrialExpired && (
+      {/* Billing locked — hard block (expired trial, churned, or cancelled) */}
+      {isBillingLocked && (
         <section className="rounded-2xl bg-red-500/10 border border-red-500/30 p-5 space-y-2">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
@@ -330,19 +445,41 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
         {billing.isLoading ? (
           <div className="h-12 rounded-xl bg-slate-200 dark:bg-slate-700/40 animate-pulse" />
         ) : (
-          <div className="flex items-center justify-between">
-            <span className="text-lg font-bold text-slate-900 dark:text-white uppercase">{currentPlan}</span>
-            <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${
-              billingStatus === "active" ? "bg-emerald-500/15 text-emerald-500" :
-              billingStatus === "trialing" ? "bg-sky-500/15 text-sky-500" :
-              billingStatus === "grace_period" ? "bg-amber-500/15 text-amber-500" :
-              "bg-red-500/15 text-red-500"
-            }`}>
-              {isTrialExpired
-                ? (lang === "ru" ? "Триал истёк" : lang === "ua" ? "Триал закінчився" : lang === "pl" ? "Próba wygasła" : "Trial expired")
-                : t(`billing.${billingStatus === "grace_period" ? "grace" : billingStatus}` as any, lang)
-              }
-            </span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-lg font-bold text-slate-900 dark:text-white uppercase">{currentPlan}</span>
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${
+                billingStatus === "active" ? "bg-emerald-500/15 text-emerald-500" :
+                billingStatus === "trialing" ? "bg-sky-500/15 text-sky-500" :
+                billingStatus === "grace_period" ? "bg-amber-500/15 text-amber-500" :
+                "bg-red-500/15 text-red-500"
+              }`}>
+                {isBillingLocked
+                  ? l.lockedBadge
+                  : t(`billing.${billingStatus === "grace_period" ? "grace" : billingStatus}` as any, lang)
+                }
+              </span>
+            </div>
+            {compedUntil && (
+              <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                {l.compedUntil} {compedUntil}
+              </p>
+            )}
+            {accountSummary && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {accountSummary.label}:{" "}
+                <span className="font-medium text-slate-700 dark:text-slate-300">{accountSummary.value}</span>
+              </p>
+            )}
+            {mastersUsed !== null && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {l.usageMasters}:{" "}
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {mastersUsed}
+                  {mastersLimit !== null ? ` / ${mastersLimit}` : ` · ${l.usageUnlimited}`}
+                </span>
+              </p>
+            )}
           </div>
         )}
       </section>
@@ -351,8 +488,8 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
       {plans.data && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {plans.data.map((plan) => {
-            const isCurrent = plan.id === currentPlan && !isTrialExpired;
-            const isUpgrade = !isCurrent && !isTrialExpired && (
+            const isCurrent = plan.id === currentPlan && !isBillingLocked;
+            const isUpgrade = !isCurrent && !isBillingLocked && (
               (currentPlan === "start" && (plan.id === "pro" || plan.id === "max")) ||
               (currentPlan === "pro" && plan.id === "max")
             );
@@ -407,7 +544,7 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
                     onClick={() => handleSubscribe(plan.id as "start" | "pro" | "max")}
                     disabled={isBusy}
                     className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${
-                      plan.popular || isTrialExpired
+                      plan.popular || isBillingLocked
                         ? "bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:from-brand-500 hover:to-purple-500"
                         : "bg-brand-600 text-white hover:bg-brand-500"
                     }`}
@@ -415,7 +552,7 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
                     {isBusy ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      isTrialExpired ? l.trialExpiredCta : isUpgrade ? l.upgrade : l.subscribe
+                      isBillingLocked ? l.trialExpiredCta : isUpgrade ? l.upgrade : l.subscribe
                     )}
                   </button>
                 )}
@@ -443,13 +580,59 @@ export function BillingSection({ tenantId }: { tenantId: string }) {
         </button>
       )}
 
+      {/* Payment history — a tenant's own recent invoices, inline. Hidden when
+          there are none (or no Stripe customer). Receipt links open the Stripe
+          PDF / hosted invoice. */}
+      {invoices.data && invoices.data.data.length > 0 && (
+        <section className="glass-card rounded-2xl p-4 space-y-3">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">{l.invoicesTitle}</h2>
+          <ul className="divide-y divide-slate-200/70 dark:divide-slate-700/50">
+            {invoices.data.data.map((inv) => (
+              <li key={inv.id} className="flex items-center justify-between gap-3 py-2 text-xs">
+                <div className="flex flex-col">
+                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                    {fmtMoney(inv.amount, inv.currency)}
+                  </span>
+                  <span className="text-slate-400 dark:text-slate-500">{fmtDate(inv.created)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
+                      inv.paid
+                        ? "bg-emerald-500/15 text-emerald-500"
+                        : inv.status === "open"
+                          ? "bg-amber-500/15 text-amber-500"
+                          : "bg-slate-500/15 text-slate-400"
+                    }`}
+                  >
+                    {inv.status || (inv.paid ? "paid" : "")}
+                  </span>
+                  {(inv.pdfUrl ?? inv.hostedUrl) && (
+                    <a
+                      href={(inv.pdfUrl ?? inv.hostedUrl)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-brand-400 hover:text-brand-300"
+                    >
+                      {l.invoiceReceipt}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* Cancel subscription — opens 3-stage retention flow.
-          Shown only when the subscription is active AND not already
-          scheduled to cancel at period end.
-          The historical "go straight to Stripe Customer Portal" path is now
-          unreachable for the explicit cancel intent — Manage subscription
-          stays for invoice/payment-method management. */}
-      {hasStripeCustomer && billing.data && !billing.data.cancelAtPeriodEnd &&
+          Gated on a REAL Stripe subscription (hasActiveSubscription), NOT merely
+          on a Stripe customer: a comped grant can have a customer but no
+          subscription, and requestCancellation throws `no_active_subscription`
+          for it — which previously surfaced as the generic "что-то пошло не так"
+          toast. Also hidden once already scheduled to cancel at period end.
+          Manage subscription (Stripe Portal) stays for card/invoice management. */}
+      {hasActiveSubscription && billing.data && !billing.data.cancelAtPeriodEnd &&
         (billingStatus === "active" || billingStatus === "trialing") && (
           <button
             type="button"

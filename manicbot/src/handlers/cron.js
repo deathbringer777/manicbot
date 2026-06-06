@@ -30,7 +30,8 @@ import { warsawNow, fmtDT } from '../utils/date.js';
 import { send } from '../telegram.js';
 import { getLang } from '../services/chat.js';
 import { initServices, getConfig } from '../services/services.js';
-import { checkBillingExpiry } from '../billing/lifecycle.js';
+import { checkBillingExpiry, billingLockoutDeadline } from '../billing/lifecycle.js';
+import { notifyTenantOwner } from '../services/userNotify.js';
 import { renewExpiringGoogleWatches, syncAppointmentCalendar } from '../services/google-calendar-oauth.js';
 import { canUse } from '../billing/features.js';
 import { isWithinMessageWindow } from './inbound.js';
@@ -84,6 +85,11 @@ export const PHASE_WINDOWS = Object.freeze({
   // fire within ~one cron tick of becoming due. Idempotency is the delivery
   // ledger, not this window.
   platformCampaigns: 60,
+  // Billing lockout warnings (24h-before notice). 6h window: the bell only
+  // ever fires once per deadline-day (sourceId is the deadline's date), so a
+  // tight tick cadence buys nothing — 6h keeps the per-tenant DB write rate low
+  // while still surfacing the warning comfortably inside the final 24h.
+  billingWarnings: 6 * 60 * 60,
 });
 
 /**
@@ -326,6 +332,71 @@ export async function phaseChannelHealth(ctx, nowMs) {
     return;
   }
   await setPhaseLastRun(ctx, 'channel_health', nowSec);
+}
+
+// 24h before a hard billing lockout we warn the salon owner once. The bot
+// keeps booking through the buffer/grace and only turns OFF at the lockout
+// itself (canUse handles that) — this phase is purely the heads-up bell.
+const BILLING_WARNING_LEAD_SEC = 24 * 60 * 60;
+
+/**
+ * Fire a one-shot "your access is about to change" bell at the tenant owner
+ * within the final 24h before a billing transition.
+ *
+ * Two flavours, derived purely from the tenant row (see billingLockoutDeadline):
+ *   - kind 'lockout'      → hard `billing.access_limiting_soon` (grace_period
+ *     running out, or a cancel-at-period-end subscription). telegram:true.
+ *   - kind 'grant_ending' → soft `billing.grant_ending` for comped (free-grant)
+ *     accounts. NO lockout language — comped is never auto-disabled.
+ *
+ * Idempotency is layered: `runPhase` claims a 6h window, AND the bell's
+ * `sourceId` is bucketed by the deadline's calendar day so notifyTenantOwner's
+ * (web_user_id, source_slug, source_id, kind) UNIQUE collapses repeats to one
+ * row per deadline-day even if the window is bypassed.
+ *
+ * @param {object} ctx   - tenant ctx (db, tenantId, tenant, bot…)
+ * @param {number} nowMs - epoch ms
+ */
+export async function phaseBillingWarnings(ctx, nowMs) {
+  if (!ctx?.db || !ctx?.tenantId || !ctx?.tenant) return;
+  const nowSec = Math.floor((nowMs ?? Date.now()) / 1000);
+
+  const { deadline, kind } = billingLockoutDeadline(ctx.tenant, nowSec);
+  // Nothing pending, already passed, or still more than 24h out → no warning.
+  if (!kind || !deadline) return;
+  if (deadline <= nowSec || (deadline - nowSec) > BILLING_WARNING_LEAD_SEC) return;
+
+  // Bucket by the deadline's date so the bell fires at most once per deadline.
+  const deadlineDayBucket = new Date(deadline * 1000).toISOString().slice(0, 10);
+
+  try {
+    if (kind === 'lockout') {
+      await notifyTenantOwner(ctx, {
+        kind: 'billing.access_limiting_soon',
+        title: 'Доступ к панели скоро ограничат',
+        body: 'В течение 24 часов оплатите подписку, иначе доступ к панели будет ограничен: вы не увидите записи, услуги и большинство разделов. Запись через бота временно сохранится.',
+        link: '/settings?section=billing',
+        sourceSlug: 'billing',
+        sourceId: `access_limiting:${deadlineDayBucket}`,
+        inapp: true,
+        telegram: true,
+      });
+    } else {
+      // grant_ending — soft notice for comped accounts. No lockout wording.
+      await notifyTenantOwner(ctx, {
+        kind: 'billing.grant_ending',
+        title: 'Бесплатный доступ скоро закончится',
+        body: `Бесплатный доступ заканчивается ${deadlineDayBucket}. Оформите подписку в Настройки → Биллинг, чтобы салон продолжил работу без перерыва.`,
+        link: '/settings?section=billing',
+        sourceSlug: 'billing',
+        sourceId: `grant_ending:${deadlineDayBucket}`,
+        inapp: true,
+        telegram: true,
+      });
+    }
+  } catch (e) {
+    log.warn('handlers.cron', { action: 'billing_warning_bell_failed', kind, error: e?.message });
+  }
 }
 
 /**
@@ -1126,9 +1197,21 @@ export async function handleCron(ctx) {
     const now = Date.now();
     const w = warsawNow();
 
-    await checkBillingExpiry(ctx, now);
+    // checkBillingExpiry compares against trialEndsAt / graceEndsAt, which are
+    // stored in Unix SECONDS — so it must receive seconds, not the ms `now`
+    // used by the ms-based phases below. Passing ms made `now` ≫ every deadline,
+    // collapsing trials/grace to zero length and flipping tenants to `inactive`
+    // on the very first cron tick (the lockout buffer this lifecycle relies on
+    // would never apply). phaseBillingWarnings keeps the ms `now` — it converts
+    // internally.
+    await checkBillingExpiry(ctx, Math.floor(now / 1000));
 
     if (!ctx?.db || !ctx?.tenantId) return;
+
+    // 24h-before billing lockout / grant-end warning bell. Sits next to
+    // checkBillingExpiry (which performs the transition itself) and is
+    // idempotent via its 6h window + deadline-day-bucketed sourceId.
+    await runPhase(ctx, 'billingWarnings', () => phaseBillingWarnings(ctx, now));
 
     // Phase 0 (always-run): IG token health check + daily webhook resubscribe
     try {

@@ -322,6 +322,66 @@ export async function listRecentCharges(
   return { data, hasMore: !!res.has_more };
 }
 
+interface RawInvoice {
+  id: string;
+  number?: string | null;
+  created?: number;
+  amount_paid?: number;
+  amount_due?: number;
+  currency?: string;
+  status?: string;
+  paid?: boolean;
+  hosted_invoice_url?: string | null;
+  invoice_pdf?: string | null;
+}
+
+/** One row of a tenant's own billing history, shaped for the Billing UI. */
+export interface StripeInvoiceRow {
+  id: string;
+  number: string | null;
+  created: number;
+  /** Minor units (e.g. grosze). amount_paid when settled, else amount_due. */
+  amount: number;
+  currency: string;
+  /** draft | open | paid | void | uncollectible */
+  status: string;
+  paid: boolean;
+  hostedUrl: string | null;
+  pdfUrl: string | null;
+}
+
+/**
+ * Pure mapper: raw Stripe invoice → UI row. Exported for unit testing the
+ * amount-selection + status normalisation without a network round-trip.
+ */
+export function mapStripeInvoiceRow(o: RawInvoice): StripeInvoiceRow {
+  const paid = o.status === "paid" || !!o.paid;
+  return {
+    id: String(o.id),
+    number: o.number ?? null,
+    created: o.created ?? 0,
+    amount: paid ? (o.amount_paid ?? 0) : (o.amount_due ?? 0),
+    currency: (o.currency ?? "").toUpperCase(),
+    status: o.status ?? "",
+    paid,
+    hostedUrl: o.hosted_invoice_url ?? null,
+    pdfUrl: o.invoice_pdf ?? null,
+  };
+}
+
+/** GET /v1/invoices?customer=… — a tenant's own recent invoices (one page). */
+export async function listInvoices(
+  secretKey: string,
+  opts: { customerId: string; limit?: number },
+): Promise<{ data: StripeInvoiceRow[]; hasMore: boolean }> {
+  const res = await stripeGet<{ data?: RawInvoice[]; has_more?: boolean }>(secretKey, "/invoices", {
+    customer: opts.customerId,
+    limit: String(clampLimit(opts.limit, 12)),
+  });
+  const data = (res.data ?? []).map(mapStripeInvoiceRow);
+  return { data, hasMore: !!res.has_more };
+}
+
 interface RawPayout {
   id: string;
   amount?: number;

@@ -8,7 +8,7 @@ import {
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
-import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
+import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon, listInvoices } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
 import { isHttpsUrl } from "~/server/lib/url";
@@ -22,6 +22,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
+import { isCompedTenant } from "~/lib/billing/trialState";
 import {
   parseMasterHours,
   isValidMasterHours,
@@ -306,6 +307,17 @@ export const salonRouter = createTRPCRouter({
         .where(eq(tenants.id, input.tenantId));
     }
 
+    // Plan-utilisation: real, active staff seats (excludes synthetic personal
+    // -master rows). Drives the "masters N / limit" usage line in the UI.
+    const [mc] = await ctx.db
+      .select({ c: sql<number>`count(*)` })
+      .from(masters)
+      .where(and(
+        eq(masters.tenantId, input.tenantId),
+        eq(masters.active, 1),
+        eq(masters.isSynthetic, 0),
+      ));
+
     return {
       plan: t.plan,
       billingStatus,
@@ -316,7 +328,43 @@ export const salonRouter = createTRPCRouter({
       nextPaymentDate: t.nextPaymentDate,
       cancelAtPeriodEnd: t.cancelAtPeriodEnd,
       stripeCustomerId: t.stripeCustomerId ?? null,
+      // Whether a real Stripe subscription backs the plan. The cancel flow
+      // requires one — a comped grant (customer may exist, subscription does
+      // not) must NOT show a "Cancel subscription" button.
+      hasActiveSubscription: !!t.stripeSubscriptionId,
+      // Complimentary / manual grant (active plan, no subscription, no trial).
+      // Drives the "free until <date>" badge and hides the cancel button.
+      isComped: isCompedTenant({
+        billingStatus: t.billingStatus ?? null,
+        trialEndsAt: t.trialEndsAt ?? null,
+        stripeCustomerId: t.stripeCustomerId ?? null,
+        stripeSubscriptionId: t.stripeSubscriptionId ?? null,
+      }),
+      mastersCount: Number(mc?.c ?? 0),
     };
+  }),
+
+  /**
+   * A tenant's own recent invoices (read-only), for the inline billing history.
+   * Returns [] when there is no Stripe customer or Stripe is unconfigured —
+   * the UI simply hides the section. Never throws on Stripe errors so the
+   * Billing page always renders.
+   */
+  listInvoices: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+    const [t] = await ctx.db
+      .select({ stripeCustomerId: tenants.stripeCustomerId })
+      .from(tenants)
+      .where(eq(tenants.id, input.tenantId))
+      .limit(1);
+    const customerId = t?.stripeCustomerId;
+    const stripeKey = env.STRIPE_SECRET_KEY;
+    if (!customerId || !stripeKey) return { data: [], hasMore: false };
+    try {
+      return await listInvoices(stripeKey, { customerId, limit: 12 });
+    } catch {
+      return { data: [], hasMore: false };
+    }
   }),
 
   /** URL вебхуков и verify token для настройки Meta (значения с сервера Pages — совпадают с Worker). */

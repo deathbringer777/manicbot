@@ -4,6 +4,7 @@ import {
   shouldShowBillingGate,
   isBillingGatedRole,
   isGateBypassPath,
+  isCompedTenant,
 } from "~/lib/billing/trialState";
 
 const NOW = 1_700_000_000; // arbitrary fixed Unix seconds
@@ -46,14 +47,15 @@ describe("evaluateTrialState — lazy flip", () => {
     expect(r.isTrialExpired).toBe(false);
   });
 
-  it("does NOT mark isTrialExpired when tenant has a Stripe customer (in grace, churned, etc.)", () => {
-    // billingStatus=inactive but they paid before — BillingSection treats this
-    // as a churned customer, not an expired-trial gate trigger.
+  it("LOCKS a churned paying customer (inactive + had a Stripe customer)", () => {
+    // billingStatus=inactive AND a Stripe customer exists — they paid before and
+    // lapsed (cancelled/period-ended). The old behaviour left their dashboard
+    // fully open forever; now they are locked just like an expired trial.
     const r = evaluateTrialState(
-      { billingStatus: "inactive", trialEndsAt: NOW - 86400, stripeCustomerId: "cus_456" },
+      { billingStatus: "inactive", trialEndsAt: NOW - 86400, stripeCustomerId: "cus_456", stripeSubscriptionId: null },
       NOW,
     );
-    expect(r.isTrialExpired).toBe(false);
+    expect(r.isTrialExpired).toBe(true);
   });
 
   it("marks isTrialExpired when status is already inactive and no Stripe customer (cron-flipped case)", () => {
@@ -63,6 +65,56 @@ describe("evaluateTrialState — lazy flip", () => {
     );
     expect(r.shouldPersistFlip).toBe(false);
     expect(r.isTrialExpired).toBe(true);
+  });
+
+  it("LOCKS a canceled subscription", () => {
+    const r = evaluateTrialState(
+      { billingStatus: "canceled", trialEndsAt: null, stripeCustomerId: "cus_y", stripeSubscriptionId: "sub_y" },
+      NOW,
+    );
+    expect(r.isTrialExpired).toBe(true);
+  });
+
+  it("does NOT lock an active paying subscription", () => {
+    const r = evaluateTrialState(
+      { billingStatus: "active", trialEndsAt: null, stripeCustomerId: "cus_z", stripeSubscriptionId: "sub_z" },
+      NOW,
+    );
+    expect(r.isTrialExpired).toBe(false);
+  });
+
+  it("does NOT lock a comped grant (active, no subscription, no trial) even past currentPeriodEnd", () => {
+    // The 4 free MAX grants in prod: active + no Stripe subscription + no trial.
+    // They must stay open — never auto-locked.
+    const r = evaluateTrialState(
+      { billingStatus: "active", trialEndsAt: null, stripeCustomerId: "cus_demo", stripeSubscriptionId: null },
+      NOW,
+    );
+    expect(r.isTrialExpired).toBe(false);
+    expect(isCompedTenant({ billingStatus: "active", trialEndsAt: null, stripeCustomerId: "cus_demo", stripeSubscriptionId: null })).toBe(true);
+  });
+});
+
+describe("isCompedTenant", () => {
+  it("is true for a free grant: active + no subscription + no trial", () => {
+    expect(isCompedTenant({ billingStatus: "active", trialEndsAt: null, stripeCustomerId: null, stripeSubscriptionId: null })).toBe(true);
+    // Demo grant variant: customer exists but still no subscription.
+    expect(isCompedTenant({ billingStatus: "active", trialEndsAt: null, stripeCustomerId: "cus_demo", stripeSubscriptionId: null })).toBe(true);
+  });
+
+  it("is false for a real paying subscription", () => {
+    expect(isCompedTenant({ billingStatus: "active", trialEndsAt: null, stripeCustomerId: "cus_p", stripeSubscriptionId: "sub_p" })).toBe(false);
+  });
+
+  it("is false for a trial (trialEndsAt set)", () => {
+    expect(isCompedTenant({ billingStatus: "trialing", trialEndsAt: NOW + 1000, stripeCustomerId: null, stripeSubscriptionId: null })).toBe(false);
+    // active but with a trial timestamp still set is not a comp
+    expect(isCompedTenant({ billingStatus: "active", trialEndsAt: NOW + 1000, stripeCustomerId: null, stripeSubscriptionId: null })).toBe(false);
+  });
+
+  it("is false for inactive / canceled", () => {
+    expect(isCompedTenant({ billingStatus: "inactive", trialEndsAt: null, stripeCustomerId: null, stripeSubscriptionId: null })).toBe(false);
+    expect(isCompedTenant({ billingStatus: "canceled", trialEndsAt: null, stripeCustomerId: null, stripeSubscriptionId: null })).toBe(false);
   });
 
   it("defaults to trialing when billingStatus is null (fresh tenants pre-cron)", () => {

@@ -4,9 +4,9 @@ import { t, type Lang } from "~/lib/i18n";
 import { WIDGET_REGISTRY, resolveWidgetOpts, type HomeWidgetItem } from "./registry";
 
 /**
- * Grab-handle class. RGL's `draggableHandle` is matched with
- * `target.closest(selector)`, so anything inside the header is a valid grab
- * point while the body is not.
+ * Class applied to the header row. No longer used as an RGL draggableHandle
+ * (the whole card is draggable in edit mode); kept for the `select-none` /
+ * cursor styling applied only to the title bar.
  */
 export const WIDGET_DRAG_HANDLE = "home-widget-drag-handle";
 
@@ -31,12 +31,13 @@ export function WidgetFrame({
   return (
     <div
       className={`flex h-full flex-col overflow-hidden rounded-xl border border-[#e5e7eb] bg-white dark:border-white/[0.06] dark:bg-slate-800 ${
-        editMode ? "widget-wobble" : ""
+        editMode ? "widget-wobble cursor-grab active:cursor-grabbing" : ""
       }`}
     >
+      {/* Header doubles as a visual label; in edit mode the whole card drags. */}
       <div
         className={`${WIDGET_DRAG_HANDLE} flex shrink-0 items-center gap-2 border-b border-[#f3f4f6] px-3 py-2 dark:border-white/[0.04] ${
-          editMode ? "cursor-move select-none" : ""
+          editMode ? "select-none" : ""
         }`}
       >
         <Icon className="h-4 w-4 shrink-0 text-[#9ca3af] dark:text-slate-500" />
@@ -44,7 +45,13 @@ export function WidgetFrame({
           {t(def.titleKey, lang)}
         </h3>
       </div>
-      <div className="min-h-0 flex-1">
+      {/*
+       * pointer-events-none in edit mode: interactive elements inside the body
+       * (buttons, links, selects) are frozen so any mousedown in the body area
+       * falls through to the card/grid-item wrapper and starts a drag, exactly
+       * like iOS jiggle mode where tapping app icons does nothing.
+       */}
+      <div className={`min-h-0 flex-1${editMode ? " pointer-events-none select-none" : ""}`}>
         <Body item={item} opts={opts} tenantId={tenantId} lang={lang} editMode={editMode} />
       </div>
     </div>

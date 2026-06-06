@@ -76,6 +76,7 @@ describe("useDashboardPrefs — bottom-nav additions", () => {
         pinnedTabs: [],
         bottomNavOrder: order,
         bottomNavLayout: "custom",
+        homeWidgets: [],
       },
       TENANT,
     );

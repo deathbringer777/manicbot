@@ -5,6 +5,12 @@ import {
   getIgCredentials,
 } from '../../src/marketing/autopilot.js';
 
+// getIgCredentials falls back to the marketing channel_config and decrypts the
+// token server-side. Mock the resolver so this unit test asserts the fallback
+// wiring (priority + id/token mapping), not the crypto itself.
+vi.mock('../../src/channels/resolver.js', () => ({ getChannelConfig: vi.fn() }));
+import { getChannelConfig } from '../../src/channels/resolver.js';
+
 const PAGE_ID = '1008301152373103';
 const TOKEN = 'EAA-test-token';
 const PNG_HEADER = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -127,16 +133,49 @@ afterEach(() => {
 });
 
 describe('marketing/autopilot — getIgCredentials', () => {
-  it('returns null when env vars missing', () => {
-    expect(getIgCredentials({})).toBeNull();
-    expect(getIgCredentials({ MARKETING_IG_PAGE_ID: 'p' })).toBeNull();
-    expect(getIgCredentials({ MARKETING_IG_ACCESS_TOKEN: 't' })).toBeNull();
+  beforeEach(() => getChannelConfig.mockReset());
+
+  it('returns null when nothing is configured', async () => {
+    expect(await getIgCredentials({})).toBeNull();
+    expect(await getIgCredentials({ MARKETING_IG_PAGE_ID: 'p' })).toBeNull();
+    expect(await getIgCredentials({ MARKETING_IG_ACCESS_TOKEN: 't' })).toBeNull();
   });
 
-  it('returns object when both set', () => {
-    expect(
-      getIgCredentials({ MARKETING_IG_PAGE_ID: 'p', MARKETING_IG_ACCESS_TOKEN: 't' }),
-    ).toEqual({ pageId: 'p', token: 't' });
+  it('returns the Worker secrets when both are set (no channel_configs read)', async () => {
+    const creds = await getIgCredentials({ MARKETING_IG_PAGE_ID: 'p', MARKETING_IG_ACCESS_TOKEN: 't' });
+    expect(creds).toEqual({ pageId: 'p', token: 't' });
+    expect(getChannelConfig).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the marketing channel_config (decrypted) when secrets absent', async () => {
+    getChannelConfig.mockResolvedValue({
+      token: 'IGAA-decrypted-token',
+      ig_business_id: '25881183448226493',
+      config: { api: 'instagram_direct', ig_user_id: '25881183448226493' },
+    });
+    const creds = await getIgCredentials({
+      DB: { __db: true },
+      BOT_ENCRYPTION_KEY: 'x'.repeat(32),
+      MARKETING_IG_TENANT_ID: 't_1c305v2g5011',
+    });
+    expect(creds).toEqual({ pageId: '25881183448226493', token: 'IGAA-decrypted-token' });
+    expect(getChannelConfig).toHaveBeenCalledWith(
+      { db: { __db: true } }, 't_1c305v2g5011', 'instagram', 'x'.repeat(32), null,
+    );
+  });
+
+  it('returns null when fallback configured but channel has no token', async () => {
+    getChannelConfig.mockResolvedValue({ token: null });
+    const creds = await getIgCredentials({
+      DB: { __db: true }, BOT_ENCRYPTION_KEY: 'x'.repeat(32), MARKETING_IG_TENANT_ID: 't_x',
+    });
+    expect(creds).toBeNull();
+  });
+
+  it('does not read channel_configs without a tenant id or enc key', async () => {
+    expect(await getIgCredentials({ DB: { __db: true }, BOT_ENCRYPTION_KEY: 'x'.repeat(32) })).toBeNull();
+    expect(await getIgCredentials({ DB: { __db: true }, MARKETING_IG_TENANT_ID: 't_x' })).toBeNull();
+    expect(getChannelConfig).not.toHaveBeenCalled();
   });
 });
 

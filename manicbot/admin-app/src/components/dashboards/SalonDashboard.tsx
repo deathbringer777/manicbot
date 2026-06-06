@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, Users, Scissors, UserCheck,
@@ -20,9 +21,7 @@ import { SalonWeekView } from "~/components/dashboards/SalonWeekView";
 import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { AppointmentDetailPanel } from "~/components/dashboard-ui/AppointmentDetailPanel";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
-import { QuickAddFab, type FabExtraItem } from "~/components/dashboards/QuickAddFab";
-import { ReminderModal } from "~/components/plugins/reminders/ReminderModal";
-import { Bell, Repeat } from "lucide-react";
+import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { CalendarLeftRail, type StatusKey } from "~/components/dashboards/CalendarLeftRail";
 import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
@@ -30,6 +29,7 @@ import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
+import { HomeWidgetHostProvider } from "~/components/dashboards/home-widgets/HomeWidgetContext";
 import {
   applyPendingStatusChanges as mergeStatusPatches,
   buildCancelPatch,
@@ -77,6 +77,16 @@ import { ServiceCategoriesModal } from "~/components/salon/tabs/services/Service
 import { Select } from "~/components/ui/Select";
 import { ListTree } from "lucide-react";
 import { resolveMasterAvatarEmoji } from "~/lib/masterAvatar";
+
+/**
+ * The widget board is client-only: react-grid-layout's WidthProvider measures
+ * the container width on mount, which has no meaning during edge SSR and would
+ * trip a hydration mismatch. `ssr: false` defers it to the browser.
+ */
+const HomeWidgetBoard = dynamic(
+  () => import("~/components/dashboards/home-widgets/HomeWidgetBoard").then((m) => m.HomeWidgetBoard),
+  { ssr: false },
+);
 
 type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
 
@@ -2038,36 +2048,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // Drag-to-create prefill (Day/Week grids → ManualBookingModal /
   // TimeReservationDialog). Cleared on dialog close.
   const [dragPrefill, setDragPrefill] = useState<{ date?: string; time?: string; masterId?: number | null; durationMin?: number; title?: string } | null>(null);
-  // Reminders plugin — FAB-launched modal state.
-  const [reminderModal, setReminderModal] = useState<null | "reminder" | "routine">(null);
-  // Which plugins are installed for this tenant. Drives the FAB extraItems list.
-  // Skipped (enabled:false) until tenantId is known so we don't fetch on the
-  // public landing pre-auth render.
-  const installedPlugins = api.plugins.getInstalled.useQuery(undefined, {
-    enabled: !!tenantId,
-  });
-  const remindersInstalled = !!installedPlugins.data?.find(
-    (p) => p.pluginSlug === "reminders" && p.enabled === 1,
-  );
-  const fabExtraItems: FabExtraItem[] = remindersInstalled
-    ? [
-        {
-          id: "reminder",
-          icon: Bell,
-          label: "Напоминание",
-          description: "Однократное напоминание для себя или мастера",
-          onClick: () => setReminderModal("reminder"),
-        },
-        {
-          id: "routine",
-          icon: Repeat,
-          label: "Рутина",
-          description: "Циклическое напоминание (например, по будням)",
-          onClick: () => setReminderModal("routine"),
-        },
-      ]
-    : [];
-
   const isTest = useRole().isTest;
 
   // Delete service confirmation modal
@@ -2092,6 +2072,46 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         </div>
       </div>
     </div>
+  );
+
+  // today_appointments widget body — the EXISTING overview today's-apts JSX,
+  // moved here unchanged (same query `todayApts`, same `applyPendingStatusChanges`
+  // sort, same AptCard wiring + empty/loading/error states). The board's
+  // `today_appointments` widget renders this through HomeWidgetHostProvider so
+  // the list is byte-for-byte what shipped before the board.
+  const renderTodayAppointments = () => (
+    <>
+      {!dashPrefs.showTodayApts ? null : (
+        <>
+          {todayApts.isLoading && (
+            <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
+          )}
+          {todayApts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
+          {todayApts.data && todayApts.data.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.todayApts", lang)}</h3>
+                <button onClick={() => { setTab("appointments"); if (inWeb) router.push("/dashboard?tab=appointments"); }}
+                  className="flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
+                  {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+              {[...applyPendingStatusChanges(todayApts.data)]
+                .sort((a: any, b: any) => String(b.time ?? "").localeCompare(String(a.time ?? "")))
+                .map((a: any) => (
+                  <AptCard key={a.id} a={a} lang={lang}
+                    onOpen={(rect) => { setOpenApt(a); setOpenAptRect(rect); }}
+                    onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
+                    onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
+                ))}
+            </div>
+          )}
+          {todayApts.data?.length === 0 && (
+            <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />
+          )}
+        </>
+      )}
+    </>
   );
 
   return (
@@ -2131,7 +2151,6 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
           onTimeReservation={() => setTimeReservationOpen(true)}
           onTimeOff={() => setTimeOffOpen(true)}
           onAddClient={() => setClientFormOpen(true)}
-          extraItems={fabExtraItems}
         />
       )}
 
@@ -2166,54 +2185,36 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
         />
       )}
 
-      {reminderModal && (
-        <ReminderModal
-          tenantId={tenantId}
-          defaultKind={reminderModal}
-          onClose={() => setReminderModal(null)}
-        />
-      )}
 
       {/* ── OVERVIEW ──
-          The Overview tab is now a focused two-card surface:
           (1) the merged setup checklist (auto-hides when 10/10 done) and
-          (2) today's appointments sorted descending — no stat grid, no
-          secondary wizard. Per-section pages own their own stats; the home
-          page is for setup progress and what's on the schedule now. */}
+          (2) the configurable widget board (KPIs, calendar heatmap, top
+          services/masters, activity, quick actions, and today's appointments).
+          The today's-appointments list is unchanged — it's rendered inside the
+          board's `today_appointments` widget via HomeWidgetHostProvider. */}
       {tab === "overview" && (
         <div className="space-y-4">
           <OnboardingChecklist tenantId={tenantId} />
           <ReferralOverviewTeaser />
-          {dashPrefs.showTodayApts && (
-            <>
-              {todayApts.isLoading && (
-                <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="glass-card rounded-xl h-16 animate-pulse" />)}</div>
-              )}
-              {todayApts.isError && <div className="glass-card rounded-2xl p-6 text-center"><p className="text-red-400">{t("common.errorLoading", lang)}</p></div>}
-              {todayApts.data && todayApts.data.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("salon.todayApts", lang)}</h3>
-                    <button onClick={() => { setTab("appointments"); if (inWeb) router.push("/dashboard?tab=appointments"); }}
-                      className="flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
-                      {t("salon.appointments", lang)} <ChevronRight className="h-3 w-3" />
-                    </button>
-                  </div>
-                  {[...applyPendingStatusChanges(todayApts.data)]
-                    .sort((a: any, b: any) => String(b.time ?? "").localeCompare(String(a.time ?? "")))
-                    .map((a: any) => (
-                      <AptCard key={a.id} a={a} lang={lang}
-                        onOpen={(rect) => { setOpenApt(a); setOpenAptRect(rect); }}
-                        onAction={(id, status) => updateAptStatus.mutate({ tenantId, appointmentId: String(id), status })}
-                        onNoShow={(id, noShowBy) => markNoShow.mutate({ tenantId, id: String(id), noShowBy })} />
-                    ))}
-                </div>
-              )}
-              {todayApts.data?.length === 0 && (
-                <EmptyState icon={CalendarDays} title={t("salon.noApts", lang)} description={t("salon.empty.apts", lang)} />
-              )}
-            </>
-          )}
+
+          {/* Configurable widget board. The today's-appointments list (the
+              existing overview JSX, unchanged) is handed to the board's
+              `today_appointments` widget verbatim via HomeWidgetHostProvider;
+              quick-action buttons reuse the same modal/nav handlers the rest of
+              the dashboard already fires. The anchored AppointmentDetailPanel
+              popover stays at the overview level (below) since it's an overlay,
+              not a grid cell. */}
+          <HomeWidgetHostProvider
+            value={{
+              renderTodayAppointments,
+              onNewBooking: () => setManualBookingOpen(true),
+              onAddClient: () => setClientFormOpen(true),
+              onAddService: () => { setTab("services"); if (inWeb) router.push("/dashboard?tab=services"); },
+              onOpenCalendar: () => { setTab("appointments"); if (inWeb) router.push("/dashboard?tab=appointments"); },
+            }}
+          >
+            <HomeWidgetBoard tenantId={tenantId} lang={lang} />
+          </HomeWidgetHostProvider>
 
           {openApt && (
             <AppointmentDetailPanel

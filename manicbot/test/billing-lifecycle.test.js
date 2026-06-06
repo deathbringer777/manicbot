@@ -58,6 +58,23 @@ describe('isBillingExpired', () => {
   it('граничный случай: now = trialEndsAt + 1 — истёк', () => {
     expect(isBillingExpired({ billingStatus: 'trialing', trialEndsAt: NOW - 1 }, NOW)).toBe('trial_expired');
   });
+
+  // Regression: the cron call site historically passed Date.now() (milliseconds)
+  // here, and ms is always > any seconds timestamp, so EVERY trialing/grace
+  // tenant was force-expired on the first tick. The boundary now normalizes a
+  // millisecond `now` to seconds so a future trial/grace stays valid.
+  it('regression: миллисекундный now не «истекает» будущий триал (Date.now())', () => {
+    expect(isBillingExpired({ billingStatus: 'trialing', trialEndsAt: FUTURE }, Date.now())).toBeNull();
+  });
+
+  it('regression: миллисекундный now не «истекает» активный grace-период', () => {
+    expect(isBillingExpired({ billingStatus: 'grace_period', graceEndsAt: FUTURE }, Date.now())).toBeNull();
+  });
+
+  it('regression: миллисекундный now всё ещё истекает по-настоящему просроченный триал', () => {
+    // trial ended a day ago (seconds) — must still expire even when probed with ms.
+    expect(isBillingExpired({ billingStatus: 'trialing', trialEndsAt: PAST }, Date.now())).toBe('trial_expired');
+  });
 });
 
 // ─── checkBillingExpiry — с side-effects ─────────────────────────────────────

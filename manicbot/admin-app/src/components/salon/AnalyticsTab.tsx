@@ -177,6 +177,9 @@ export function AnalyticsTab({
   const acquisition = api.analytics.getAcquisition.useQuery({ tenantId, days });
   const funnel = api.analytics.getFunnel.useQuery({ tenantId, days });
   const topCampaigns = api.analytics.getTopCampaigns.useQuery({ tenantId, days });
+  // Operational metrics — the tenant-facing half of the platform/tenant split.
+  // Same numbers God Mode sees for this salon (getTenantMetrics).
+  const myMetrics = api.salon.getMyMetrics.useQuery({ tenantId });
 
   const isLoading = acquisition.isLoading || funnel.isLoading || topCampaigns.isLoading;
 
@@ -215,6 +218,27 @@ export function AnalyticsTab({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* ── Salon operational metrics — always visible (independent of tracked
+            acquisition data): clients served + bookings for this salon. ── */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatBox
+          label={t("salon.metrics.clientsProcessed", lang)}
+          value={myMetrics.data?.clientsProcessed ?? 0}
+          icon={Users}
+        />
+        <StatBox
+          label={t("salon.metrics.appointmentsTotal", lang)}
+          value={myMetrics.data?.appointmentsTotal ?? 0}
+          icon={BarChart3}
+        />
+        <StatBox
+          label={t("salon.metrics.appointmentsThisMonth", lang)}
+          value={myMetrics.data?.appointmentsThisMonth ?? 0}
+          hint={t("salon.metrics.last30", lang)}
+          icon={TrendingUp}
+        />
       </div>
 
       {isLoading && (

@@ -32,6 +32,7 @@ import { useDragToMove, type MoveCommit } from "~/lib/calendar/useDragToMove";
 import { useDragToResize, type ResizeCommit } from "~/lib/calendar/useDragToResize";
 import { useCoarsePointer } from "~/lib/useCoarsePointer";
 import { computeColumnLanes, laneKey } from "~/lib/calendar/laneItems";
+import { clampBand } from "~/lib/calendar/clampBand";
 import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHours";
 
@@ -804,10 +805,15 @@ export function SalonWeekView({
                         multi-day bands stay full-width background. */}
                     {dayBlocks.map((b) => {
                       const isMultiDay = !!b.endDate && b.endDate !== iso;
-                      const top = isMultiDay ? 0 : timeToTop(b.time, hourStart);
-                      const height = isMultiDay
+                      const rawTop = isMultiDay ? 0 : timeToTop(b.time, hourStart);
+                      const rawHeight = isMultiDay
                         ? totalHours * HOUR_HEIGHT
                         : Math.max(HOUR_HEIGHT * 0.5, (b.durationMin / 60) * HOUR_HEIGHT);
+                      // Clamp to the visible window so an over-long single-day
+                      // block (e.g. a 24h "day off") can't overflow the grid and
+                      // stretch the scroll area into a void below working hours.
+                      const { top, height } = clampBand(rawTop, rawHeight, totalHours * HOUR_HEIGHT);
+                      if (height <= 0) return null; // entirely outside the window
                       const placement = isMultiDay
                         ? null
                         : laneMap.get(laneKey("block", b.id)) ?? { lane: 0, lanes: 1 };

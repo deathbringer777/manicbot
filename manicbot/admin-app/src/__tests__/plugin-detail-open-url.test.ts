@@ -31,18 +31,21 @@ function resolveOpenUrl(
 }
 
 describe("resolveOpenUrl", () => {
-  const plainManifest = getPlugin("shift-planner")!.manifest;
+  // No retained plugin is runtime-less, so synthesize a "plain" manifest (no
+  // runtime / settingsPanel / nav) from a real one and drive resolveOpenUrl
+  // with a slug absent from RUNTIME_LOADERS ("x-plain").
+  const plainManifest: PluginManifest = { ...getPlugin("task-board")!.manifest, capabilities: {} };
 
   it("returns null when not installed", () => {
-    expect(resolveOpenUrl("shift-planner", plainManifest, false, false, "system_admin")).toBeNull();
+    expect(resolveOpenUrl("x-plain", plainManifest, false, false, "system_admin")).toBeNull();
   });
 
   it("returns null when installed but not enabled", () => {
-    expect(resolveOpenUrl("shift-planner", plainManifest, true, false, "system_admin")).toBeNull();
+    expect(resolveOpenUrl("x-plain", plainManifest, true, false, "system_admin")).toBeNull();
   });
 
   it("returns null for a plugin with no runtime, no settingsPanel + no nav", () => {
-    expect(resolveOpenUrl("shift-planner", plainManifest, true, true, "system_admin")).toBeNull();
+    expect(resolveOpenUrl("x-plain", plainManifest, true, true, "system_admin")).toBeNull();
   });
 
   it("returns /plugin/<slug> when plugin has a runtime", () => {
@@ -54,11 +57,11 @@ describe("resolveOpenUrl", () => {
   it("returns settings URL when plugin has settingsPanel but no runtime", () => {
     const m: PluginManifest = {
       ...plainManifest,
-      slug: "shift-planner", // ensure no runtime override
+      slug: "x-plain", // ensure no runtime override
       capabilities: { settingsPanel: { sectionKey: "plugin:x", componentId: "x.Panel" } },
     };
-    // shift-planner has no runtime, so settingsPanel takes precedence
-    expect(resolveOpenUrl("shift-planner", m, true, true, "system_admin")).toBe("/settings?section=plugin:x");
+    // x-plain has no runtime, so settingsPanel takes precedence
+    expect(resolveOpenUrl("x-plain", m, true, true, "system_admin")).toBe("/settings?section=plugin:x");
   });
 
   it("returns nav[0].href when only nav contributions exist and role matches", () => {
@@ -70,7 +73,7 @@ describe("resolveOpenUrl", () => {
         ],
       },
     };
-    expect(resolveOpenUrl("shift-planner", m, true, true, "tenant_owner")).toBe("/plugins/x/settings");
+    expect(resolveOpenUrl("x-plain", m, true, true, "tenant_owner")).toBe("/plugins/x/settings");
   });
 
   it("nav match respects role filter", () => {
@@ -82,7 +85,7 @@ describe("resolveOpenUrl", () => {
         ],
       },
     };
-    expect(resolveOpenUrl("shift-planner", m, true, true, "tenant_owner")).toBeNull();
+    expect(resolveOpenUrl("x-plain", m, true, true, "tenant_owner")).toBeNull();
   });
 });
 

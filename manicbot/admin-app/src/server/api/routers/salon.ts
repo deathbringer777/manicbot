@@ -10,7 +10,11 @@ import {
 import { PERMISSION_TEMPLATES, MASTER_DEFAULT, type PermissionKey } from "~/server/api/permissions";
 import { hashPassword } from "~/server/auth/password";
 import { telegramGetMe, telegramSetWebhook, telegramDeleteWebhook } from "~/server/lib/telegramApi";
-import { getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon } from "~/server/lib/stripe";
+import {
+  getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon,
+  retrieveSubscription, changeSubscriptionPlanImmediate, scheduleDowngradeAtPeriodEnd, releaseScheduledChange,
+  pauseSubscription as stripePauseSubscription, resumeSubscription as stripeResumeSubscription, previewPlanChange as stripePreviewPlanChange,
+} from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
 import { isHttpsUrl } from "~/server/lib/url";
@@ -36,6 +40,7 @@ import {
   deriveWorkDaysFromSchedule,
 } from "~/lib/workHours";
 import { MASTER_SCHEDULE_POLICIES } from "~/lib/masterSchedulePolicy";
+import { getTenantMetrics } from "~/server/metrics/tenant";
 import { t } from "~/lib/i18n";
 import { sanitizeText } from "~/server/security/sanitize";
 import { encryptBotTokenForWorker } from "~/server/security/tokenEncryption";
@@ -125,7 +130,42 @@ async function maybeAttachReferral(
   return { couponId, referralId: row.id };
 }
 
+// ── Plan-change helpers (in-app upgrade/downgrade) ──────────────────────────
+
+/** Plan tiers ordered low→high so we can classify a change as up- or downgrade. */
+const PLAN_RANK: Record<"start" | "pro" | "max", number> = { start: 0, pro: 1, max: 2 };
+
+/**
+ * Configured Stripe price id for a (plan, cycle) pair, or undefined when that
+ * cell isn't configured. No cross-cycle fallback — a plan CHANGE must keep the
+ * subscription's existing billing cycle (the checkout flow falls back monthly).
+ */
+function stripePriceId(plan: "start" | "pro" | "max", cycle: "monthly" | "annual"): string | undefined {
+  const monthly: Record<string, string | undefined> = {
+    start: env.STRIPE_PRICE_START_MONTHLY,
+    pro: env.STRIPE_PRICE_PRO_MONTHLY,
+    max: env.STRIPE_PRICE_MAX_MONTHLY,
+  };
+  const annual: Record<string, string | undefined> = {
+    start: env.STRIPE_PRICE_START_ANNUAL,
+    pro: env.STRIPE_PRICE_PRO_ANNUAL,
+    max: env.STRIPE_PRICE_MAX_ANNUAL,
+  };
+  return cycle === "annual" ? annual[plan] : monthly[plan];
+}
+
 export const salonRouter = createTRPCRouter({
+  /**
+   * Per-salon operational metrics (clients processed, appointments) — the
+   * tenant-facing half of the metrics split. Uses the SAME getTenantMetrics
+   * the God-Mode per-tenant view does, so the owner sees identical numbers.
+   * Tenant-isolated via assertTenantOwner.
+   */
+  getMyMetrics: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+    return getTenantMetrics(ctx.db, input.tenantId, Math.floor(Date.now() / 1000));
+  }),
+
   getOverview: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
     const today = new Date().toISOString().slice(0, 10);
@@ -442,6 +482,12 @@ export const salonRouter = createTRPCRouter({
       nextPaymentDate: t.nextPaymentDate,
       cancelAtPeriodEnd: t.cancelAtPeriodEnd,
       stripeCustomerId: t.stripeCustomerId ?? null,
+      // In-app self-service state: whether there's a live subscription to manage,
+      // a scheduled downgrade (plan + when it takes effect), and pause window.
+      hasSubscription: !!t.stripeSubscriptionId,
+      pendingPlan: t.pendingPlan ?? null,
+      pendingPlanEffectiveAt: t.pendingPlanEffectiveAt ?? null,
+      pauseResumesAt: t.pauseResumesAt ?? null,
     };
   }),
 
@@ -2716,6 +2762,223 @@ export const salonRouter = createTRPCRouter({
 
     return { url };
   }),
+
+  // ── In-app subscription self-service (plan change + pause) ─────────────────
+
+  /**
+   * Preview the immediate charge an upgrade would make (no mutation). Downgrades
+   * and same-plan return amountDue=0 (they never charge now).
+   */
+  previewPlanChange: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]) }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const stripeKey = env.STRIPE_SECRET_KEY;
+      if (!stripeKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+
+      const [tenant] = await ctx.db
+        .select({ plan: tenants.plan, stripeSubscriptionId: tenants.stripeSubscriptionId })
+        .from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
+      if (!tenant?.stripeSubscriptionId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "no_active_subscription" });
+      }
+      const currentPlan = (tenant.plan ?? "start") as "start" | "pro" | "max";
+      if (PLAN_RANK[input.plan] <= PLAN_RANK[currentPlan]) {
+        return {
+          kind: (PLAN_RANK[input.plan] < PLAN_RANK[currentPlan] ? "downgrade" : "noop") as "downgrade" | "noop",
+          amountDue: 0,
+          currency: "pln",
+        };
+      }
+      const sub = await retrieveSubscription(stripeKey, tenant.stripeSubscriptionId);
+      const item = sub?.items?.data?.[0];
+      const itemId = item?.id;
+      const cycle: "monthly" | "annual" =
+        (item?.price?.recurring?.interval ?? item?.plan?.interval) === "year" ? "annual" : "monthly";
+      const newPriceId = stripePriceId(input.plan, cycle);
+      if (!itemId || !newPriceId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_preview" });
+      }
+      const { amountDue, currency } = await stripePreviewPlanChange(
+        stripeKey, tenant.stripeSubscriptionId, itemId, newPriceId,
+      );
+      return { kind: "upgrade" as const, amountDue, currency };
+    }),
+
+  /**
+   * Change the subscription's plan in-app.
+   *   UPGRADE   → replace the price now, bill the prorated difference immediately.
+   *   DOWNGRADE → schedule the cheaper price at the period end (no refund); the
+   *               current plan stays until then.
+   * Any existing pending downgrade is released first so we re-derive cleanly.
+   */
+  changePlan: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), plan: z.enum(["start", "pro", "max"]) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const stripeKey = env.STRIPE_SECRET_KEY;
+      if (!stripeKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+
+      const [tenant] = await ctx.db
+        .select({
+          plan: tenants.plan,
+          stripeSubscriptionId: tenants.stripeSubscriptionId,
+          pendingScheduleId: tenants.pendingScheduleId,
+        })
+        .from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
+      if (!tenant) throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found" });
+      if (!tenant.stripeSubscriptionId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "no_active_subscription" });
+      }
+
+      const currentPlan = (tenant.plan ?? "start") as "start" | "pro" | "max";
+      const target = input.plan;
+      const now = Math.floor(Date.now() / 1000);
+
+      const sub = await retrieveSubscription(stripeKey, tenant.stripeSubscriptionId);
+      if (!sub) throw new TRPCError({ code: "BAD_REQUEST", message: "stripe_subscription_missing" });
+      const item = sub.items?.data?.[0];
+      const itemId = item?.id;
+      if (!itemId) throw new TRPCError({ code: "BAD_REQUEST", message: "subscription_item_missing" });
+      const cycle: "monthly" | "annual" =
+        (item?.price?.recurring?.interval ?? item?.plan?.interval) === "year" ? "annual" : "monthly";
+
+      // Release any pending downgrade schedule first — releasing leaves the sub
+      // on its current/active plan, then we apply the new change from scratch.
+      const existingScheduleId = tenant.pendingScheduleId ?? sub.schedule ?? null;
+      if (existingScheduleId) {
+        await releaseScheduledChange(stripeKey, existingScheduleId).catch((e) =>
+          log.warn?.("salon.changePlan.releaseFailed", { err: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+      const clearPending = {
+        pendingPlan: null, pendingPriceId: null, pendingPlanEffectiveAt: null, pendingScheduleId: null,
+      };
+
+      if (target === currentPlan) {
+        // Same plan: if we just released a pending downgrade this is "keep my
+        // current plan" (cancel the downgrade); otherwise a no-op. Either way
+        // clear pending state.
+        await ctx.db.update(tenants).set({ ...clearPending, updatedAt: now })
+          .where(eq(tenants.id, input.tenantId));
+        return { kind: "noop" as const, plan: currentPlan };
+      }
+
+      const newPriceId = stripePriceId(target, cycle);
+      if (!newPriceId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `price_not_configured:${target}:${cycle}` });
+      }
+
+      if (PLAN_RANK[target] > PLAN_RANK[currentPlan]) {
+        // UPGRADE — immediate, bill the prorated difference now.
+        await changeSubscriptionPlanImmediate(stripeKey, tenant.stripeSubscriptionId, itemId, newPriceId);
+        await ctx.db.update(tenants)
+          .set({ plan: target, ...clearPending, updatedAt: now })
+          .where(eq(tenants.id, input.tenantId));
+        await writeAudit(ctx.db, {
+          actor: ctx.webUser?.email ?? null, action: "salon.changePlan.upgrade",
+          tenantId: input.tenantId, detail: `${currentPlan}->${target} (${cycle})`, ip: ctxIp(ctx),
+        });
+        return { kind: "upgraded" as const, plan: target };
+      }
+
+      // DOWNGRADE — schedule at period end (no refund); keep current plan until then.
+      const { scheduleId, effectiveAt } = await scheduleDowngradeAtPeriodEnd(
+        stripeKey, tenant.stripeSubscriptionId, newPriceId,
+      );
+      await ctx.db.update(tenants).set({
+        pendingPlan: target,
+        pendingPriceId: newPriceId,
+        pendingPlanEffectiveAt: effectiveAt,
+        pendingScheduleId: scheduleId,
+        updatedAt: now,
+      }).where(eq(tenants.id, input.tenantId));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null, action: "salon.changePlan.downgrade",
+        tenantId: input.tenantId, detail: `${currentPlan}->${target} (${cycle}) at ${effectiveAt}`, ip: ctxIp(ctx),
+      });
+      return { kind: "downgrade_scheduled" as const, plan: target, effectiveAt };
+    }),
+
+  /** Undo a scheduled downgrade — release the Stripe schedule, clear pending state. */
+  cancelPendingDowngrade: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const stripeKey = env.STRIPE_SECRET_KEY;
+      if (!stripeKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+      const [tenant] = await ctx.db
+        .select({ pendingScheduleId: tenants.pendingScheduleId })
+        .from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
+      if (!tenant?.pendingScheduleId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "no_pending_downgrade" });
+      }
+      await releaseScheduledChange(stripeKey, tenant.pendingScheduleId);
+      const now = Math.floor(Date.now() / 1000);
+      await ctx.db.update(tenants).set({
+        pendingPlan: null, pendingPriceId: null, pendingPlanEffectiveAt: null, pendingScheduleId: null,
+        updatedAt: now,
+      }).where(eq(tenants.id, input.tenantId));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null, action: "salon.cancelPendingDowngrade",
+        tenantId: input.tenantId, detail: "released schedule", ip: ctxIp(ctx),
+      });
+      return { ok: true as const };
+    }),
+
+  /** Pause the subscription (no billing, service paused). Optional auto-resume. */
+  pauseSubscription: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), resumeInMonths: z.number().int().min(1).max(12).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const stripeKey = env.STRIPE_SECRET_KEY;
+      if (!stripeKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+      const [tenant] = await ctx.db
+        .select({ stripeSubscriptionId: tenants.stripeSubscriptionId, billingStatus: tenants.billingStatus })
+        .from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
+      if (!tenant?.stripeSubscriptionId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "no_active_subscription" });
+      }
+      if (tenant.billingStatus !== "active") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "only_active_can_pause" });
+      }
+      const now = Math.floor(Date.now() / 1000);
+      const resumesAt = input.resumeInMonths ? now + input.resumeInMonths * 30 * 86400 : null;
+      await stripePauseSubscription(stripeKey, tenant.stripeSubscriptionId, resumesAt);
+      await ctx.db.update(tenants)
+        .set({ billingStatus: "paused", pauseResumesAt: resumesAt, updatedAt: now })
+        .where(eq(tenants.id, input.tenantId));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null, action: "salon.pauseSubscription",
+        tenantId: input.tenantId, detail: resumesAt ? `resumesAt=${resumesAt}` : "indefinite", ip: ctxIp(ctx),
+      });
+      return { ok: true as const, resumesAt };
+    }),
+
+  /** Resume a paused subscription — clear pause_collection, back to active. */
+  resumeSubscription: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const stripeKey = env.STRIPE_SECRET_KEY;
+      if (!stripeKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+      const [tenant] = await ctx.db
+        .select({ stripeSubscriptionId: tenants.stripeSubscriptionId })
+        .from(tenants).where(eq(tenants.id, input.tenantId)).limit(1);
+      if (!tenant?.stripeSubscriptionId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "no_active_subscription" });
+      }
+      await stripeResumeSubscription(stripeKey, tenant.stripeSubscriptionId);
+      const now = Math.floor(Date.now() / 1000);
+      await ctx.db.update(tenants)
+        .set({ billingStatus: "active", pauseResumesAt: null, updatedAt: now })
+        .where(eq(tenants.id, input.tenantId));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null, action: "salon.resumeSubscription",
+        tenantId: input.tenantId, detail: "resumed", ip: ctxIp(ctx),
+      });
+      return { ok: true as const };
+    }),
 
   // ── Meta Channels (Instagram / WhatsApp) ───────────────────────
 

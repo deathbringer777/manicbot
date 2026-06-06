@@ -21,6 +21,18 @@ export function graphBase(host) {
 }
 
 /**
+ * Pick the Graph host from the token when the caller didn't pass an explicit one.
+ * IGAA-prefixed tokens (Instagram Login product) ONLY work on graph.instagram.com;
+ * EAA / WhatsApp / system-user tokens use graph.facebook.com. Keeps existing callers
+ * (which pass no host) correct for both messaging and the marketing autopilot.
+ * @param {string} token
+ * @returns {'facebook'|'instagram'}
+ */
+export function hostForToken(token) {
+  return typeof token === 'string' && token.startsWith('IGAA') ? 'instagram' : 'facebook';
+}
+
+/**
  * Meta error codes that mean the token is dead (re-auth required).
  * Code 190 = OAuthException; subcode 463 = user hasn't authorized.
  * Code 200 = app doesn't have permission (scope change).
@@ -42,8 +54,8 @@ export function isTokenDead(errorData) {
  * @param {{ maxRetries?: number, label?: string }} [opts]
  * @returns {Promise<{ ok: boolean, data?: any, status?: number, error?: string }>}
  */
-export async function graphPost(path, token, body, { maxRetries = 2, label = 'graph', host = 'facebook' } = {}) {
-  const base = graphBase(host);
+export async function graphPost(path, token, body, { maxRetries = 2, label = 'graph', host } = {}) {
+  const base = graphBase(host ?? hostForToken(token));
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetch(`${base}${path}`, {
@@ -93,10 +105,11 @@ export async function graphPost(path, token, body, { maxRetries = 2, label = 'gr
  * @param {{ maxRetries?: number, label?: string }} [opts]
  * @returns {Promise<{ ok: boolean, data?: any, status?: number, error?: string, errorCode?: number, errorType?: string, tokenDead?: boolean }>}
  */
-export async function graphGet(path, token, { maxRetries = 2, label = 'graph' } = {}) {
+export async function graphGet(path, token, { maxRetries = 2, label = 'graph', host } = {}) {
+  const base = graphBase(host ?? hostForToken(token));
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(`${GRAPH_API}${path}`, {
+      const res = await fetch(`${base}${path}`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });

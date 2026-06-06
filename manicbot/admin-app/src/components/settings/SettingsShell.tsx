@@ -6,6 +6,7 @@ import {
   User, CreditCard, Palette, HelpCircle, ArrowLeft,
   Settings, Wrench, Store, Users, MessageSquare,
   UserRound, ChevronLeft, ChevronRight, Gift, Bell, Star,
+  LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
@@ -62,6 +63,12 @@ const SECTION_LABELS: Record<string, Record<Lang, { label: string; desc: string 
     en: { label: "Appearance",       desc: "Sidebar, widgets" },
     pl: { label: "Wygląd",           desc: "Pasek boczny, widżety" },
   },
+  widgets: {
+    ru: { label: "Виджеты",          desc: "Виджеты на «Домой»" },
+    ua: { label: "Віджети",          desc: "Віджети на «Додому»" },
+    en: { label: "Widgets",          desc: "Home dashboard widgets" },
+    pl: { label: "Widżety",          desc: "Widżety strony głównej" },
+  },
   help: {
     ru: { label: "Помощь",           desc: "Тур, поддержка" },
     ua: { label: "Допомога",         desc: "Тур, підтримка" },
@@ -116,6 +123,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   channels:      MessageSquare,
   billing:       CreditCard,
   appearance:    Palette,
+  widgets:       LayoutGrid,
   help:          HelpCircle,
   profile:       UserRound,
   platform:      Wrench,
@@ -142,7 +150,7 @@ export function getSettingsSectionIds(role: string | null, isPersonalTenant: boo
     (role === "master" && isPersonalTenant);
 
   if (role === "tenant_owner" || role === "tenant_manager") {
-    const ids = ["salon", "reviews", "team", "channels", "billing", "notifications", "appearance"];
+    const ids = ["salon", "reviews", "team", "channels", "billing", "notifications", "appearance", "widgets"];
     if (showReferrals) ids.push("referrals");
     ids.push("account", "help");
     return ids;

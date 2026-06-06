@@ -22,6 +22,7 @@ import {
 
 import { checkRateLimit } from "~/server/auth/rateLimit";
 import { log } from "~/server/utils/logger";
+import { deliverWelcomeFireAndForget } from "~/server/messenger/welcomeOnRegister";
 import { writeAudit } from "~/server/security/audit";
 import { isSafeDisplayName } from "~/server/security/sanitize";
 import { recordEvent, ANALYTICS_EVENTS } from "~/server/services/recordEvent";
@@ -397,6 +398,18 @@ export const webUsersRouter = createTRPCRouter({
           userId: id,
           properties: { role: input.role, lang: input.lang, via_google: true },
         });
+      }
+
+      // Welcome message — drop a personalized first message into the new owner's
+      // "ManicBot — News & Announcements" channel so it isn't empty on first
+      // login. Fire-and-forget (never blocks signup), tenant_owner only (matches
+      // the platform-campaign recipient model), idempotent via the delivery
+      // ledger. Independent masters are intentionally excluded, like all platform
+      // campaigns.
+      if (input.role === "tenant_owner" && assignedTenantId) {
+        void deliverWelcomeFireAndForget(ctx.db, { webUserId: id, tenantId: assignedTenantId }).catch((err) =>
+          log.error("webUsers.register: welcome failed", err instanceof Error ? err : new Error(String(err))),
+        );
       }
 
       return {

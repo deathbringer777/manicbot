@@ -328,6 +328,11 @@ CREATE TABLE IF NOT EXISTS tenants (
   next_payment_date INTEGER,
   billing_email TEXT,
   cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+  pending_plan TEXT,
+  pending_price_id TEXT,
+  pending_plan_effective_at INTEGER,
+  pending_schedule_id TEXT,
+  pause_resumes_at INTEGER,
   slug TEXT,
   description TEXT,
   lat REAL,
@@ -360,6 +365,7 @@ CREATE INDEX IF NOT EXISTS idx_tenant_location ON tenants(lat, lng);
 CREATE INDEX IF NOT EXISTS idx_tenant_public ON tenants(public_active, city);
 CREATE INDEX IF NOT EXISTS idx_tenants_parent ON tenants(parent_tenant_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_is_test ON tenants(is_test);
+CREATE INDEX IF NOT EXISTS idx_tenant_billing_status ON tenants(billing_status);
 
 CREATE TABLE IF NOT EXISTS bots (
   bot_id TEXT PRIMARY KEY,
@@ -1505,47 +1511,6 @@ CREATE TABLE IF NOT EXISTS referral_events (
 CREATE INDEX IF NOT EXISTS idx_ref_events_referral
   ON referral_events (referral_id, created_at);
 
--- ─── Reminders plugin (migration 0070) ───────────────────────────────────
--- One row per reminder/routine definition. Recurrence is stored as JSON;
--- validation lives at the tRPC boundary. starts_on + time are the anchor.
-CREATE TABLE IF NOT EXISTS plugin_reminders (
-  id                       TEXT PRIMARY KEY,
-  tenant_id                TEXT NOT NULL,
-  created_by_web_user_id   TEXT NOT NULL,
-  target_master_id         INTEGER,
-  kind                     TEXT NOT NULL DEFAULT 'reminder'
-                           CHECK (kind IN ('reminder','routine')),
-  title                    TEXT NOT NULL,
-  note                     TEXT,
-  starts_on                TEXT NOT NULL,
-  time                     TEXT NOT NULL,
-  recurrence_json          TEXT NOT NULL,
-  channels_json            TEXT NOT NULL DEFAULT '["inapp"]',
-  archived_at              INTEGER,
-  created_at               INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at               INTEGER NOT NULL DEFAULT (unixepoch())
-);
-CREATE INDEX IF NOT EXISTS idx_reminders_tenant_active
-  ON plugin_reminders(tenant_id, starts_on) WHERE archived_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_reminders_target
-  ON plugin_reminders(tenant_id, target_master_id, starts_on) WHERE archived_at IS NULL;
-
--- Idempotency claim + fire log. The (reminder_id, fires_at_epoch) UNIQUE
--- index IS the contract — INSERT OR IGNORE in the cron loop returns
--- changes=0 on duplicate, which is how the second cron tick at the same
--- minute knows not to re-fire.
-CREATE TABLE IF NOT EXISTS plugin_reminder_fires (
-  id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  reminder_id     TEXT NOT NULL REFERENCES plugin_reminders(id) ON DELETE CASCADE,
-  fires_at_epoch  INTEGER NOT NULL,
-  fired_at_epoch  INTEGER,
-  delivery_state  TEXT NOT NULL DEFAULT 'pending'
-                  CHECK (delivery_state IN ('pending','sent','failed')),
-  delivery_error  TEXT
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_reminder_fires_occurrence
-  ON plugin_reminder_fires(reminder_id, fires_at_epoch);
-
 -- ─── User notifications (migration 0070) ─────────────────────────────────
 -- Platform-wide in-app feed consumed by the header bell. Generic by design
 -- — reminders is the first writer but any future feature (checklists,
@@ -1720,7 +1685,7 @@ CREATE INDEX IF NOT EXISTS idx_platform_campaigns_kind
   ON platform_campaigns(kind);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_campaigns_singleton_kind
   ON platform_campaigns(kind)
-  WHERE kind IN ('monthly_report', 'subscription_reminder');
+  WHERE kind IN ('monthly_report', 'subscription_reminder', 'welcome');
 
 CREATE TABLE IF NOT EXISTS platform_campaign_deliveries (
   id                    TEXT PRIMARY KEY,

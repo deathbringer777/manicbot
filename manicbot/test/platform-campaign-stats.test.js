@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { makeCtx } from './helpers/mock-db.js';
-import { monthWindow, buildMonthlyReport, renderMonthlyReportBodies } from '../src/services/platformCampaignStats.js';
+import { monthWindow, buildMonthlyReport, renderMonthlyReportBodies, renderAnnouncementBodies } from '../src/services/platformCampaignStats.js';
 
 // April 2026 in Europe/Warsaw (UTC+2 in summer): 2026-04-01 00:00 local = 2026-03-31 22:00 UTC.
 const W = monthWindow('2026-04');
@@ -129,5 +129,36 @@ describe('renderMonthlyReportBodies', () => {
   it('omits the revenue line when estimatedRevenue is null', () => {
     const b = renderMonthlyReportBodies({ ...stats, estimatedRevenue: null }, 'ru');
     expect(b.center).not.toMatch(/720/);
+  });
+});
+
+describe('renderAnnouncementBodies — personalization', () => {
+  const vars = { salon_name: 'Glow Studio', owner_name: 'Anna', plan: 'pro' };
+
+  it('substitutes {tokens} across center / telegram / bell', () => {
+    const b = renderAnnouncementBodies(
+      { title: 'Привет, {salon_name}', bodies_json: JSON.stringify({ center: 'Здравствуйте, {salon_name}! Тариф: {plan}.' }) },
+      'ru', {}, vars,
+    );
+    expect(b.title).toBe('Привет, Glow Studio');
+    expect(b.center).toBe('Здравствуйте, Glow Studio! Тариф: pro.');
+    expect(b.telegram).toBe('Здравствуйте, Glow Studio! Тариф: pro.');
+    expect(b.bellBody).toContain('Glow Studio');
+  });
+
+  it('HTML-escapes a substituted value in the default email layout (no injection)', () => {
+    const b = renderAnnouncementBodies(
+      { title: 'T', bodies_json: JSON.stringify({ center: 'Hi {salon_name}' }) },
+      'ru', {}, { salon_name: '<b>x</b>' },
+    );
+    expect(b.center).toBe('Hi <b>x</b>');               // raw text body is not escaped
+    expect(b.emailHtml).toContain('&lt;b&gt;x&lt;/b&gt;'); // but the email layout escapes it
+    expect(b.emailHtml).not.toContain('<b>x</b>');
+  });
+
+  it('leaves unknown tokens verbatim and is a no-op without vars', () => {
+    const campaign = { title: 'T', body: 'Hi {salon_name} {missing}' };
+    expect(renderAnnouncementBodies(campaign, 'ru', {}, { salon_name: 'Glow' }).center).toBe('Hi Glow {missing}');
+    expect(renderAnnouncementBodies(campaign, 'ru', {}).center).toBe('Hi {salon_name} {missing}');
   });
 });

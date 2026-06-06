@@ -57,6 +57,19 @@ The repository has `manicbot/package-lock.json` (Worker) and `manicbot/admin-app
 
 Detailed architecture: **`CLAUDE.md`** in the repository (Admin Mini-App section).
 
+## Salon Home widget board
+
+The salon Overview («Домой») tab is a configurable widget board
+(`src/components/dashboards/home-widgets/`) built on `react-grid-layout`
+(`^1.5`, React 19-compatible; mounted `next/dynamic { ssr:false }`).
+Drag / resize / add / remove widgets; the layout persists per-user in the
+`tenant_config` ui-prefs blob via `useDashboardPrefs.homeWidgets` — **no
+migration**. Metrics come from the tenant-scoped `salonMetrics` tRPC
+router. **Settings → Виджеты**
+(`src/components/settings/sections/WidgetsSection.tsx`) configures the same
+state. See `src/components/dashboards/home-widgets/README.md` for the
+registry contract and how to add a widget.
+
 ## Deploy
 
 Push to `main` → GitHub Actions: `test` job (including `typecheck` + `npm test` for this package) → `deploy-admin-app` job → `pages deploy` to project `admin-app`.

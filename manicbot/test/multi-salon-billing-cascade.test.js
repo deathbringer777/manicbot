@@ -1,5 +1,5 @@
 /**
- * Multi-salon billing cascade (migration 0116).
+ * Multi-salon billing cascade (migration 0117).
  *
  * Secondary salons (`parent_tenant_id` set) are billed under their parent's MAX
  * subscription. `setSecondarySalonsBillingStatus` mirrors the parent's
@@ -31,7 +31,7 @@ async function seed(ctx, id, extra = {}) {
   });
 }
 
-describe('setSecondarySalonsBillingStatus — multi-salon cascade (0116)', () => {
+describe('setSecondarySalonsBillingStatus — multi-salon cascade (0117)', () => {
   let ctx;
   beforeEach(async () => {
     ctx = makeCtx();
@@ -69,7 +69,7 @@ describe('setSecondarySalonsBillingStatus — multi-salon cascade (0116)', () =>
   });
 });
 
-describe('phaseBillingReconcileSecondaries — cascade backstop (0116)', () => {
+describe('phaseBillingReconcileSecondaries — cascade backstop (0117)', () => {
   it('re-derives each secondary billing status from its parent and repairs drift', async () => {
     const ctx = makeCtx();
     await seed(ctx, 'home', { plan: 'max', billingStatus: 'active' });

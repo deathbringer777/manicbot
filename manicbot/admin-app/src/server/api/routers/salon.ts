@@ -3017,7 +3017,7 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.update(tenants)
         .set({ billingStatus: "paused", pauseResumesAt: resumesAt, updatedAt: now })
         .where(eq(tenants.id, input.tenantId));
-      // Multi-salon cascade (0116): freeze this owner's secondary salons
+      // Multi-salon cascade (0117): freeze this owner's secondary salons
       // synchronously so they can't be used during the webhook-delay window.
       await ctx.db.update(tenants)
         .set({ billingStatus: "inactive", updatedAt: now })
@@ -3047,7 +3047,7 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.update(tenants)
         .set({ billingStatus: "active", pauseResumesAt: null, updatedAt: now })
         .where(eq(tenants.id, input.tenantId));
-      // Multi-salon cascade (0116): restore this owner's secondary salons.
+      // Multi-salon cascade (0117): restore this owner's secondary salons.
       await ctx.db.update(tenants)
         .set({ billingStatus: "active", updatedAt: now })
         .where(eq(tenants.parentTenantId, input.tenantId));

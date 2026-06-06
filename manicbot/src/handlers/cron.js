@@ -83,7 +83,7 @@ export const PHASE_WINDOWS = Object.freeze({
   cleanup: 24 * 60 * 60,      // 24 h
   retention: 24 * 60 * 60,    // 24 h (P1-10)
   attachmentGc: 24 * 60 * 60, // 24 h — orphaned messenger attachment sweep
-  // Multi-salon (0116) backstop: re-derive each secondary salon's billing
+  // Multi-salon (0117) backstop: re-derive each secondary salon's billing
   // status from its parent in case a cascade webhook was lost/out-of-order.
   billingReconcileSecondaries: 24 * 60 * 60, // 24 h
   emailPrompt: 24 * 60 * 60,  // 24 h — proactive email re-ask (Scenario C, OFF by default)
@@ -1366,7 +1366,7 @@ export async function phasePluginCron(ctx, nowMs, dispatchers = PLUGIN_CRON_DISP
  *   - Persists the last-run epoch on success.
  */
 /**
- * Multi-salon billing backstop (0116). Stripe webhook delivery is not
+ * Multi-salon billing backstop (0117). Stripe webhook delivery is not
  * guaranteed, so a secondary salon's billing_status can drift out of sync with
  * its parent's MAX entitlement. Once a day, re-derive each secondary's status
  * from its parent (active iff the parent is an active/trialing MAX) and repair
@@ -1504,7 +1504,7 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));
     await runPhase(ctx, 'attachmentGc', () => phaseAttachmentGc(ctx, ctx.tenantId, now));
-    // Multi-salon (0116): repair any secondary-salon billing drift left by a
+    // Multi-salon (0117): repair any secondary-salon billing drift left by a
     // lost/out-of-order cascade webhook. Idempotent; windowed to 24h.
     await runPhase(ctx, 'billingReconcileSecondaries', () => phaseBillingReconcileSecondaries(ctx, now));
     // Scenario C: proactive email re-ask (Telegram-only). No-op unless

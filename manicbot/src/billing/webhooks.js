@@ -421,7 +421,7 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
             updatedAt: nowSec(),
           });
         }
-        // Multi-salon cascade (0116): mirror the parent's (possibly recovered)
+        // Multi-salon cascade (0117): mirror the parent's (possibly recovered)
         // MAX entitlement onto its secondary salons — restore them when the card
         // clears, keep them frozen if the parent is no longer an active MAX.
         try {
@@ -456,7 +456,7 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
           graceEndsAt: nowSec() + msToSec(GRACE_DURATION_MS),
           updatedAt: nowSec(),
         });
-        // Multi-salon cascade (0116): the parent entered grace (card declined) —
+        // Multi-salon cascade (0117): the parent entered grace (card declined) —
         // freeze its secondary salons so they can't use premium features while
         // the parent is only entitled to booking during dunning.
         try {

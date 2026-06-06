@@ -102,7 +102,7 @@ function docToTenantParams(data) {
     // paused chat must pass `chatEnabled: false` explicitly.
     chat_enabled: data.chatEnabled === false ? 0 : 1,
     search_text: data.searchText || null,
-    // 0116 — preserve secondary-salon parent across billing writes (putTenant
+    // 0117 — preserve secondary-salon parent across billing writes (putTenant
     // is INSERT-OR-REPLACE; an omitted column would reset to NULL).
     parent_tenant_id: data.parentTenantId || null,
     created_at: data.createdAt || nowSec(),

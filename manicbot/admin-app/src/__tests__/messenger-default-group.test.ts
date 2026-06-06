@@ -91,7 +91,7 @@ describe("defaultStaffGroup — ensureDefaultStaffGroup", () => {
     expect(ownerInsert).toBeUndefined();
   });
 
-  it("resolves the owner via parent_tenant_id for a secondary salon (0116)", async () => {
+  it("resolves the owner via parent_tenant_id for a secondary salon (0117)", async () => {
     // A secondary salon has no web_users row of its own — the owner lives on the
     // HOME tenant. ensureDefaultStaffGroup must follow parent_tenant_id so the
     // group is still seeded with its owner.

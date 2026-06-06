@@ -375,7 +375,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   is_personal INTEGER NOT NULL DEFAULT 0,
   industry TEXT NOT NULL DEFAULT 'beauty',
   is_test INTEGER NOT NULL DEFAULT 0,
-  -- 0116 — multi-salon ownership: home tenant this secondary salon is billed
+  -- 0117 — multi-salon ownership: home tenant this secondary salon is billed
   -- under (MAX plan). NULL = normal, independently-billed tenant.
   parent_tenant_id TEXT,
   created_at INTEGER NOT NULL,

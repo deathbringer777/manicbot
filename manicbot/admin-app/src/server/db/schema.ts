@@ -47,7 +47,7 @@ export const tenants = sqliteTable("tenants", {
   isPersonal: integer("is_personal").notNull().default(0),
   industry: text("industry").notNull().default("beauty"),
   isTest: integer("is_test").notNull().default(0),
-  // 0116 — multi-salon ownership: home tenant id this secondary salon is billed
+  // 0117 — multi-salon ownership: home tenant id this secondary salon is billed
   // under (MAX plan). NULL = a normal, independently-billed tenant.
   parentTenantId: text("parent_tenant_id"),
   createdAt: integer("created_at").notNull(),

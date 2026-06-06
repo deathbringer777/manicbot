@@ -1,5 +1,5 @@
 import { send } from '../telegram.js';
-import { escHtml, fill, t, svcName, isCorrectionSvc } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isCorrectionSvc, hasRealName } from '../utils/helpers.js';
 import { fmtDT, fmtDate, resolveDateHint, resolveTimeHint, findClosestSlot } from '../utils/date.js';
 import { CB, STEP } from '../config.js';
 import { getLang } from '../services/chat.js';
@@ -22,11 +22,11 @@ export async function startBooking(ctx, cid, from, bookingIntent = null) {
     ...(bookingIntent.masterId ? { masterId: bookingIntent.masterId } : {}),
   } : {};
   if (!isRegComplete(user)) {
-    // Web channel: there's no genuine Telegram name to confirm, so skip
-    // REG_CONFIRM and prompt for a typed name directly. This is also
-    // safer for embeds (TikTok etc.) where we can't assume we know the
-    // visitor at all.
-    if (ctx.channel?.type === 'web') {
+    // Web channel — and any channel that gives us no genuine first_name
+    // (Instagram / WhatsApp) — has no real Telegram name to confirm. Skip
+    // REG_CONFIRM and prompt for a typed name directly. Confirming a
+    // fabricated '?' here is what drove the registration loop on IG/WA.
+    if (ctx.channel?.type === 'web' || !hasRealName(from)) {
       await setState(ctx, cid, {
         step: STEP.REG_NAME, flow: 'book',
         tgUser: from?.username || null,

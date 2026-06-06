@@ -20,6 +20,43 @@ export function escHtml(s) {
 
 export function isCorrectionSvc(svcId) { return svcId === 'correction'; }
 
+/**
+ * True when `from` carries a genuine Telegram-style display name. Channels like
+ * Instagram / WhatsApp deliver no first_name, so we must not fabricate one and
+ * ask the user to "confirm" it — that drove the REG_CONFIRM infinite loop
+ * (name='?' → isRegComplete rejects '?' → bounce back to REG_CONFIRM).
+ * @param {{ first_name?: string, last_name?: string }|null|undefined} from
+ */
+export function hasRealName(from) {
+  const first = typeof from?.first_name === 'string' ? from.first_name.trim() : '';
+  const last = typeof from?.last_name === 'string' ? from.last_name.trim() : '';
+  return Boolean(first || last);
+}
+
+/**
+ * Build the registration phone-step prompt for the current channel.
+ *
+ * Telegram gets a `request_contact` reply-keyboard (one-tap number share).
+ * Web / Instagram / WhatsApp can't render reply-keyboards — WebAdapter only
+ * surfaces inline_keyboard — so they get a plain "type your number" prompt
+ * with NO reply_markup. Otherwise the copy points at a button that never
+ * renders ("phantom button" bug).
+ * @param {{ channel?: { type?: string } }} ctx
+ * @param {string} lg
+ * @param {string} name already HTML-escaped display name for the {n} placeholder
+ * @returns {{ text: string, extra: object }}
+ */
+export function regPhonePrompt(ctx, lg, name) {
+  const isTelegram = !ctx?.channel || ctx.channel.type === 'telegram';
+  if (isTelegram) {
+    return {
+      text: fill(t(lg, 'reg_phone'), { n: name }),
+      extra: { reply_markup: { keyboard: [[{ text: t(lg, 'reg_phone_btn'), request_contact: true }]], resize_keyboard: true, one_time_keyboard: true } },
+    };
+  }
+  return { text: fill(t(lg, 'reg_phone_web'), { n: name }), extra: {} };
+}
+
 export function fmtEmoji(e) {
   return e && typeof e === 'string' && e.trim() ? e + ' ' : '';
 }

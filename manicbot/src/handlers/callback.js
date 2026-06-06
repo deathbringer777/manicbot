@@ -1,7 +1,7 @@
 import { CB, STEP, VALID_LANGS, LOCK_TTL_SEC, MAX_APTS } from '../config.js';
 import { log } from '../utils/logger.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
-import { escHtml, fill, t, svcName, isCorrectionSvc, isValidChatId, p2, safeParseInt } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isCorrectionSvc, isValidChatId, p2, safeParseInt, regPhonePrompt } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, warsawToUTC, warsawNow, dateStrForOffset, todayStr } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
 import { send, edit, answerCb, api } from '../telegram.js';
@@ -1203,13 +1203,21 @@ export async function onCb(ctx, cb) {
   if (d === CB.REG_YES) {
     const st = await getState(ctx, cid);
     if (st.step !== STEP.REG_CONFIRM) return;
+    // Defensive: never persist a fabricated '?'/empty name. If we somehow
+    // reached REG_CONFIRM without a real name, fall back to manual entry
+    // rather than confirming an invalid name (which isRegComplete rejects).
+    const confirmedName = typeof st.tgName === 'string' ? st.tgName.trim() : '';
+    if (!confirmedName || confirmedName === '?' || confirmedName === '—' || confirmedName === '-') {
+      st.step = STEP.REG_NAME;
+      await setState(ctx, cid, st);
+      return send(ctx, cid, t(lg, 'reg_enter_name'));
+    }
     st.step = STEP.REG_PHONE;
-    st.name = st.tgName;
+    st.name = confirmedName;
     st.tosAcceptedAt = Math.floor(Date.now() / 1000);
     await setState(ctx, cid, st);
-    return send(ctx, cid, fill(t(lg, 'reg_phone'), { n: escHtml(st.tgName) }), {
-      reply_markup: { keyboard: [[{ text: t(lg, 'reg_phone_btn'), request_contact: true }]], resize_keyboard: true, one_time_keyboard: true },
-    });
+    const prompt = regPhonePrompt(ctx, lg, escHtml(confirmedName));
+    return send(ctx, cid, prompt.text, prompt.extra);
   }
 
   if (d === CB.REG_CHANGE) {

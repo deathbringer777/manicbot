@@ -8,9 +8,6 @@ import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { hasRuntime, loadRuntime } from "~/components/plugins/runtimePanels";
-import { getPlugin } from "@plugins/index";
-import type { PluginLang } from "@plugins/types";
-import { PLUGIN_LANGS } from "@plugins/types";
 
 export default function PluginOpenClient() {
   const params = useParams();
@@ -24,11 +21,6 @@ export default function PluginOpenClient() {
     return installedQ.data.find((row) => row.pluginSlug === slug) ?? null;
   }, [installedQ.data, slug]);
 
-  const plugin = useMemo(() => getPlugin(slug), [slug]);
-  const pluginLang: PluginLang = (PLUGIN_LANGS as readonly string[]).includes(lang)
-    ? (lang as PluginLang)
-    : "ru";
-  const pluginName = plugin?.manifest.name[pluginLang] ?? slug;
   const runtimeAvailable = hasRuntime(slug);
 
   // Redirect when: not installed / disabled / no runtime (once data is loaded).
@@ -69,17 +61,16 @@ export default function PluginOpenClient() {
   }
 
   return (
-    <div className="min-h-0 flex flex-col w-full max-w-4xl mx-auto px-4 sm:px-6 pt-5 pb-10">
-      {/* Minimal header */}
-      <div className="flex items-center gap-3 mb-5">
+    <div className="min-h-0 flex flex-col w-full max-w-6xl mx-auto px-4 sm:px-6 pt-4 pb-[max(2.5rem,env(safe-area-inset-bottom))]">
+      {/* Single back-link — the runtime's PluginRuntimeShell renders the
+          icon + name + tagline header, so we don't repeat the name here. */}
+      <div className="mb-4">
         <Link
           href="/plugins"
           className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 inline-flex items-center gap-1"
         >
           <ArrowLeft size={13} /> {t("plugins.detail.back", lang)}
         </Link>
-        <span className="text-slate-300 dark:text-slate-700 text-xs">·</span>
-        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{pluginName}</span>
       </div>
 
       {/* Runtime full-width area */}

@@ -262,7 +262,7 @@ describe("LoyaltyStampsRuntime — client list", () => {
     mockClientsRows = [
       { chatId: 1, name: "Alice", phone: null, tgUsername: null, lifetimeVisits: 3 },
       { chatId: 2, name: "Bob", phone: "+48", tgUsername: null, lifetimeVisits: 14 },
-      { chatId: 3, name: null, phone: null, tgUsername: "@vip", lifetimeVisits: 0 },
+      { chatId: 3, name: null, phone: null, tgUsername: "@vip", lifetimeVisits: 5 },
     ];
     render();
     const rows = screen.getAllByTestId("loyalty-client-row");
@@ -279,13 +279,29 @@ describe("LoyaltyStampsRuntime — client list", () => {
     mockClientsRows = [
       { chatId: 10, name: "", phone: "+48 600 111 222", tgUsername: null, lifetimeVisits: 1 },
       { chatId: 11, name: null, phone: null, tgUsername: "@vipclient", lifetimeVisits: 2 },
-      { chatId: 12, name: null, phone: null, tgUsername: null, lifetimeVisits: 0 },
+      { chatId: 12, name: null, phone: null, tgUsername: null, lifetimeVisits: 3 },
     ];
     render();
     const rows = screen.getAllByTestId("loyalty-client-row");
     expect(rows[0]!.textContent).toContain("+48 600 111 222");
     expect(rows[1]!.textContent).toContain("@vipclient");
     expect(rows[2]!.textContent).toContain("Без имени");
+  });
+
+  it("hides zero-visit clients by default and surfaces them via search", () => {
+    mockClientsRows = [
+      { chatId: 1, name: "Активная", phone: null, tgUsername: null, lifetimeVisits: 2 },
+      { chatId: 2, name: "Новенькая", phone: null, tgUsername: null, lifetimeVisits: 0 },
+    ];
+    render();
+    // Default view hides the zero-visit client (test-data noise).
+    expect(screen.getAllByTestId("loyalty-client-row")).toHaveLength(1);
+    expect(screen.getByTestId("loyalty-client-list").textContent).toContain("Активная");
+    // Search by name surfaces a zero-visit client on demand.
+    fireEvent.change(screen.getByTestId("loyalty-client-search"), { target: { value: "Новень" } });
+    const found = screen.getAllByTestId("loyalty-client-row");
+    expect(found).toHaveLength(1);
+    expect(found[0]!.textContent).toContain("Новенькая");
   });
 
   it("renders avatar emoji from the row; falls back to default 👩 when null", () => {

@@ -38,6 +38,13 @@ export interface PluginRuntimeShellProps {
    * to control their own outer container.
    */
   bare?: boolean;
+  /**
+   * Max-width of the runtime column. "default" (max-w-2xl, centered) suits
+   * simple forms; "wide" (max-w-5xl) suits lists/tables; "full" removes the
+   * cap for grid layouts like the Task Board kanban — kills the cramped,
+   * centered-on-wide-screens look.
+   */
+  width?: "default" | "wide" | "full";
 }
 
 function pickLang(raw: string | null | undefined): PluginLang {
@@ -46,7 +53,7 @@ function pickLang(raw: string | null | undefined): PluginLang {
     : "ru";
 }
 
-export function PluginRuntimeShell({ slug, flash = null, children, bare = false }: PluginRuntimeShellProps) {
+export function PluginRuntimeShell({ slug, flash = null, children, bare = false, width = "default" }: PluginRuntimeShellProps) {
   const { lang: rawLang } = useLang();
   const lang = pickLang(rawLang);
 
@@ -56,8 +63,13 @@ export function PluginRuntimeShell({ slug, flash = null, children, bare = false 
   const iconName = manifest?.icon.name ?? "Puzzle";
   const iconTint = manifest?.icon.tint ?? "#6b7280";
 
+  const widthClass =
+    width === "full" ? "w-full"
+      : width === "wide" ? "w-full max-w-5xl mx-auto"
+      : "w-full max-w-2xl mx-auto";
+
   return (
-    <div data-testid="plugin-runtime-shell" data-slug={slug} className="w-full max-w-2xl mx-auto">
+    <div data-testid="plugin-runtime-shell" data-slug={slug} data-width={width} className={widthClass}>
       <div className="flex items-center gap-4 mb-6">
         <PluginIcon name={iconName} tint={iconTint} size={32} />
         <div className="min-w-0">

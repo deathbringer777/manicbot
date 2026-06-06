@@ -25,7 +25,7 @@
 import { useState } from "react";
 import { Bell, BellOff, Check, RotateCcw, Sparkles, Info } from "lucide-react";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, type TranslationKey } from "~/lib/i18n";
 import { api } from "~/trpc/react";
 import {
   DEFAULT_PREFS,
@@ -40,54 +40,56 @@ import { usePushSubscription } from "~/lib/notifications/usePushSubscription";
  * authoritative kind list lives in lib/notifications/kindMeta.ts —
  * this is the user-facing summary, not a kind catalog.
  */
-const SCENARIOS: Record<NotificationCategory, string[]> = {
+type Scenario = { kind: string; descKey: TranslationKey };
+
+const SCENARIOS: Record<NotificationCategory, Scenario[]> = {
   appointment: [
-    "appointment.created — клиент записался",
-    "appointment.confirmed — запись подтверждена",
-    "appointment.cancelled — запись отменена",
-    "appointment.rescheduled — запись перенесена",
-    "appointment.done — визит завершён",
-    "appointment.no_show_client — клиент не пришёл",
-    "appointment.no_show_master — мастер не пришёл",
+    { kind: "appointment.created", descKey: "notif.scn.appointment.created" },
+    { kind: "appointment.confirmed", descKey: "notif.scn.appointment.confirmed" },
+    { kind: "appointment.cancelled", descKey: "notif.scn.appointment.cancelled" },
+    { kind: "appointment.rescheduled", descKey: "notif.scn.appointment.rescheduled" },
+    { kind: "appointment.done", descKey: "notif.scn.appointment.done" },
+    { kind: "appointment.no_show_client", descKey: "notif.scn.appointment.no_show_client" },
+    { kind: "appointment.no_show_master", descKey: "notif.scn.appointment.no_show_master" },
   ],
   support: [
-    "support.reply — поддержка ответила на ваш тикет",
-    "support.ticket.new — новый тикет от салона (для support)",
-    "support.ticket.reply — ответ клиента на тикет (для support)",
-    "support.test — тестовое уведомление из настроек",
+    { kind: "support.reply", descKey: "notif.scn.support.reply" },
+    { kind: "support.ticket.new", descKey: "notif.scn.support.ticket.new" },
+    { kind: "support.ticket.reply", descKey: "notif.scn.support.ticket.reply" },
+    { kind: "support.test", descKey: "notif.scn.support.test" },
   ],
   birthday: [
-    "birthday.client — у клиента сегодня день рождения, выдан промокод",
+    { kind: "birthday.client", descKey: "notif.scn.birthday.client" },
   ],
   platform: [
-    "platform.message — личное сообщение от ManicBot",
-    "platform.reply — ответ салона на личное сообщение (для system_admin)",
+    { kind: "platform.message", descKey: "notif.scn.platform.message" },
+    { kind: "platform.reply", descKey: "notif.scn.platform.reply" },
   ],
   master: [
-    "master.invite — салон пригласил вас как мастера",
+    { kind: "master.invite", descKey: "notif.scn.master.invite" },
   ],
   reminder: [
-    "reminder.fired — сработало личное напоминание (плагин Reminders)",
+    { kind: "reminder.fired", descKey: "notif.scn.reminder.fired" },
   ],
   messenger: [
-    "messenger.* / thread.* — новые сообщения во внутренних чатах",
+    { kind: "messenger.* / thread.*", descKey: "notif.scn.messenger" },
   ],
   billing: [
-    "billing.payment_failed — платёж не прошёл, начался grace-период",
-    "billing.trial_expiring_soon — триал заканчивается через 3 дня",
-    "billing.grace_started — салон перешёл в grace-период",
-    "billing.subscription_renewed — подписка успешно продлена",
+    { kind: "billing.payment_failed", descKey: "notif.scn.billing.payment_failed" },
+    { kind: "billing.trial_expiring_soon", descKey: "notif.scn.billing.trial_expiring_soon" },
+    { kind: "billing.grace_started", descKey: "notif.scn.billing.grace_started" },
+    { kind: "billing.subscription_renewed", descKey: "notif.scn.billing.subscription_renewed" },
   ],
   marketing: [
-    "marketing.campaign.sent — статус доставки маркетинговой кампании",
+    { kind: "marketing.campaign.sent", descKey: "notif.scn.marketing.campaign.sent" },
   ],
   // PR-B (Notification Center 2.0) additions.
   channel: [
-    "channel.broken — IG / WA / Telegram токен умер, клиенты не дозванниваются",
-    "channel.degraded — канал работает, но Meta теряет события",
+    { kind: "channel.broken", descKey: "notif.scn.channel.broken" },
+    { kind: "channel.degraded", descKey: "notif.scn.channel.degraded" },
   ],
   client: [
-    "client.new — новый клиент зарегистрировался в боте",
+    { kind: "client.new", descKey: "notif.scn.client.new" },
   ],
 };
 
@@ -337,12 +339,12 @@ export function NotificationsSection() {
                 {t(`notifications.cat.${cat}` as never, lang)}
               </p>
               <ul className="space-y-1">
-                {SCENARIOS[cat].map((line) => (
+                {SCENARIOS[cat].map((s) => (
                   <li
-                    key={line}
+                    key={s.kind}
                     className="text-[11px] text-slate-500 dark:text-slate-400 font-mono leading-relaxed"
                   >
-                    {line}
+                    {s.kind} — {t(s.descKey, lang)}
                   </li>
                 ))}
               </ul>

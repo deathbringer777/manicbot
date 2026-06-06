@@ -1987,6 +1987,36 @@ const translations = {
   "notifications.cat.channel.desc": { ru: "Сбои IG / WA / Telegram, потеря токена, разрыв подписки.", ua: "Збої IG / WA / Telegram, втрата токена, розрив підписки.", en: "IG / WA / Telegram outages, token loss, subscription drift.", pl: "Awarie IG / WA / Telegram, utrata tokenu, rozspójnienie subskrypcji." },
   "notifications.cat.client":       { ru: "Клиенты",                ua: "Клієнти",                 en: "Clients",                pl: "Klienci" },
   "notifications.cat.client.desc":  { ru: "Новые клиенты регистрируются в боте, первые записи.", ua: "Нові клієнти реєструються в боті, перші записи.", en: "New clients registering with the bot, first bookings.", pl: "Nowi klienci rejestrują się w bocie, pierwsze rezerwacje." },
+
+  // Scenarios reference panel — localized description per event kind. The kind
+  // code (e.g. "appointment.created") is shown verbatim; only the human gloss
+  // after the em-dash is translated.
+  "notif.scn.appointment.created":     { ru: "клиент записался", ua: "клієнт записався", en: "client booked", pl: "klient się zapisał" },
+  "notif.scn.appointment.confirmed":   { ru: "запись подтверждена", ua: "запис підтверджено", en: "booking confirmed", pl: "rezerwacja potwierdzona" },
+  "notif.scn.appointment.cancelled":   { ru: "запись отменена", ua: "запис скасовано", en: "booking cancelled", pl: "rezerwacja anulowana" },
+  "notif.scn.appointment.rescheduled": { ru: "запись перенесена", ua: "запис перенесено", en: "booking rescheduled", pl: "rezerwacja przełożona" },
+  "notif.scn.appointment.done":        { ru: "визит завершён", ua: "візит завершено", en: "visit completed", pl: "wizyta zakończona" },
+  "notif.scn.appointment.no_show_client": { ru: "клиент не пришёл", ua: "клієнт не прийшов", en: "client no-show", pl: "klient się nie stawił" },
+  "notif.scn.appointment.no_show_master": { ru: "мастер не пришёл", ua: "майстер не прийшов", en: "staff no-show", pl: "pracownik się nie stawił" },
+  "notif.scn.support.reply":           { ru: "поддержка ответила на ваш тикет", ua: "підтримка відповіла на ваш тікет", en: "support replied to your ticket", pl: "wsparcie odpowiedziało na zgłoszenie" },
+  "notif.scn.support.ticket.new":      { ru: "новый тикет от салона (для support)", ua: "новий тікет від салону (для support)", en: "new ticket from a salon (for support)", pl: "nowe zgłoszenie od salonu (dla wsparcia)" },
+  "notif.scn.support.ticket.reply":    { ru: "ответ клиента на тикет (для support)", ua: "відповідь клієнта на тікет (для support)", en: "client reply on a ticket (for support)", pl: "odpowiedź klienta na zgłoszenie (dla wsparcia)" },
+  "notif.scn.support.test":            { ru: "тестовое уведомление из настроек", ua: "тестове сповіщення з налаштувань", en: "test notification from settings", pl: "testowe powiadomienie z ustawień" },
+  "notif.scn.birthday.client":         { ru: "у клиента сегодня день рождения, выдан промокод", ua: "у клієнта сьогодні день народження, видано промокод", en: "a client has a birthday today, a promo code was issued", pl: "klient ma dziś urodziny, wydano kod promocyjny" },
+  "notif.scn.platform.message":        { ru: "личное сообщение от ManicBot", ua: "особисте повідомлення від ManicBot", en: "direct message from ManicBot", pl: "wiadomość bezpośrednia od ManicBot" },
+  "notif.scn.platform.reply":          { ru: "ответ салона на личное сообщение (для system_admin)", ua: "відповідь салону на особисте повідомлення (для system_admin)", en: "salon reply to a direct message (for system_admin)", pl: "odpowiedź salonu na wiadomość (dla system_admin)" },
+  "notif.scn.master.invite":           { ru: "салон пригласил вас как мастера", ua: "салон запросив вас як майстра", en: "a salon invited you as a master", pl: "salon zaprosił Cię jako pracownika" },
+  "notif.scn.reminder.fired":          { ru: "сработало личное напоминание (плагин Reminders)", ua: "спрацювало особисте нагадування (плагін Reminders)", en: "a personal reminder fired (Reminders plugin)", pl: "zadziałało osobiste przypomnienie (wtyczka Reminders)" },
+  "notif.scn.messenger":               { ru: "новые сообщения во внутренних чатах", ua: "нові повідомлення у внутрішніх чатах", en: "new messages in internal chats", pl: "nowe wiadomości w czatach wewnętrznych" },
+  "notif.scn.billing.payment_failed":  { ru: "платёж не прошёл, начался grace-период", ua: "платіж не пройшов, почався grace-період", en: "payment failed, grace period started", pl: "płatność nieudana, rozpoczął się okres karencji" },
+  "notif.scn.billing.trial_expiring_soon": { ru: "триал заканчивается через 3 дня", ua: "тріал закінчується через 3 дні", en: "trial ends in 3 days", pl: "okres próbny kończy się za 3 dni" },
+  "notif.scn.billing.grace_started":   { ru: "салон перешёл в grace-период", ua: "салон перейшов у grace-період", en: "salon entered the grace period", pl: "salon wszedł w okres karencji" },
+  "notif.scn.billing.subscription_renewed": { ru: "подписка успешно продлена", ua: "підписку успішно продовжено", en: "subscription renewed successfully", pl: "subskrypcja pomyślnie odnowiona" },
+  "notif.scn.marketing.campaign.sent": { ru: "статус доставки маркетинговой кампании", ua: "статус доставки маркетингової кампанії", en: "marketing campaign delivery status", pl: "status dostarczenia kampanii marketingowej" },
+  "notif.scn.channel.broken":          { ru: "IG / WA / Telegram токен умер, клиенты не дозваниваются", ua: "токен IG / WA / Telegram помер, клієнти не додзвоняться", en: "IG / WA / Telegram token died, clients can't reach you", pl: "token IG / WA / Telegram wygasł, klienci nie mogą się dodzwonić" },
+  "notif.scn.channel.degraded":        { ru: "канал работает, но Meta теряет события", ua: "канал працює, але Meta втрачає події", en: "channel works, but Meta is dropping events", pl: "kanał działa, ale Meta gubi zdarzenia" },
+  "notif.scn.client.new":              { ru: "новый клиент зарегистрировался в боте", ua: "новий клієнт зареєструвався в боті", en: "a new client registered in the bot", pl: "nowy klient zarejestrował się w bocie" },
+
   // PR-D: per-category test-fire column header + tooltip.
   "notifications.settings.col.test":    { ru: "Тест",                   ua: "Тест",                    en: "Test",                   pl: "Test" },
   "notifications.settings.testBtnTitle":{ ru: "Отправить тестовое уведомление этой категории", ua: "Надіслати тестове сповіщення цієї категорії", en: "Send a test notification of this category", pl: "Wyślij testowe powiadomienie tej kategorii" },
@@ -2044,6 +2074,11 @@ const translations = {
   "marketing.nav.automations":    { ru: "Автоматизации",          ua: "Автоматизації",          en: "Automations",            pl: "Automatyzacje" },
   "marketing.nav.templates":      { ru: "Шаблоны",                ua: "Шаблони",                en: "Templates",              pl: "Szablony" },
   "marketing.nav.providers":      { ru: "Провайдеры",             ua: "Провайдери",             en: "Providers",              pl: "Dostawcy" },
+
+  // Sysadmin-only banner shown on the salon-side marketing tab
+  "marketing.sysadminBanner.title": { ru: "Это салон-сторона маркетинга", ua: "Це салон-сторона маркетингу", en: "This is the salon-side of marketing", pl: "To jest marketing po stronie salonu" },
+  "marketing.sysadminBanner.desc":  { ru: "Платформенный CRM, кросс-тенантные кампании и воронка лидов — в Центре маркетинга.", ua: "Платформенний CRM, крос-тенантні кампанії та воронка лідів — у Центрі маркетингу.", en: "Platform CRM, cross-tenant campaigns and the lead funnel live in the Marketing Hub.", pl: "Platformowy CRM, kampanie międzytenantowe i lejek leadów znajdziesz w Centrum Marketingu." },
+  "marketing.sysadminBanner.cta":   { ru: "Открыть Центр маркетинга", ua: "Відкрити Центр маркетингу", en: "Open Marketing Hub", pl: "Otwórz Centrum Marketingu" },
 
   // ── Marketing — common ─────────────────────────────────────────────────────
   "common.dismiss":               { ru: "Скрыть",                 ua: "Сховати",                en: "Dismiss",                pl: "Ukryj" },

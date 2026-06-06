@@ -100,8 +100,19 @@ export function PluginCard({ card }: { card: CatalogCard }) {
       data-installed={card.installed ? "1" : "0"}
       data-actionable={actionable ? "1" : "0"}
       data-lang={lang}
-      className="group relative flex flex-col h-full min-h-[200px] rounded-2xl border border-slate-200/80 dark:border-white/[0.06] bg-white dark:bg-slate-900/60 p-4 sm:p-5 transition-all duration-200 ease-out hover:border-brand-500/50 dark:hover:border-brand-400/40 hover:shadow-[0_4px_24px_-8px] hover:shadow-brand-500/15 dark:hover:shadow-brand-400/10 hover:-translate-y-0.5"
+      className="group relative flex flex-col h-full min-h-[200px] rounded-2xl border border-slate-200/80 dark:border-white/[0.06] bg-white dark:bg-slate-900/60 p-4 sm:p-5 cursor-pointer transition-all duration-200 ease-out hover:border-brand-500/50 dark:hover:border-brand-400/40 hover:shadow-[0_4px_24px_-8px] hover:shadow-brand-500/15 dark:hover:shadow-brand-400/10 hover:-translate-y-0.5 active:translate-y-0"
     >
+      {/* Whole-tile click → App-Store-style detail/preview (stretched-link
+          overlay). Sits above the static content but below the pin + footer
+          actions (z-10), so the entire tile is tappable while those stay
+          independently clickable. */}
+      <Link
+        href={detailHref}
+        data-testid="plugin-card-overlay"
+        aria-label={card.name}
+        className="absolute inset-0 z-[1] rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
+      />
+
       {/* Pin button — visible (not hover-only) when plugin is actionable. */}
       {actionable && (
         <button
@@ -161,7 +172,7 @@ export function PluginCard({ card }: { card: CatalogCard }) {
         <span className="text-[12px] font-medium text-slate-700 dark:text-slate-200 truncate">
           {card.billingLabel}
         </span>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="relative z-10 flex items-center gap-1 shrink-0">
           {actionable && hasSettingsPanel && settingsHref && (
             <Link
               href={settingsHref}

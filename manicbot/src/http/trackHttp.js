@@ -28,6 +28,7 @@ import {
   parseTrackPayload,
 } from './trackHttpLogic.js';
 import { dbRun } from '../utils/db.js';
+import { recordWebOrigin } from '../services/origins.js';
 import { checkAndIncrement } from '../utils/rateLimit.js';
 import { nowSec } from '../utils/time.js';
 import { log } from '../utils/logger.js';
@@ -125,6 +126,24 @@ async function hasAnalyticsConsent(env, anonymousId) {
 }
 
 /**
+ * Resolve a public salon slug to its owning tenant id, to tenant-scope web
+ * profile-view events. Returns null if unknown or on error (the caller then
+ * stores the event platform-level and skips the user_origins touch).
+ */
+async function resolveTenantBySlug(env, slug) {
+  if (!env?.DB || !slug) return null;
+  try {
+    const row = await env.DB.prepare('SELECT id FROM tenants WHERE slug = ? LIMIT 1')
+      .bind(slug)
+      .first();
+    return row?.id ?? null;
+  } catch (e) {
+    log.error('trackHttp.resolveTenant', e instanceof Error ? e : new Error(String(e)));
+    return null;
+  }
+}
+
+/**
  * Public handler. Always returns Response. Always 204 on success, dropped, or
  * silently filtered — the caller never learns whether the event was stored.
  */
@@ -157,11 +176,19 @@ export async function handleTrackRequest(request, env) {
     return new Response(null, { status: 204 });
   }
 
+  // Profile-view events carry the salon slug. Resolve it to the owning tenant so
+  // (a) the analytics_events row is tenant-scoped instead of an orphaned
+  // platform-level row, and (b) we can mirror the touch into the unified
+  // user_origins ledger that powers the per-salon funnel/sources.
+  const ev = parsed.value.event;
+  const props = parsed.value.properties || {};
+  let tenantId = null;
+  if ((ev === 'salon_view' || ev === 'master_view') && typeof props.slug === 'string') {
+    tenantId = await resolveTenantBySlug(env, props.slug);
+  }
+
   try {
-    const row = buildTrackInsertParams(parsed.value, {
-      tenantId: null, // landing events are platform-level, not tenant-scoped
-      nowSec: nowSec(),
-    });
+    const row = buildTrackInsertParams(parsed.value, { tenantId, nowSec: nowSec() });
     // Mirror recordEvent() shape so dashboards reading analytics_events handle
     // both ingestion paths uniformly.
     await dbRun(
@@ -177,6 +204,25 @@ export async function handleTrackRequest(request, env) {
   } catch (e) {
     // Non-fatal — analytics ingest must never break user UX.
     log.error('trackHttp.insert', e instanceof Error ? e : new Error(String(e)));
+  }
+
+  // Web touch → unified origins ledger (Telegram + web). Best-effort; a failed
+  // insert must never break ingest. Consent was already verified above.
+  if (tenantId && typeof props.source === 'string' && props.source) {
+    try {
+      await recordWebOrigin(
+        { db: env.DB, tenantId },
+        {
+          webUserId: parsed.value.anonymousId,
+          source: props.source,
+          medium: typeof props.medium === 'string' ? props.medium : null,
+          campaign: typeof props.campaign === 'string' ? props.campaign : null,
+          content: typeof props.content === 'string' ? props.content : null,
+        },
+      );
+    } catch (e) {
+      log.error('trackHttp.webOrigin', e instanceof Error ? e : new Error(String(e)));
+    }
   }
 
   return new Response(null, { status: 204 });

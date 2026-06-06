@@ -1,4 +1,4 @@
--- 0114_seed_welcome_automation.sql — 2026-06-06
+-- 0115_seed_welcome_automation.sql — 2026-06-06
 --
 -- Killer-feature scaffolding: a DISABLED platform-default marketing automation
 -- that greets a client right after they leave their email in chat. The capture

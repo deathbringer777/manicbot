@@ -82,7 +82,7 @@ export const users = sqliteTable("users", {
   notes: text("notes"),
   tags: text("tags"),
   marketingContactId: integer("marketing_contact_id"),
-  // 0113: chat email-capture opt-in / anti-nag state (NULL=unasked, 1=in, 0=out).
+  // 0114: chat email-capture opt-in / anti-nag state (NULL=unasked, 1=in, 0=out).
   emailOptIn: integer("email_opt_in"),
   emailPromptLastAt: integer("email_prompt_last_at"),
   emailPromptCount: integer("email_prompt_count").notNull().default(0),
@@ -145,11 +145,26 @@ export const userOrigins = sqliteTable("user_origins", {
   rawPayload: text("raw_payload"),
   capturedAt: integer("captured_at").notNull(),
   isFirstTouch: integer("is_first_touch").notNull().default(0),
+  webUserId: text("web_user_id"),
 }, (t) => [
   index("idx_uo_tenant_chat").on(t.tenantId, t.chatId),
   index("idx_uo_tenant_source").on(t.tenantId, t.source, t.capturedAt),
   index("idx_uo_tenant_campaign").on(t.tenantId, t.campaign, t.capturedAt),
   index("idx_uo_tenant_first").on(t.tenantId, t.isFirstTouch, t.capturedAt),
+]);
+
+export const trackingLinks = sqliteTable("tracking_links", {
+  shortCode: text("short_code").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  source: text("source").notNull(),
+  medium: text("medium"),
+  campaign: text("campaign"),
+  content: text("content"),
+  payloadHash: text("payload_hash").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_tl_tenant_hash").on(t.tenantId, t.payloadHash),
+  index("idx_tl_tenant_code").on(t.tenantId, t.shortCode),
 ]);
 
 export const masters = sqliteTable("masters", {
@@ -299,6 +314,9 @@ export const appointments = sqliteTable("appointments", {
   visitConfirmedAt: integer("visit_confirmed_at"),
   visitConfirmedBy: text("visit_confirmed_by"),
   reviewRequestedAt: integer("review_requested_at"),
+  /** Post-visit follow-up (24h sweep) idempotency marker; epoch seconds,
+   *  null = not yet sent. See phasePostVisitFollowup + migration 0112. */
+  followup24hSentAt: integer("followup_24h_sent_at"),
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_apt_tenant_date").on(t.tenantId, t.date),

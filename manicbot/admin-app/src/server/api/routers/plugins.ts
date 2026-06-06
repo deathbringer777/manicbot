@@ -40,6 +40,7 @@ import { PLUGIN_LANGS } from "@plugins/types";
 import { runLifecycle, writePluginEvent } from "~/server/plugins/lifecycle";
 import { computeLockReason, type ViewerContext } from "~/server/plugins/lockReason";
 import { env } from "~/env";
+import { assertAdminAppReturnUrl } from "~/server/security/returnUrl";
 
 const MAX_SETTINGS_BYTES = 8 * 1024;
 
@@ -256,6 +257,7 @@ export const pluginsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      assertAdminAppReturnUrl(input.returnUrl);
       const plugin = getPlugin(input.slug);
       if (!plugin) throw new TRPCError({ code: "NOT_FOUND", message: "Plugin not found" });
       const m = plugin.manifest;

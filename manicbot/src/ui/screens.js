@@ -183,7 +183,7 @@ export async function showCatPhoto(ctx, cid, svcId, idx, msgId) {
 export async function showMyApts(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const apts = await getApts(ctx, cid);
-  // 0113: subscribed clients get an in-chat unsubscribe button in their personal
+  // 0114: subscribed clients get an in-chat unsubscribe button in their personal
   // hub (keyed by chat_id). Hidden for non-subscribers — and always available to
   // subscribers regardless of the capture feature flag.
   const u = await getUser(ctx, cid).catch(() => null);

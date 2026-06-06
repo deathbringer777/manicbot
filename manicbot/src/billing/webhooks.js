@@ -30,7 +30,7 @@ import { notifyTenantOwner } from '../services/userNotify.js';
 
 // #P1-5 (relax.md §5) — plan tier order is the single source of truth for
 // upgrade detection. Mirrored verbatim by `notificationEmails.PLAN_ORDER`.
-const PLAN_ORDER = ['start', 'pro', 'max']; // eslint-disable-line no-unused-vars
+const PLAN_ORDER = ['start', 'pro', 'max'];  
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;

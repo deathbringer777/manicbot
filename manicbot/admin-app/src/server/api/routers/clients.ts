@@ -234,7 +234,7 @@ interface ClientRow {
   isBlockedGlobal: number;
   blockedGlobalReason: string | null;
   marketingContactId: number | null;
-  // 0113: chat email-capture opt-in state (NULL=unasked, 1=subscribed, 0=opted out).
+  // 0114: chat email-capture opt-in state (NULL=unasked, 1=subscribed, 0=opted out).
   // Lets the clients UI flag who joined the list via chat. select() already
   // returns it; this types it for consumers.
   emailOptIn: number | null;

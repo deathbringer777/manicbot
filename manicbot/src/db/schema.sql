@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS appointments (
   visit_confirmed_at INTEGER,
   visit_confirmed_by TEXT,
   review_requested_at INTEGER,
+  -- Post-visit follow-up (24h sweep) idempotency marker; epoch seconds,
+  -- NULL = not yet sent. See phasePostVisitFollowup + migration 0112.
+  followup_24h_sent_at INTEGER,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_apt_tenant_date ON appointments(tenant_id, date);
@@ -80,7 +83,7 @@ CREATE TABLE IF NOT EXISTS users (
   notes TEXT,
   tags TEXT,
   marketing_contact_id INTEGER,
-  -- 0113: chat email-capture opt-in / anti-nag state. email_opt_in:
+  -- 0114: chat email-capture opt-in / anti-nag state. email_opt_in:
   -- NULL=never asked, 1=opted in, 0=declined/unsubscribed. Durable across
   -- sessions (the conversation-state KV is too short-lived for the cooldown).
   email_opt_in INTEGER,
@@ -151,12 +154,26 @@ CREATE TABLE IF NOT EXISTS user_origins (
   referer         TEXT,
   raw_payload     TEXT,
   captured_at     INTEGER NOT NULL,
-  is_first_touch  INTEGER NOT NULL DEFAULT 0
+  is_first_touch  INTEGER NOT NULL DEFAULT 0,
+  web_user_id     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_uo_tenant_chat ON user_origins(tenant_id, chat_id);
 CREATE INDEX IF NOT EXISTS idx_uo_tenant_source ON user_origins(tenant_id, source, captured_at);
 CREATE INDEX IF NOT EXISTS idx_uo_tenant_campaign ON user_origins(tenant_id, campaign, captured_at);
 CREATE INDEX IF NOT EXISTS idx_uo_tenant_first ON user_origins(tenant_id, is_first_touch, captured_at);
+
+CREATE TABLE IF NOT EXISTS tracking_links (
+  short_code    TEXT PRIMARY KEY,
+  tenant_id     TEXT NOT NULL,
+  source        TEXT NOT NULL,
+  medium        TEXT,
+  campaign      TEXT,
+  content       TEXT,
+  payload_hash  TEXT NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tl_tenant_hash ON tracking_links(tenant_id, payload_hash);
+CREATE INDEX IF NOT EXISTS idx_tl_tenant_code ON tracking_links(tenant_id, short_code);
 
 CREATE TABLE IF NOT EXISTS masters (
   tenant_id TEXT NOT NULL,

@@ -31,6 +31,9 @@ vi.mock('../src/services/state.js', () => ({
 vi.mock('../src/services/users.js', () => ({
   getRole: vi.fn().mockResolvedValue('client'),
   isPlatformAdmin: vi.fn().mockResolvedValue(false),
+  // showMyApts reads the client to decide whether to show the email-unsubscribe
+  // row (0114). null → not subscribed → no extra row, so the layout below holds.
+  getUser: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../src/services/appointments.js', () => ({

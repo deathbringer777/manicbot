@@ -90,6 +90,21 @@ const CONTACT_COLS =
   'id, email, phone, name, custom_fields, linked_user_chat_id, lead_count, unsubscribe_token, consent_email, unsubscribed';
 
 /**
+ * YELLOW-3 — escape LIKE metacharacters (`%` `_` `\`) so a tg/ig handle is
+ * matched literally rather than as a wildcard. The handle is already a bound
+ * parameter (no SQL injection), but `_` is a legal handle character and would
+ * otherwise act as a single-char wildcard, risking an additive merge into the
+ * WRONG same-tenant contact on the no-email/no-phone fallback path. Pair with
+ * an `ESCAPE '\'` clause on the LIKE.
+ *
+ * @param {string} s
+ * @returns {string}
+ */
+export function escapeLikePattern(s) {
+  return String(s).replace(/[\\%_]/g, '\\$&');
+}
+
+/**
  * Resolve an existing tenant contact for this person. Priority email > phone,
  * falling back to tg/ig handle ONLY when neither email nor phone is known
  * (the handle lookup needs a LIKE on custom_fields; chat capture always carries
@@ -105,11 +120,11 @@ async function lookupContact(ctx, tenantId, email, phone, tg, ig) {
     if (r) return r;
   }
   if (!email && !phone && tg) {
-    const r = await dbGet(ctx, `SELECT ${CONTACT_COLS} FROM marketing_contacts WHERE tenant_id = ? AND custom_fields LIKE ? LIMIT 1`, tenantId, `%"tg_username":"${tg}"%`);
+    const r = await dbGet(ctx, `SELECT ${CONTACT_COLS} FROM marketing_contacts WHERE tenant_id = ? AND custom_fields LIKE ? ESCAPE '\\' LIMIT 1`, tenantId, `%"tg_username":"${escapeLikePattern(tg)}"%`);
     if (r) return r;
   }
   if (!email && !phone && !tg && ig) {
-    const r = await dbGet(ctx, `SELECT ${CONTACT_COLS} FROM marketing_contacts WHERE tenant_id = ? AND custom_fields LIKE ? LIMIT 1`, tenantId, `%"ig_username":"${ig}"%`);
+    const r = await dbGet(ctx, `SELECT ${CONTACT_COLS} FROM marketing_contacts WHERE tenant_id = ? AND custom_fields LIKE ? ESCAPE '\\' LIMIT 1`, tenantId, `%"ig_username":"${escapeLikePattern(ig)}"%`);
     if (r) return r;
   }
   return null;

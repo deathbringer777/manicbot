@@ -118,6 +118,35 @@ describe('handleMetaOAuthStart', () => {
     }
   });
 
+  it('SEC-004: 400 when returnTo is a foreign origin (open-redirect / token-leak guard)', async () => {
+    // returnTo is stored in KV state and later used as the 302 target + the
+    // popup postMessage targetOrigin. Even though this endpoint is ADMIN_KEY
+    // gated, a leaked key or a future caller must not be able to redirect the
+    // OAuth completion (with its meta_state) to an attacker origin. Only the
+    // admin-app / worker base origin is allowed.
+    const ctx = makeCtx();
+    for (const returnTo of [
+      'https://evil.example.com/dashboard',
+      'https://manicbot.com.evil.com/x',  // suffix-spoof
+      'http://manicbot.com/x',            // scheme downgrade (base is https)
+    ]) {
+      const res = await handleMetaOAuthStart(ctx, makeReq('/meta/oauth/start', {
+        body: { provider: 'instagram', tenantId: 't_real', webUserId: 'u', returnTo },
+      }));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('invalid_return_to');
+    }
+  });
+
+  it('SEC-004: accepts a returnTo on the configured admin-app origin', async () => {
+    const ctx = makeCtx({ ADMIN_APP_URL: 'https://app.manicbot.com' });
+    const res = await handleMetaOAuthStart(ctx, makeReq('/meta/oauth/start', {
+      // wrong provider env → 503, but ONLY reachable if the returnTo origin passed
+      body: { provider: 'instagram', tenantId: 't_real', webUserId: 'u', returnTo: 'https://app.manicbot.com/dashboard?tab=channels' },
+    }));
+    expect(res.status).not.toBe(400);
+  });
+
   it('404 when the tenant does not exist (no cross-tenant probing)', async () => {
     const ctx = makeCtx();
     const res = await handleMetaOAuthStart(ctx, makeReq('/meta/oauth/start', {

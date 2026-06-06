@@ -228,7 +228,7 @@ export const reviewsRouter = createTRPCRouter({
     }),
 
   // ── Salon owner: update review-collection settings ────────────────────
-  // nosemgrep: trpc-public-procedure-mutation -- auth via assertTenantOwner inside handler
+  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
   updateSettings: publicProcedure
     .input(z.object({
       tenantId: z.string(),

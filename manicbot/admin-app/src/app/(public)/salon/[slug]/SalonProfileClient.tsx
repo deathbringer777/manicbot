@@ -691,7 +691,7 @@ export function SalonProfileClient({
                 {profile.city && (
                   <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">{profile.city}</p>
                 )}
-                {profile.mapsUrl && (
+                {profile.mapsUrl && /^https?:\/\//i.test(profile.mapsUrl) && (
                   <a
                     href={profile.mapsUrl}
                     target="_blank"

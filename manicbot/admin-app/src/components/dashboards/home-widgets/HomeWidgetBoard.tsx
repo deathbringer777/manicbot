@@ -244,9 +244,9 @@ export function HomeWidgetBoard({ tenantId, lang }: { tenantId: string; lang: La
                   }}
                   aria-label={t("home.remove", lang)}
                   title={t("home.remove", lang)}
-                  className="absolute -right-2 -top-2 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-[#1f2937] text-white shadow-md ring-2 ring-white transition-colors hover:bg-red-500 dark:bg-slate-500 dark:ring-slate-900 dark:hover:bg-red-500"
+                  className="absolute -right-2 -top-2 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg ring-2 ring-white transition-transform hover:scale-110 active:scale-95 dark:ring-slate-900"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>

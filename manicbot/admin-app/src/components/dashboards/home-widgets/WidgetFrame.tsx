@@ -30,8 +30,10 @@ export function WidgetFrame({
 
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden rounded-xl border border-[#e5e7eb] bg-white dark:border-white/[0.06] dark:bg-slate-800 ${
-        editMode ? "widget-wobble cursor-grab active:cursor-grabbing" : ""
+      className={`flex h-full flex-col overflow-hidden rounded-xl border bg-white transition-shadow dark:bg-slate-800 ${
+        editMode
+          ? "widget-wobble cursor-grab border-accent-500/30 shadow-md ring-1 ring-accent-500/20 active:cursor-grabbing dark:border-accent-500/20 dark:ring-accent-500/15"
+          : "border-[#e5e7eb] dark:border-white/[0.06]"
       }`}
     >
       {/* Header doubles as a visual label; in edit mode the whole card drags. */}

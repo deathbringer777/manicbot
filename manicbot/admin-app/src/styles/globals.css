@@ -262,29 +262,42 @@ body.driver-tour-active .overflow-hidden {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Widget board — iOS-style jiggle mode while editing. */
+   Widget board — iOS-style jiggle mode while editing.
+   translateY adds a subtle "breathing" lift that makes the animation feel
+   organic rather than mechanical. amplitude kept at ±0.8 deg (iOS-range). */
 @keyframes widget-wobble {
-  0%   { transform: rotate(-1deg); }
-  25%  { transform: rotate(1deg); }
-  50%  { transform: rotate(-0.8deg); }
-  75%  { transform: rotate(0.8deg); }
-  100% { transform: rotate(-1deg); }
+  0%   { transform: rotate(-0.8deg) translateY(0px); }
+  25%  { transform: rotate(0.8deg) translateY(-1px); }
+  50%  { transform: rotate(-0.7deg) translateY(0px); }
+  75%  { transform: rotate(0.7deg) translateY(-1px); }
+  100% { transform: rotate(-0.8deg) translateY(0px); }
 }
 
 .widget-wobble {
-  animation: widget-wobble 0.5s ease-in-out infinite;
+  animation: widget-wobble 0.48s ease-in-out infinite;
   transform-origin: center bottom;
 }
 
+/* Phase-stagger via negative delay so adjacent widgets wobble out of sync,
+   matching the iOS home-screen effect. Negative values start mid-cycle. */
+.home-widget-board [data-widget-type]:nth-child(2) .widget-wobble { animation-delay: -0.12s; }
+.home-widget-board [data-widget-type]:nth-child(3) .widget-wobble { animation-delay: -0.24s; }
+.home-widget-board [data-widget-type]:nth-child(4) .widget-wobble { animation-delay: -0.08s; }
+.home-widget-board [data-widget-type]:nth-child(5) .widget-wobble { animation-delay: -0.20s; }
+.home-widget-board [data-widget-type]:nth-child(6) .widget-wobble { animation-delay: -0.32s; }
+.home-widget-board [data-widget-type]:nth-child(7) .widget-wobble { animation-delay: -0.16s; }
+.home-widget-board [data-widget-type]:nth-child(8) .widget-wobble { animation-delay: -0.04s; }
+.home-widget-board [data-widget-type]:nth-child(9) .widget-wobble { animation-delay: -0.28s; }
+.home-widget-board [data-widget-type]:nth-child(10) .widget-wobble { animation-delay: -0.40s; }
+.home-widget-board [data-widget-type]:nth-child(11) .widget-wobble { animation-delay: -0.10s; }
+
 /* ─────────────────────────────────────────────────────────────────────
-   Widget board — visible resize handle in edit mode.
-   react-resizable renders a small corner nub (.react-resizable-handle-se).
-   We replace the default arrow icon with an L-shaped grip indicator so the
-   resize affordance is visually clear against the card background. */
+   Widget board — resize handle.
+   Three diagonal dots (macOS-style) replacing the default SVG arrow. */
 .home-widget-board .react-resizable-handle-se {
   background-image: none;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   bottom: 0;
   right: 0;
   cursor: se-resize;
@@ -294,9 +307,15 @@ body.driver-tour-active .overflow-hidden {
   position: absolute;
   right: 5px;
   bottom: 5px;
-  width: 9px;
-  height: 9px;
-  border-right: 2px solid rgba(156, 163, 175, 0.9);
-  border-bottom: 2px solid rgba(156, 163, 175, 0.9);
-  border-radius: 0 0 3px 0;
+  width: 12px;
+  height: 12px;
+  /* Three dots on a diagonal: bright → mid → faint (bottom-right to top-left) */
+  background:
+    radial-gradient(circle at 10.5px 10.5px, rgba(156, 163, 175, 0.9) 1.5px, transparent 0),
+    radial-gradient(circle at 5.5px 5.5px,   rgba(156, 163, 175, 0.7) 1.5px, transparent 0),
+    radial-gradient(circle at 0.5px 0.5px,   rgba(156, 163, 175, 0.4) 1.5px, transparent 0);
+  transition: filter 0.15s;
+}
+.home-widget-board .react-grid-item:hover .react-resizable-handle-se::after {
+  filter: brightness(1.4);
 }

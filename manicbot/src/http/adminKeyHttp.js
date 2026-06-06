@@ -1712,6 +1712,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
 
   // Read-only status dashboard. Returns counts by status + recent rows.
   if (request.method === 'GET' && url.pathname === '/admin/tenants-export') {
+    if (!isNotifyAuthValid(env, request)) return forbidden();
     if (!env.DB) return new Response('DB not bound', { status: 500 });
     try {
       const { dbAll } = await import('../utils/db.js');

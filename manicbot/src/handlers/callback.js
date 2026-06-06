@@ -217,24 +217,30 @@ export async function onCb(ctx, cb) {
        isOk ? 'booking.completed' : 'booking.no_show',
        JSON.stringify({ appointmentId: aptId, confirmedBy: 'master' }), now).catch(() => {});
 
-    // On success, ask the client to leave a review (best-effort)
+    // On success, ask the client to leave a review (best-effort, event-based).
+    // Gated on the tenant's review settings: prompt only when reviews are
+    // enabled AND timing is "immediate" (the default). When timing is
+    // "delayed", phaseReviews (cron) sends the prompt later instead; marking the
+    // appointment review_requested here makes that cron skip it (no double-ask).
+    // The buttons MUST use the `rev:` callback prefix — that's the only handler
+    // (`d.startsWith('rev:')` below). The old `rate:` prefix had NO handler, so
+    // this immediate prompt was silently dead. Mirror the cron prompt exactly.
     if (isOk && apt.chat_id > 0) {
-      const { markReviewRequested: mrr } = await import('../services/reviews.js');
-      await mrr(ctx, aptId).catch(() => {});
-      await send(ctx, apt.chat_id,
-        'Надеемся, вам понравилось! Поставьте оценку от 1 до 5:',
-        {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '⭐1', callback_data: `rate:${aptId}:1` },
-              { text: '⭐2', callback_data: `rate:${aptId}:2` },
-              { text: '⭐3', callback_data: `rate:${aptId}:3` },
-              { text: '⭐4', callback_data: `rate:${aptId}:4` },
-              { text: '⭐5', callback_data: `rate:${aptId}:5` },
-            ]],
-          },
-        },
-      ).catch(() => {});
+      const { getConfig } = await import('../services/services.js');
+      const reviewsEnabled = await getConfig(ctx, 'reviews_enabled');
+      const promptTiming = await getConfig(ctx, 'reviews_prompt_timing');
+      if (reviewsEnabled && promptTiming !== 'delayed') {
+        const { markReviewRequested: mrr } = await import('../services/reviews.js');
+        await mrr(ctx, aptId).catch(() => {});
+        const clg = (await getLang(ctx, apt.chat_id)) || 'ru';
+        const stars = ['1', '2', '3', '4', '5'].map((n) => ({
+          text: '⭐'.repeat(Number(n)),
+          callback_data: `rev:${aptId}:${n}`,
+        }));
+        await send(ctx, apt.chat_id, t(clg, 'review_request'), {
+          reply_markup: { inline_keyboard: [stars] },
+        }).catch(() => {});
+      }
     }
     // Stamp-card increment on a confirmed visit (Sprint 4).
     // #N-02 — failures here MUST NOT block the rest of the callback flow

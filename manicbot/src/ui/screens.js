@@ -4,7 +4,7 @@ import { fmtDT, fmtDate } from '../utils/date.js';
 import { CB, SALON, ADDRESS, PHONE, HOURS_STR, MAPS_URL } from '../config.js';
 import { getLang } from '../services/chat.js';
 import { clearState } from '../services/state.js';
-import { getRole, isPlatformAdmin } from '../services/users.js';
+import { getRole, isPlatformAdmin, getUser } from '../services/users.js';
 import { getApts } from '../services/appointments.js';
 import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl, getConfig } from '../services/services.js';
 import { mainKb, langKb, catListKb, catPhotoKb, aboutPhotoKb } from './keyboards.js';
@@ -183,9 +183,17 @@ export async function showCatPhoto(ctx, cid, svcId, idx, msgId) {
 export async function showMyApts(ctx, cid) {
   const lg = await getLang(ctx, cid) || 'ru';
   const apts = await getApts(ctx, cid);
+  // 0114: subscribed clients get an in-chat unsubscribe button in their personal
+  // hub (keyed by chat_id). Hidden for non-subscribers — and always available to
+  // subscribers regardless of the capture feature flag.
+  const u = await getUser(ctx, cid).catch(() => null);
+  const optoutRows = u?.emailOptIn === 1
+    ? [[{ text: t(lg, 'email_optout_btn'), callback_data: CB.EMAIL_OPTOUT }]]
+    : [];
   if (!apts.length) {
     return send(ctx, cid, `${t(lg, 'my_title')}\n\n${t(lg, 'my_empty')}`, { reply_markup: { inline_keyboard: [
       [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
+      ...optoutRows,
       [{ text: t(lg, 'back_m'), callback_data: CB.MAIN }],
     ] } });
   }
@@ -206,6 +214,7 @@ export async function showMyApts(ctx, cid) {
     btns.push([{ text: t(lg, 'my_cancel_all'), callback_data: CB.CANCEL_ALL }]);
   }
   btns.push([{ text: t(lg, 'm_book'), callback_data: CB.BOOK }]);
+  for (const r of optoutRows) btns.push(r);
   btns.push([{ text: t(lg, 'back_m'), callback_data: CB.MAIN }]);
   await send(ctx, cid, txt, { reply_markup: { inline_keyboard: btns } });
 }

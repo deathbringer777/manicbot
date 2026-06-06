@@ -83,6 +83,12 @@ CREATE TABLE IF NOT EXISTS users (
   notes TEXT,
   tags TEXT,
   marketing_contact_id INTEGER,
+  -- 0114: chat email-capture opt-in / anti-nag state. email_opt_in:
+  -- NULL=never asked, 1=opted in, 0=declined/unsubscribed. Durable across
+  -- sessions (the conversation-state KV is too short-lived for the cooldown).
+  email_opt_in INTEGER,
+  email_prompt_last_at INTEGER,
+  email_prompt_count INTEGER NOT NULL DEFAULT 0,
   is_blocked_global INTEGER NOT NULL DEFAULT 0,
   blocked_global_reason TEXT,
   blocked_global_at INTEGER,

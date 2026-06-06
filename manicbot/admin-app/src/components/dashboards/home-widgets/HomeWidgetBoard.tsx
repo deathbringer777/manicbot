@@ -25,7 +25,7 @@ import { useMemo, useState } from "react";
 import { Responsive, WidthProvider, type Layout, type Layouts } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-import { LayoutGrid, Check, RotateCcw } from "lucide-react";
+import { LayoutGrid, Check, RotateCcw, X } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useDashboardPrefs, hydrateHomeLayout } from "~/lib/useDashboardPrefs";
 import { useCoarsePointer } from "~/lib/useCoarsePointer";
@@ -220,14 +220,29 @@ export function HomeWidgetBoard({ tenantId, lang }: { tenantId: string; lang: La
           onLayoutChange={handleLayoutChange}
         >
           {items.map((item) => (
-            <div key={item.i} data-widget-type={item.type}>
+            <div key={item.i} data-widget-type={item.type} className="relative">
               <WidgetFrame
                 item={item}
                 tenantId={tenantId}
                 lang={lang}
                 editMode={interactive}
-                onRemove={removeHomeWidget}
               />
+              {/* iOS-style delete badge — shown for all edit-mode users (incl. touch) */}
+              {editMode && (
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeHomeWidget(item.i);
+                  }}
+                  aria-label={t("home.remove", lang)}
+                  title={t("home.remove", lang)}
+                  className="absolute -right-2 -top-2 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-[#1f2937] text-white shadow-md ring-2 ring-white transition-colors hover:bg-red-500 dark:bg-slate-500 dark:ring-slate-900 dark:hover:bg-red-500"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
           ))}
         </ResponsiveGridLayout>

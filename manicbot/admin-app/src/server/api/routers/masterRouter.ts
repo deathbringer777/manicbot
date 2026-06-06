@@ -15,6 +15,7 @@ import {
 import { eq, and, gte, lte, desc, inArray, isNull, gt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { sanitizeText } from "~/server/security/sanitize";
+import { isHttpsUrl } from "~/server/lib/url";
 import {
   parseMasterHours,
   isValidMasterHours,
@@ -593,8 +594,10 @@ export const masterRouter = createTRPCRouter({
       tenantId: z.string(),
       masterId: z.number(),
       bio: z.string().max(500).optional(),
-      photo: z.string().url().optional().or(z.literal("")),
-      portfolio: z.array(z.string()).optional(),
+      // SEC-003: https-only. `.url()` accepts `javascript:`/`data:`; both fields
+      // render into `<img src>` and could move into an `<a href>` later.
+      photo: z.string().max(2048).refine(isHttpsUrl, { message: "url_must_be_https" }).optional().or(z.literal("")),
+      portfolio: z.array(z.string().max(2048).refine(isHttpsUrl, { message: "url_must_be_https" })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertCallerIsMaster(ctx, input.tenantId, input.masterId);

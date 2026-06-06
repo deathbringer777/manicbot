@@ -128,6 +128,41 @@ function isAdminKeyValid(env, request) {
 // ─── HTTP: POST /meta/oauth/start (admin-keyed) ─────────────────────────────
 
 /**
+ * SEC-004 — returnTo origin allowlist (open-redirect / token-leak guard).
+ *
+ * `returnTo` is stored in KV state and later used as the callback 302 target
+ * AND as the popup postMessage targetOrigin (deriveOpenerOriginFromReturnTo).
+ * The old check only required an `http(s)://` scheme, so anyone who could call
+ * this endpoint (ADMIN_KEY holder, or a future caller) could redirect the OAuth
+ * completion — carrying `meta_state` — to an attacker origin. Pin returnTo to a
+ * known admin-app / worker origin. Mirrors google-calendar-oauth's
+ * isAllowedWebReturnUrl; also accepts the worker base origin since the admin-app
+ * is served from the same apex (admin.manicbot.com does not resolve — see
+ * reference_admin_prod_url).
+ *
+ * @param {any} ctx
+ * @param {string} returnTo
+ * @returns {boolean}
+ */
+function isAllowedMetaReturnTo(ctx, returnTo) {
+  let target;
+  try {
+    target = new URL(returnTo);
+  } catch {
+    return false;
+  }
+  const allowed = new Set();
+  for (const candidate of [ctx.ADMIN_APP_URL, ctx.AUTH_URL, ctx.APP_BASE_URL, getBaseUrl(ctx)]) {
+    if (!candidate) continue;
+    try {
+      allowed.add(new URL(candidate).origin);
+    } catch { /* ignore unparseable config */ }
+  }
+  if (allowed.size === 0) allowed.add('https://manicbot.com');
+  return allowed.has(target.origin);
+}
+
+/**
  * Mint OAuth state, store it in KV with the tenant binding, return the
  * provider-specific authorize URL.
  *
@@ -162,7 +197,7 @@ export async function handleMetaOAuthStart(ctx, request) {
   if (!webUserId || typeof webUserId !== 'string') {
     return Response.json({ ok: false, error: 'missing_web_user_id' }, { status: 400 });
   }
-  if (!returnTo || typeof returnTo !== 'string' || !/^https?:\/\//i.test(returnTo)) {
+  if (!returnTo || typeof returnTo !== 'string' || !isAllowedMetaReturnTo(ctx, returnTo)) {
     return Response.json({ ok: false, error: 'invalid_return_to' }, { status: 400 });
   }
   // popup is a UX hint — when truthy the callback returns an HTML page that

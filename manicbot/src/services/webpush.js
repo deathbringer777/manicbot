@@ -24,6 +24,35 @@
 
 const TEXT_ENC = new TextEncoder();
 
+/**
+ * SEC-002 — Web Push endpoint SSRF guard (defense-in-depth).
+ *
+ * `sendWebPush` does `fetch(subscription.endpoint, …)`, so the endpoint is an
+ * SSRF sink. The admin-app router validates on write, but rows predating that
+ * guard (or any future non-router writer) must not be able to point this fetch
+ * at an internal/loopback/metadata host. Browsers only ever mint push
+ * endpoints on these four vendor services. Keep in sync with the admin-app copy
+ * in `admin-app/src/server/lib/url.ts` (isAllowedPushEndpoint).
+ */
+const ALLOWED_PUSH_HOST_SUFFIXES = [
+  '.googleapis.com', // FCM — Chrome, Edge, Opera, Brave, Samsung
+  '.push.services.mozilla.com', // Firefox autopush
+  '.notify.windows.com', // WNS — Edge
+  '.wns.windows.com', // WNS
+  '.push.apple.com', // Safari
+];
+export function isAllowedPushEndpoint(endpoint) {
+  let parsed;
+  try {
+    parsed = new URL(String(endpoint));
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  return ALLOWED_PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
 // ── Base64url helpers ───────────────────────────────────────────────────
 
 export function b64uToBytes(str) {
@@ -238,6 +267,10 @@ export async function buildVapidAuthHeader(endpoint, subject, publicKeyB64u, pri
  */
 export async function sendWebPush(subscription, payload, vapid, opts = {}) {
   if (!subscription?.endpoint) return { ok: false, status: 0, body: "missing_endpoint" };
+  // SEC-002: refuse to fetch anything that isn't a real https push service.
+  if (!isAllowedPushEndpoint(subscription.endpoint)) {
+    return { ok: false, status: 0, body: "endpoint_host_not_allowed" };
+  }
   if (!vapid?.publicKey || !vapid?.privateKey || !vapid?.subject) {
     return { ok: false, status: 0, body: "missing_vapid_config" };
   }

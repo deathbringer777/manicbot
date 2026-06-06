@@ -22,7 +22,15 @@ function secret(name, minLength = 32) {
 export const env = createEnv({
   server: {
     DATABASE_URL: z.string().url().optional(),
-    TELEGRAM_BOT_TOKEN: z.string().min(1),
+    /**
+     * Telegram bot token. NOT boot-fatal: the admin-app never calls the
+     * Telegram API directly (all sends route through the Worker); the only
+     * consumer is a `!!env.TELEGRAM_BOT_TOKEN` health badge in system.ts.
+     * Was `z.string().min(1)`, which made an empty/unset value throw at module
+     * import and 500-loop the entire /api/trpc surface — the exact #406
+     * boot-fatal class. Only AUTH_SECRET should be boot-fatal; keep `.optional()`.
+     */
+    TELEGRAM_BOT_TOKEN: z.string().optional(),
     ADMIN_CHAT_ID: z.string().optional(),
     AUTH_SECRET: secret("AUTH_SECRET", 32),
     /** Публичный URL Worker (без слэша в конце), для подсказок webhook в Mini App */

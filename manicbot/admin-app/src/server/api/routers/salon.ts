@@ -1293,7 +1293,13 @@ export const salonRouter = createTRPCRouter({
       city: z.string().max(100).optional(),
       lat: z.number().min(-90).max(90).optional(),
       lng: z.number().min(-180).max(180).optional(),
-      mapsUrl: z.string().max(2048).optional().or(z.literal("")),
+      // SEC-001: https-only. mapsUrl renders into `<a href={mapsUrl}>` on the
+      // PUBLIC /salon/<slug> page (looser `unsafe-inline` CSP), so a bare
+      // `z.string()` let a tenant_owner store `javascript:…` → click-to-XSS in
+      // the manicbot.com origin for every visitor. Same guard as logo/coverPhoto;
+      // generic https (not a host allowlist) since a maps link may be Google /
+      // goo.gl / Yandex / 2GIS. See salon-update-profile-security.test.ts.
+      mapsUrl: z.string().regex(/^https:\/\//i, "URL must start with https://").max(2048).optional().or(z.literal("")),
       publicActive: z.number().min(0).max(1).optional(),
       // 0091 — chat surface independent of catalog publication. Owners
       // toggle this on to expose `/salon/{slug}/chat` without putting

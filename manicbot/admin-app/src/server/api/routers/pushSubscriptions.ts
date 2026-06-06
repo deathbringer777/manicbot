@@ -22,6 +22,7 @@ import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { pushSubscriptions } from "~/server/db/schema";
+import { isAllowedPushEndpoint } from "~/server/lib/url";
 import { env } from "~/env";
 
 function newSubscriptionId(): string {
@@ -49,7 +50,9 @@ export const pushSubscriptionsRouter = createTRPCRouter({
    */
   subscribe: protectedProcedure
     .input(z.object({
-      endpoint: z.string().url().max(2000),
+      // SEC-002: https + real push-vendor host only (this value is later
+      // fetch()'d by the Worker — see isAllowedPushEndpoint).
+      endpoint: z.string().url().max(2000).refine(isAllowedPushEndpoint, { message: "endpoint_host_not_allowed" }),
       p256dh: z.string().min(1).max(200),
       auth: z.string().min(1).max(80),
       userAgent: z.string().max(500).optional(),

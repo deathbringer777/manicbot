@@ -20,6 +20,7 @@ import {
   XCircle,
   Shield,
   UserPlus,
+  FlaskConical,
   Trash2,
   Zap,
   Copy,
@@ -153,6 +154,7 @@ export default function TenantsPageClient() {
 
   const activateMut = api.tenants.activate.useMutation({ onSuccess: () => utils.tenants.getAll.invalidate() });
   const deactivateMut = api.tenants.deactivate.useMutation({ onSuccess: () => utils.tenants.getAll.invalidate() });
+  const setTestModeMut = api.tenants.setTestMode.useMutation({ onSuccess: () => utils.tenants.getAll.invalidate() });
   const createMut = api.provisioning.createTenant.useMutation({
     onSuccess: () => { utils.tenants.getAll.invalidate(); setShowCreate(false); setCreateName(""); },
   });
@@ -336,6 +338,16 @@ export default function TenantsPageClient() {
                         >
                           <Bot className="w-3.5 h-3.5" />
                           {t("gmTenants.linkBot", lang)}
+                        </button>
+                        {/* Flag this salon as test/real — test tenants are excluded
+                            from every business metric (MRR, paying, trials…). */}
+                        <button
+                          onClick={() => setTestModeMut.mutate({ id: tenant.id, isTest: !tenant.isTest })}
+                          disabled={setTestModeMut.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-500 dark:text-amber-400 text-xs font-medium active:bg-amber-500/20 disabled:opacity-50"
+                        >
+                          <FlaskConical className="w-3.5 h-3.5" />
+                          {tenant.isTest ? t("gmTenants.markReal", lang) : t("gmTenants.markTest", lang)}
                         </button>
                       </div>
                     </div>

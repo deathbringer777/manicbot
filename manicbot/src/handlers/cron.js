@@ -43,8 +43,8 @@ import { isTokenExpiring, refreshInstagramToken } from '../channels/token-manage
 import { cleanupExpired as cleanupRateLimits } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
 import { runCampaignSend as runMarketingCampaign } from '../services/marketing/sender.js';
+import { fireAutomationForEvent } from '../services/marketing/automations.js';
 import { phasePlatformCampaigns } from '../services/platformCampaigns.js';
-import { remindersCron } from '../../plugins/reminders/cron.js';
 
 /**
  * Plugin cron dispatchers — runtime map of slug → handler for plugins that
@@ -61,17 +61,22 @@ import { remindersCron } from '../../plugins/reminders/cron.js';
  * TS and the worker is JS, and (b) lazy growth — when there are 3+ entries
  * we extract to plugins/cron-dispatchers.js. YAGNI for plugin #1.
  */
-const PLUGIN_CRON_DISPATCHERS = Object.freeze({
-  reminders: remindersCron,
-});
+// Currently empty: the `reminders` plugin (the first cron-backed plugin) was
+// removed 2026-06-06 as a duplicate of the core notification bell + the
+// `phaseReminders` appointment-reminder cron. The orchestrator below stays so
+// the next cron-backed plugin is a one-line add.
+const PLUGIN_CRON_DISPATCHERS = Object.freeze({});
 
 // Per-phase idempotency window (seconds). The 15-min cron tick fires every
 // 900 s; phases with windowSec > 900 will skip most ticks.
 export const PHASE_WINDOWS = Object.freeze({
-  reminders: 10 * 60,         // 10 min — must run almost every cron tick
   reviews: 24 * 60 * 60,      // 24 h
   gcalSync: 10 * 60,          // 10 min
   postVisit: 60 * 60,         // 1 h
+  // Post-visit follow-up sweep (24h after the visit). 10-min window so it
+  // catches up within a tick or two; the followup_24h_sent_at flag is the
+  // real idempotency, not this window.
+  postVisitFollowup: 10 * 60, // 10 min
   promos: 24 * 60 * 60,       // 24 h
   cleanup: 24 * 60 * 60,      // 24 h
   retention: 24 * 60 * 60,    // 24 h (P1-10)
@@ -79,7 +84,7 @@ export const PHASE_WINDOWS = Object.freeze({
   // PR-A marketing send dispatch — tight window because we want scheduled
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
   marketingDispatch: 60,
-  pluginCron: 10 * 60,        // 10 min — same cadence as reminders
+  pluginCron: 10 * 60,        // 10 min
   // Platform operator campaigns (migration 0100): tight window so scheduled /
   // recurring sends and the monthly-report/subscription-reminder automations
   // fire within ~one cron tick of becoming due. Idempotency is the delivery
@@ -773,6 +778,121 @@ export async function phaseReviews(ctx, now) {
   }
 }
 
+// ─── Phase: post-visit follow-up (24h after the visit) ──────────────────
+/**
+ * Marketing trigger fired by the 24h-after-visit sweep. Distinct from the
+ * immediate `appointment.done` dispatch (appointmentAutomations.js) so the
+ * delayed follow-up and the at-done message stay independently configurable
+ * and never collide on the same automation row.
+ */
+export const POST_VISIT_FOLLOWUP_TRIGGER = 'post_visit_24h';
+/** Send the follow-up once the visit ended at least this long ago. */
+export const POST_VISIT_FOLLOWUP_DELAY_SEC = 24 * 60 * 60;
+/**
+ * Don't follow up on visits older than DELAY + LOOKBACK. The
+ * `followup_24h_sent_at` flag already prevents re-sends; this floor just
+ * stops a first deploy (or a long worker outage) from blasting weeks-old
+ * visits in a single tick.
+ */
+export const POST_VISIT_FOLLOWUP_LOOKBACK_SEC = 48 * 60 * 60;
+
+/**
+ * Pure decision helper: is an appointment whose visit ended at `endSec`
+ * (unix seconds) due for the 24h-after follow-up at `nowSec`?
+ *
+ * Due when the visit ended >=24h ago but still within the look-back floor.
+ * Exported so the window can be locked in by unit tests without a DB.
+ */
+export function isPostVisitFollowupDue(endSec, nowSec, lookbackSec = POST_VISIT_FOLLOWUP_LOOKBACK_SEC) {
+  if (!Number.isFinite(endSec)) return false;
+  const dueAt = nowSec - POST_VISIT_FOLLOWUP_DELAY_SEC;
+  const floor = dueAt - lookbackSec;
+  return endSec <= dueAt && endSec > floor;
+}
+
+/**
+ * Fire the post-visit follow-up ~24h after a visit, on both channels:
+ *   - email/SMS via the marketing pipeline (any enabled `post_visit_24h`
+ *     automation; consent-gated inside fireAutomationForEvent)
+ *   - Telegram star review ask (opt-in via `post_visit_followup_tg_enabled`),
+ *     reusing the existing `rev:` rating keyboard
+ *
+ * Idempotency: claim-by-conditional-UPDATE on
+ * `appointments.followup_24h_sent_at` so overlapping cron ticks / queue
+ * redeliveries can never double-send. The claim runs BEFORE the sends, so a
+ * crash mid-phase drops at most one follow-up rather than risking a
+ * duplicate.
+ *
+ * Mirrors processPostVisitConfirmations: a coarse SQL pre-filter (simple
+ * status flags + `ts <= now`) plus a JS time-window decision via
+ * isPostVisitFollowupDue, so the SQL stays simple enough for the test
+ * mock-db parser.
+ */
+export async function phasePostVisitFollowup(ctx, now) {
+  const nowSec = Math.floor(now / 1000);
+
+  // Cheap early-out: do nothing unless the owner enabled the Telegram ask
+  // OR configured an enabled post_visit_24h email/SMS automation (a
+  // platform-default tenant_id=NULL row counts too).
+  const tgEnabled = !!(await getConfig(ctx, 'post_visit_followup_tg_enabled'));
+  const hasEmailAuto = !!(await dbGet(ctx,
+    'SELECT 1 AS x FROM marketing_automations WHERE trigger_type = ? AND enabled = 1 AND (tenant_id = ? OR tenant_id IS NULL) LIMIT 1',
+    POST_VISIT_FOLLOWUP_TRIGGER, ctx.tenantId,
+  ));
+  if (!tgEnabled && !hasEmailAuto) return;
+
+  // Coarse scan: completed, non-cancelled, non-no-show visits not yet
+  // followed up, that have already started. WHERE is single-line and free of
+  // IN(...) so the test mock-db parser can exercise it; the precise 24h
+  // window is decided in JS below.
+  const rows = await dbAll(ctx,
+    'SELECT id, ts, duration, svc_id, chat_id FROM appointments WHERE tenant_id = ? AND status = ? AND cancelled = 0 AND no_show = 0 AND followup_24h_sent_at IS NULL AND ts <= ? ORDER BY ts ASC LIMIT 50',
+    ctx.tenantId, 'done', now,
+  );
+  if (!rows.length) return;
+
+  const svcDurMap = new Map((ctx.svc || []).map(s => [s.id, s.dur]));
+
+  for (const r of rows) {
+    try {
+      // Per-appointment duration override (migration 0106) wins over the
+      // service's nominal duration.
+      const durMin = r.duration ?? svcDurMap.get(r.svc_id) ?? 60;
+      const endSec = Math.floor(r.ts / 1000) + durMin * 60;
+      if (!isPostVisitFollowupDue(endSec, nowSec)) continue;
+
+      // Claim the row — only the winner of the conditional UPDATE sends.
+      const claim = await dbRun(ctx,
+        'UPDATE appointments SET followup_24h_sent_at = ? WHERE id = ? AND tenant_id = ? AND followup_24h_sent_at IS NULL',
+        nowSec, r.id, ctx.tenantId,
+      );
+      const claimed = (claim?.meta?.changes ?? claim?.changes ?? 0) > 0;
+      if (!claimed) continue;
+
+      // Email/SMS — fires any enabled post_visit_24h automation for this
+      // client (no-op if they have no consented marketing_contacts row).
+      if (hasEmailAuto) {
+        await fireAutomationForEvent(ctx, POST_VISIT_FOLLOWUP_TRIGGER, { chatId: r.chat_id });
+      }
+
+      // Telegram review ask (opt-in) — same star keyboard as phaseReviews so
+      // ratings flow into the existing `rev:` callback handler.
+      if (tgEnabled && r.chat_id != null) {
+        const lg = (await getLang(ctx, r.chat_id).catch(() => null)) || 'ru';
+        const stars = ['1', '2', '3', '4', '5'].map(n => ({
+          text: '⭐'.repeat(Number(n)),
+          callback_data: `rev:${r.id}:${n}`,
+        }));
+        await send(ctx, r.chat_id, t(lg, 'review_request'), {
+          reply_markup: { inline_keyboard: [stars] },
+        });
+      }
+    } catch (e) {
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { action: 'post_visit_followup', aptId: r.id });
+    }
+  }
+}
+
 // ─── Phase 3: Google Calendar retry sync ────────────────────────────────
 export async function phaseGcalSync(ctx, now) {
   const MAX_SYNC_PER_CRON = 10;
@@ -1135,7 +1255,7 @@ export async function phaseMarketingDispatch(ctx, nowMs) {
  * separate global orchestrator; tenant-fan-out is correct for reminders
  * + checklists + everything currently on the roadmap.
  */
-export async function phasePluginCron(ctx, nowMs) {
+export async function phasePluginCron(ctx, nowMs, dispatchers = PLUGIN_CRON_DISPATCHERS) {
   if (!ctx?.db || !ctx?.tenantId) return;
   let installs;
   try {
@@ -1155,7 +1275,7 @@ export async function phasePluginCron(ctx, nowMs) {
     return;
   }
   for (const install of installs) {
-    const dispatcher = PLUGIN_CRON_DISPATCHERS[install.plugin_slug];
+    const dispatcher = dispatchers[install.plugin_slug];
     if (!dispatcher) continue;
     // Treat past_due / canceled paid addons as disabled at runtime even when
     // the enabled=1 flag still says yes — matches assertPluginEnabled gating
@@ -1197,13 +1317,12 @@ export async function handleCron(ctx) {
     const now = Date.now();
     const w = warsawNow();
 
-    // checkBillingExpiry compares against trialEndsAt / graceEndsAt, which are
-    // stored in Unix SECONDS — so it must receive seconds, not the ms `now`
-    // used by the ms-based phases below. Passing ms made `now` ≫ every deadline,
-    // collapsing trials/grace to zero length and flipping tenants to `inactive`
-    // on the very first cron tick (the lockout buffer this lifecycle relies on
-    // would never apply). phaseBillingWarnings keeps the ms `now` — it converts
-    // internally.
+    // `now` is Date.now() MILLISECONDS — every phase below consumes it as ms.
+    // checkBillingExpiry, however, compares against trial_ends_at / grace_ends_at
+    // which are stored in UNIX SECONDS. Passing ms made `now > trialEndsAt`
+    // always true, flipping every trialing/grace tenant to `inactive` on the
+    // first cron tick (zero-length trials + grace). Convert to seconds here.
+    // (phaseBillingWarnings below keeps the ms `now` — it converts internally.)
     await checkBillingExpiry(ctx, Math.floor(now / 1000));
 
     if (!ctx?.db || !ctx?.tenantId) return;
@@ -1271,6 +1390,9 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'reviews', () => phaseReviews(ctx, now));
     await runPhase(ctx, 'gcalSync', () => phaseGcalSync(ctx, now));
     await runPhase(ctx, 'postVisit', () => phasePostVisit(ctx, now));
+    // Post-visit follow-up: ~24h after the visit, fire the «После визита»
+    // marketing template (email/SMS) + an opt-in Telegram review ask.
+    await runPhase(ctx, 'postVisitFollowup', () => phasePostVisitFollowup(ctx, now));
     await runPhase(ctx, 'promos', () => phasePromos(ctx, now));
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));

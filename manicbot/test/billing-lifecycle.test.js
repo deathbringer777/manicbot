@@ -63,6 +63,23 @@ describe('isBillingExpired', () => {
   it('граничный случай: now = trialEndsAt + 1 — истёк', () => {
     expect(isBillingExpired({ billingStatus: 'trialing', trialEndsAt: NOW - 1 }, NOW)).toBe('trial_expired');
   });
+
+  // Regression: the cron call site historically passed Date.now() (milliseconds)
+  // here, and ms is always > any seconds timestamp, so EVERY trialing/grace
+  // tenant was force-expired on the first tick. The boundary now normalizes a
+  // millisecond `now` to seconds so a future trial/grace stays valid.
+  it('regression: миллисекундный now не «истекает» будущий триал (Date.now())', () => {
+    expect(isBillingExpired({ billingStatus: 'trialing', trialEndsAt: FUTURE }, Date.now())).toBeNull();
+  });
+
+  it('regression: миллисекундный now не «истекает» активный grace-период', () => {
+    expect(isBillingExpired({ billingStatus: 'grace_period', graceEndsAt: FUTURE }, Date.now())).toBeNull();
+  });
+
+  it('regression: миллисекундный now всё ещё истекает по-настоящему просроченный триал', () => {
+    // trial ended a day ago (seconds) — must still expire even when probed with ms.
+    expect(isBillingExpired({ billingStatus: 'trialing', trialEndsAt: PAST }, Date.now())).toBe('trial_expired');
+  });
 });
 
 // ─── checkBillingExpiry — с side-effects ─────────────────────────────────────
@@ -103,26 +120,16 @@ describe('checkBillingExpiry', () => {
     expect(ctx.tenant.billingStatus).toBe('trialing');
   });
 
-  // Regression for the cron call-site (handlers/cron.js handleCron). It used to
-  // pass Date.now() (MILLISECONDS) here, but trialEndsAt/graceEndsAt are stored
-  // in SECONDS: ms ≫ any seconds deadline, so every trialing/grace tenant was
-  // flipped to inactive on the first tick (zero-length grace). Pin both ways.
+  // Regression for the cron call-site (handlers/cron.js handleCron now passes
+  // Math.floor(now/1000)). A future trial must NOT be flipped. isBillingExpired
+  // also has a ms safety-net (covered by the isBillingExpired regression tests
+  // above) — here we pin the call-site contract end to end.
   it('cron-unit regression: a future trial is NOT flipped when called with SECONDS', async () => {
     const futureSec = nowSec() + 7 * 86400;
     const ctx = makeTenantCtx({ billingStatus: 'trialing', trialEndsAt: futureSec });
     const result = await checkBillingExpiry(ctx, Math.floor(Date.now() / 1000));
     expect(result).toBeNull();
     expect(ctx.tenant.billingStatus).toBe('trialing');
-  });
-
-  it('cron-unit regression: passing MILLISECONDS would wrongly flip a future trial (documents the bug)', async () => {
-    const futureSec = nowSec() + 7 * 86400;
-    const ctx = makeTenantCtx({ billingStatus: 'trialing', trialEndsAt: futureSec });
-    // The old buggy call site passed Date.now() (ms). Show it mis-fires so the
-    // seconds fix is never silently reverted to ms.
-    const result = await checkBillingExpiry(ctx, Date.now());
-    expect(result).toBe('trial_expired');
-    expect(ctx.tenant.billingStatus).toBe('inactive');
   });
 
   it('переводит trialing → inactive когда трайл истёк', async () => {

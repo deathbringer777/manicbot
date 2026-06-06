@@ -73,6 +73,25 @@ describe("salonRouter", () => {
     });
   });
 
+  // ── getMyMetrics (tenant-facing, mirrors God-Mode getTenantMetrics) ────────
+  describe("getMyMetrics", () => {
+    it("guards via assertTenantOwner and returns clients/appointments metrics", async () => {
+      const dbMock = createDbMock([
+        [{ count: 12 }], // distinct clients processed
+        [{ count: 40 }], // appointments total (non-cancelled)
+        [{ count: 7 }],  // appointments last 30d
+      ]);
+      const caller = ownerCaller(dbMock.db);
+
+      const result = await caller.getMyMetrics({ tenantId: TENANT });
+
+      expect(assertTenantOwner).toHaveBeenCalledWith(expect.anything(), TENANT);
+      expect(result.clientsProcessed).toBe(12);
+      expect(result.appointmentsTotal).toBe(40);
+      expect(result.appointmentsThisMonth).toBe(7);
+    });
+  });
+
   // ── getOverview ───────────────────────────────────────────────────────────
   describe("getOverview", () => {
     it("returns aggregated today appointments via count(*), masters, tickets, plan", async () => {

@@ -1,0 +1,18 @@
+-- 0112a_appointments_followup_marker.sql — 2026-06-06
+--
+-- Renumbered 0112 → 0112a (a-suffix slot-in, like 0012a) to resolve a duplicate
+-- migration number: #379 landed this as 0112 while #377 had already taken 0112
+-- with 0112_drop_reminders_tables.sql, which red-lined check-migrations and
+-- silently skipped every deploy since. wrangler orders 0112 < 0112a < 0113, and
+-- this migration had never applied to prod (deploys were blocked), so the rename
+-- is safe — it applies fresh as 0112a.
+--
+-- Post-visit follow-up (24h after a visit): idempotency marker for the new
+-- `phasePostVisitFollowup` cron sweep. NULL = no follow-up sent yet; the sweep
+-- claims a row by conditionally stamping this with the send epoch (seconds),
+-- so overlapping cron ticks / queue redeliveries can never double-send.
+--
+-- Nullable additive change, no backfill: existing past visits stay NULL, and a
+-- bounded look-back floor in the sweep keeps them from being blasted on first
+-- deploy.
+ALTER TABLE appointments ADD COLUMN followup_24h_sent_at INTEGER;

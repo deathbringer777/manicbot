@@ -40,6 +40,7 @@ import { PLUGIN_LANGS } from "@plugins/types";
 import { runLifecycle, writePluginEvent } from "~/server/plugins/lifecycle";
 import { computeLockReason, type ViewerContext } from "~/server/plugins/lockReason";
 import { env } from "~/env";
+import { assertAdminAppReturnUrl } from "~/server/security/returnUrl";
 
 const MAX_SETTINGS_BYTES = 8 * 1024;
 
@@ -253,9 +254,11 @@ export const pluginsRouter = createTRPCRouter({
           .regex(/^[a-z][a-z0-9-]{2,40}$/, "Invalid slug shape"),
         tenantId: z.string().nullable().optional(),
         settings: z.record(z.string(), z.unknown()).optional(),
+        returnUrl: z.string().url().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      assertAdminAppReturnUrl(input.returnUrl);
       const plugin = getPlugin(input.slug);
       if (!plugin) throw new TRPCError({ code: "NOT_FOUND", message: "Plugin not found" });
       const m = plugin.manifest;

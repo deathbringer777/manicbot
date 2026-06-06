@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MarketingShell } from "../MarketingShell";
 import { api } from "~/trpc/react";
 import { Mail, Plus, Send, Trash2, Clock, CheckCircle2, XCircle } from "lucide-react";
@@ -84,6 +84,19 @@ export default function CampaignsClient() {
   const [deleting, setDeleting] = useState<CampaignRow | null>(null);
   const [sending, setSending] = useState<CampaignRow | null>(null);
   const [sendResult, setSendResult] = useState<string | null>(null);
+
+  // Deep-link handoff from the Clients-tab "broadcast from selection" action:
+  // /marketing/campaigns?segmentId=<id> auto-opens the create modal pre-targeted
+  // at that list. Read from window (not useSearchParams) so this edge route
+  // doesn't need a Suspense boundary.
+  const [initialSegmentId, setInitialSegmentId] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const seg = new URLSearchParams(window.location.search).get("segmentId");
+    if (seg) {
+      setInitialSegmentId(seg);
+      setShowCreate(true);
+    }
+  }, []);
 
   const scope = mode === "admin"
     ? ({ mode: "admin" } as const)
@@ -239,6 +252,7 @@ export default function CampaignsClient() {
         <CampaignFormModal
           scope={scope}
           forcedChannel="email"
+          initialSegmentId={initialSegmentId}
           onClose={() => setShowCreate(false)}
           onSaved={() => setShowCreate(false)}
         />

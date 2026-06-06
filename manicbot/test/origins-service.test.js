@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   decodeStartPayload,
   encodeStartPayload,
+  encodeStartPayloadFit,
+  lookupTrackingLink,
   recordOrigin,
+  recordWebOrigin,
   ORIGIN_CHANNELS,
 } from '../src/services/origins.js';
 
@@ -95,6 +98,141 @@ describe('encodeStartPayload', () => {
   it('produces URL-safe tokens (no + / =)', () => {
     const token = encodeStartPayload({ source: '@@@', campaign: '???' });
     expect(token).not.toMatch(/[+/=]/);
+  });
+});
+
+// ─── UTF-8 safety (regression: btoa() threw InvalidCharacterError on Cyrillic) ──
+
+describe('encodeStartPayload — UTF-8 / Cyrillic', () => {
+  it('no longer throws on a Cyrillic campaign and round-trips', () => {
+    const token = encodeStartPayload({ source: 'qr', campaign: 'Весна' });
+    expect(decodeStartPayload(token)).toEqual({ source: 'qr', campaign: 'Весна' });
+  });
+
+  it('round-trips mixed Cyrillic + ASCII + spaces', () => {
+    const token = encodeStartPayload({ source: 'instagram', campaign: 'Весна 2026' });
+    expect(decodeStartPayload(token)).toEqual({ source: 'instagram', campaign: 'Весна 2026' });
+  });
+
+  it('still decodes a legacy ASCII-only token minted the old way (backward compat)', () => {
+    const legacy = btoa(JSON.stringify({ s: 'qr', c: 'april' }))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    expect(decodeStartPayload(legacy)).toEqual({ source: 'qr', campaign: 'april' });
+  });
+});
+
+describe('encodeStartPayloadFit — graceful degradation under the 64-char limit', () => {
+  it('returns the full token untruncated when everything fits', () => {
+    const r = encodeStartPayloadFit({ source: 'qr', campaign: 'spring' });
+    expect(r.truncated).toBe(false);
+    expect(r.dropped).toEqual([]);
+    expect(decodeStartPayload(r.token)).toEqual({ source: 'qr', campaign: 'spring' });
+  });
+
+  it('round-trips a Cyrillic campaign that fits without truncation', () => {
+    const r = encodeStartPayloadFit({ source: 'qr', campaign: 'Весна 2026' });
+    expect(r.truncated).toBe(false);
+    expect(decodeStartPayload(r.token)).toEqual({ source: 'qr', campaign: 'Весна 2026' });
+  });
+
+  it('drops content (then medium) to fit, always keeping source, never throws', () => {
+    const r = encodeStartPayloadFit({
+      source: 'website',
+      medium: 'вава',
+      campaign: 'вав',
+      content: 'вавав',
+    });
+    expect(r.token.length).toBeLessThanOrEqual(64);
+    expect(r.truncated).toBe(true);
+    expect(r.dropped).toContain('content');
+    const decoded = decodeStartPayload(r.token);
+    expect(decoded.source).toBe('website');
+    expect(decoded.content).toBeUndefined();
+  });
+
+  it('falls back to a fitting source-only token for an extreme oversized payload', () => {
+    const r = encodeStartPayloadFit({
+      source: 'instagram',
+      campaign: 'Очень_длинное_название_кампании_которое_не_влезает',
+      medium: 'органический_трафик_из_историй',
+      content: 'баннер_в_шапке_профиля_2026',
+    });
+    expect(r.token.length).toBeLessThanOrEqual(64);
+    const decoded = decodeStartPayload(r.token);
+    expect(decoded.source).toBe('instagram');
+  });
+
+  it('throws only when there is no source at all', () => {
+    expect(() => encodeStartPayloadFit({})).toThrow(/empty/);
+  });
+});
+
+describe('recordWebOrigin', () => {
+  function makeWebCtx({ prior = null } = {}) {
+    const inserts = [];
+    const exec = async (sql, params) => {
+      const n = sql.trim().replace(/\s+/g, ' ');
+      if (n.startsWith('SELECT 1 AS seen FROM user_origins')) return prior;
+      if (n.startsWith('INSERT INTO user_origins')) { inserts.push(params); return { success: true }; }
+      return null;
+    };
+    const db = {
+      prepare: (sql) => ({
+        bind: (...p) => ({ async first() { return exec(sql, p); }, async run() { return exec(sql, p); } }),
+      }),
+    };
+    return { ctx: { db, tenantId: 't_demo' }, inserts };
+  }
+
+  it('records a web touch (chat_id=0, channel web, web_user_id set) as first touch', async () => {
+    const { ctx, inserts } = makeWebCtx({ prior: null });
+    const res = await recordWebOrigin(ctx, { webUserId: 'anon-123', source: 'qr', campaign: 'Весна 2026' });
+    expect(res).toEqual({ ok: true, isFirstTouch: true });
+    expect(inserts).toHaveLength(1);
+    // params: [tenant, source, medium, campaign, content, landing, referer, raw, captured, is_first, web_user]
+    const p = inserts[0];
+    expect(p[0]).toBe('t_demo');
+    expect(p[1]).toBe('qr');
+    expect(p[3]).toBe('Весна 2026');
+    expect(p[9]).toBe(1);
+    expect(p[10]).toBe('anon-123');
+  });
+
+  it('marks a repeat visit by the same anonymousId as not-first-touch', async () => {
+    const { ctx, inserts } = makeWebCtx({ prior: { seen: 1 } });
+    const res = await recordWebOrigin(ctx, { webUserId: 'anon-123', source: 'website' });
+    expect(res).toEqual({ ok: true, isFirstTouch: false });
+    expect(inserts[0][9]).toBe(0);
+  });
+
+  it('rejects missing ctx / webUserId / source', async () => {
+    expect((await recordWebOrigin(null, { webUserId: 'a', source: 'qr' })).ok).toBe(false);
+    expect((await recordWebOrigin(makeWebCtx().ctx, { source: 'qr' })).ok).toBe(false);
+    expect((await recordWebOrigin(makeWebCtx().ctx, { webUserId: 'a' })).ok).toBe(false);
+  });
+});
+
+describe('lookupTrackingLink', () => {
+  function ctxWith(row) {
+    return {
+      db: { prepare() { return { bind() { return { async first() { return row; } }; } }; } },
+      tenantId: 't_demo',
+    };
+  }
+
+  it('resolves a known short code to its stored attribution (Cyrillic-safe)', async () => {
+    const ctx = ctxWith({ source: 'qr', medium: null, campaign: 'Весна 2026', content: null });
+    expect(await lookupTrackingLink(ctx, 'ab12cd34')).toEqual({ source: 'qr', campaign: 'Весна 2026' });
+  });
+
+  it('returns null for an unknown code', async () => {
+    expect(await lookupTrackingLink(ctxWith(null), 'ffffffff')).toBeNull();
+  });
+
+  it('returns null without ctx / tenant / code', async () => {
+    expect(await lookupTrackingLink(null, 'ab12cd34')).toBeNull();
+    expect(await lookupTrackingLink({ db: {}, tenantId: '' }, 'ab12cd34')).toBeNull();
+    expect(await lookupTrackingLink(ctxWith({ source: 'qr' }), '')).toBeNull();
   });
 });
 

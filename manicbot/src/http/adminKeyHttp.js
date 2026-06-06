@@ -3,7 +3,7 @@ import { log } from '../utils/logger.js';
 import { runMigration } from '../tenant/migration.js';
 import { runSeed } from '../admin/seed.js';
 import { registerBot, createTenant } from '../admin/provisioning.js';
-import { getTenant, putTenant, putBot, listTenantIds, getBotIdsByTenantId, getBot, getBotToken } from '../tenant/storage.js';
+import { getTenant, putTenant, listTenantIds, getBotIdsByTenantId, getBot, getBotToken } from '../tenant/storage.js';
 import { envCtx } from './envCtx.js';
 import { logEvent } from '../utils/events.js';
 import { audit } from '../utils/audit.js';
@@ -52,6 +52,18 @@ function isNotifyAuthValid(env, request) {
 
 /** Returns a 403 Forbidden response. */
 const forbidden = () => new Response('Forbidden', { status: 403 });
+
+function isAllowedAdminReturnUrl(returnUrl, env) {
+  if (!returnUrl) return true;
+  try {
+    const target = new URL(returnUrl);
+    const configured = env.ADMIN_APP_URL || env.APP_BASE_URL || '';
+    const allowed = configured ? new URL(configured).origin : 'https://admin.manicbot.com';
+    return target.origin === allowed;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * @param {Request} request
@@ -370,6 +382,9 @@ export async function tryAdminKeyRoutes(request, env, url) {
       if (cycle !== 'monthly' && cycle !== 'onetime') {
         return Response.json({ error: 'cycle must be monthly or onetime' }, { status: 400 });
       }
+      if (!isAllowedAdminReturnUrl(returnUrl, env)) {
+        return Response.json({ error: 'returnUrl origin not allowed' }, { status: 400 });
+      }
       const priceId = env[priceIdEnv];
       if (!priceId) {
         return Response.json({ error: `Env var ${priceIdEnv} not configured` }, { status: 503 });
@@ -384,8 +399,18 @@ export async function tryAdminKeyRoutes(request, env, url) {
       const cfg = getStripeConfig(env);
       if (!cfg.ok) return Response.json({ error: cfg.error }, { status: 503 });
 
-      const success = returnUrl || `${cfg.baseUrl}/?plugin_checkout_ok=1`;
-      const cancel = returnUrl || `${cfg.baseUrl}/?plugin_checkout_cancel=1`;
+      let success = `${cfg.baseUrl}/?plugin_checkout_ok=1`;
+      let cancel = `${cfg.baseUrl}/?plugin_checkout_cancel=1`;
+      if (returnUrl) {
+        try {
+          const u = new URL(returnUrl);
+          const baseU = new URL(cfg.baseUrl);
+          if (u.origin === baseU.origin) {
+            success = returnUrl;
+            cancel = returnUrl;
+          }
+        } catch (e) {}
+      }
       const params = {
         mode: cycle === 'monthly' ? 'subscription' : 'payment',
         'line_items[0][price]': priceId,
@@ -1045,7 +1070,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
     try {
-      const { action, appointmentId, tenantId, confirmedBy, oldDate, oldTime, apt: bodyApt } = await request.json();
+      const { action, appointmentId, tenantId, oldDate, oldTime, apt: bodyApt } = await request.json();
       if (!action || !appointmentId || !tenantId) {
         return Response.json({ error: 'action, appointmentId, tenantId required' }, { status: 400 });
       }
@@ -1075,7 +1100,7 @@ export async function tryAdminKeyRoutes(request, env, url) {
       const { initServices } = await import('../services/services.js');
       await initServices(ctx);
 
-      const { getAptById, updateApt } = await import('../services/appointments.js');
+      const { getAptById } = await import('../services/appointments.js');
       let apt = await getAptById(ctx, appointmentId);
       // Read-after-write fallback for the calendar-only `sync_calendar` action:
       // appointments.createManual inserts the row then immediately calls this

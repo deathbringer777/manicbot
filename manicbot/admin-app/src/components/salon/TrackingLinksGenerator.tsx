@@ -1,17 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, Download, QrCode, Check, Loader2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Copy, Download, QrCode, Check, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
+const DEBOUNCE_MS = 400;
+
 /**
- * Generates tracking links (Telegram deep-link, public profile) with a shared
- * source/campaign tag. Uses the analytics.buildTrackingLinks tRPC procedure to
- * mint a token that the Worker's /start parser can decode back into
- * `user_origins.first_source` / `first_campaign`.
+ * Generates ready-to-share tracking links (Telegram deep-link, public profile).
+ * Calls analytics.buildTrackingLinks, which persists the attribution and returns
+ * a short code (e.g. `ab12cd34`) — the Worker's /start handler resolves it back
+ * to source/campaign. No "Create" button: the link rebuilds itself a beat after
+ * you stop typing (debounced, so it mints at most one code per settled value,
+ * which also keeps the request log quiet). The short code carries no payload, so
+ * any campaign length or alphabet (Cyrillic included) is safe — no 64-char limit.
  */
 export function TrackingLinksGenerator({
   tenantId,
@@ -31,22 +36,28 @@ export function TrackingLinksGenerator({
   const [showQr, setShowQr] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const build = api.analytics.buildTrackingLinks.useQuery(
-    {
-      tenantId,
-      source,
-      medium: medium || undefined,
-      campaign: campaign || undefined,
-      content: content || undefined,
-      botUsername: botUsername || undefined,
-      slug: slug || undefined,
-    },
-    {
-      enabled: !!source,
-      retry: false,
-      refetchOnWindowFocus: false,
-    },
-  );
+  const build = api.analytics.buildTrackingLinks.useMutation();
+  const mutate = build.mutate;
+
+  // No "Create" button — rebuild a short beat after the user stops typing.
+  // Debounced so we mint at most one short code per settled value (not one per
+  // keystroke). The mutation is idempotent per (tenant, payload), so re-running
+  // with the same inputs returns the same code rather than spawning rows.
+  useEffect(() => {
+    if (!source) return;
+    const handle = setTimeout(() => {
+      mutate({
+        tenantId,
+        source,
+        medium: medium || undefined,
+        campaign: campaign || undefined,
+        content: content || undefined,
+        botUsername: botUsername || undefined,
+        slug: slug || undefined,
+      });
+    }, DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [tenantId, source, medium, campaign, content, botUsername, slug, mutate]);
 
   async function copy(url: string) {
     try {
@@ -161,26 +172,20 @@ export function TrackingLinksGenerator({
         )}
       </div>
 
-      {build.isLoading && (
+      {build.isPending && (
         <div className="flex items-center justify-center py-6 text-slate-500">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       )}
 
       {build.isError && (
-        <div className="glass-card rounded-2xl p-4 text-sm text-red-500">
-          {build.error.message}
+        <div data-testid="tracking-error" className="glass-card rounded-2xl p-4 text-sm text-red-500">
+          {t("tracking.error", lang)}
         </div>
       )}
 
       {build.data && (
         <div className="space-y-3">
-          {build.data.token.length > 64 && (
-            <div data-testid="tracking-token-warning" className="rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs px-3 py-2 flex items-center gap-2">
-              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-              <span>{t("tracking.tooLong", lang)}</span>
-            </div>
-          )}
           {build.data.links.length === 0 && (
             <div className="glass-card rounded-2xl p-4 text-xs text-slate-500">
               {t("tracking.connectFirst", lang)}

@@ -33,6 +33,7 @@ export type TriggerType =
   | "birthday"
   | "booking_reminder"
   | "abandoned_booking"
+  | "post_visit_24h"
   | "manual";
 
 export interface AutomationInitial {
@@ -214,6 +215,7 @@ export function AutomationFormModal({ scope, initial, preset, onClose, onSaved }
                 { value: "birthday", label: t("marketing.automation.trigger.birthday", lang) },
                 { value: "booking_reminder", label: t("marketing.automation.trigger.booking_reminder", lang) },
                 { value: "abandoned_booking", label: t("marketing.automation.trigger.abandoned_booking", lang) },
+                { value: "post_visit_24h", label: t("marketing.automation.trigger.post_visit_24h", lang) },
               ]}
               testIdPrefix="auto-trigger"
             />

@@ -1,8 +1,8 @@
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
-import { users, tenants, appointments, webUsers } from "~/server/db/schema";
+import { tenants, appointments, webUsers } from "~/server/db/schema";
 import { sql, desc, and, eq, gte, asc } from "drizzle-orm";
 import { z } from "zod";
-import { PLAN_PRICES_PLN } from "~/lib/money";
+import { getPlatformMetrics } from "~/server/metrics/platform";
 
 /**
  * Activity-feed entry kinds. The client renders gender-neutral labels via
@@ -32,42 +32,35 @@ function normalizeReferralSource(raw: string): ReferralStackKey {
 export const metricsRouter = createTRPCRouter({
   getDashboardStats: adminProcedure.query(async ({ ctx }) => {
     const today = new Date().toISOString().split("T")[0]!;
+    const now = Math.floor(Date.now() / 1000);
 
-    const [usersCount, tenantsCount, activeSubs, trialing, totalApts, todayApts, activeTenants] =
-      await Promise.all([
-        ctx.db.select({ count: sql<number>`count(*)` }).from(users),
-        ctx.db.select({ count: sql<number>`count(*)` }).from(tenants),
-        ctx.db
-          .select({ count: sql<number>`count(*)` })
-          .from(tenants)
-          .where(eq(tenants.billingStatus, "active")),
-        ctx.db
-          .select({ count: sql<number>`count(*)` })
-          .from(tenants)
-          .where(eq(tenants.billingStatus, "trialing")),
-        ctx.db
-          .select({ count: sql<number>`count(*)` })
-          .from(appointments)
-          .where(eq(appointments.cancelled, 0)),
-        ctx.db
-          .select({ count: sql<number>`count(*)` })
-          .from(appointments)
-          .where(and(eq(appointments.date, today), eq(appointments.cancelled, 0))),
-        ctx.db
-          .select({ plan: tenants.plan })
-          .from(tenants)
-          .where(eq(tenants.billingStatus, "active")),
-      ]);
-
-    const mrr = activeTenants.reduce(
-      (sum, t) => sum + (PLAN_PRICES_PLN[t.plan ?? "start"] ?? 0),
-      0
-    );
+    // Platform KPIs (paying / comped / trials / MRR) come from the shared
+    // metrics module — test tenants, expired trials and grant/promo "active"
+    // tenants are already excluded there. Operational counts below are scoped
+    // to non-test tenants so the dashboard never mixes real and synthetic data.
+    const [platform, tenantsCount, totalApts, todayApts] = await Promise.all([
+      getPlatformMetrics(ctx.db, now),
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(tenants)
+        .where(eq(tenants.isTest, 0)),
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(appointments)
+        .innerJoin(tenants, eq(appointments.tenantId, tenants.id))
+        .where(and(eq(tenants.isTest, 0), eq(appointments.cancelled, 0))),
+      ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(appointments)
+        .innerJoin(tenants, eq(appointments.tenantId, tenants.id))
+        .where(and(eq(tenants.isTest, 0), eq(appointments.date, today), eq(appointments.cancelled, 0))),
+    ]);
 
     const [recentTenants, recentApts] = await Promise.all([
       ctx.db
         .select({ id: tenants.id, name: tenants.name, createdAt: tenants.createdAt })
         .from(tenants)
+        .where(eq(tenants.isTest, 0))
         .orderBy(desc(tenants.createdAt))
         .limit(5),
       ctx.db
@@ -79,6 +72,8 @@ export const metricsRouter = createTRPCRouter({
           createdAt: appointments.createdAt,
         })
         .from(appointments)
+        .innerJoin(tenants, eq(appointments.tenantId, tenants.id))
+        .where(eq(tenants.isTest, 0))
         .orderBy(desc(appointments.createdAt))
         .limit(5),
     ]);
@@ -108,14 +103,26 @@ export const metricsRouter = createTRPCRouter({
       .slice(0, 8);
 
     return {
-      totalUsers: usersCount[0]?.count ?? 0,
+      // ── Platform KPIs (test/expired/comped excluded) ──
+      ourCustomers: platform.ourCustomers,
+      paying: platform.paying,
+      comped: platform.comped,
+      activeTrials: platform.activeTrials,
+      churned: platform.churned,
+      mrr: platform.mrrPln,
+      arr: platform.arrPln,
+      // ── Operational (non-test tenants only) ──
       totalTenants: tenantsCount[0]?.count ?? 0,
-      activeSubscriptions: activeSubs[0]?.count ?? 0,
-      trialingCount: trialing[0]?.count ?? 0,
       totalAppointments: totalApts[0]?.count ?? 0,
       todayAppointments: todayApts[0]?.count ?? 0,
-      mrr,
       recentActivity: activity,
+      // ── Legacy aliases — kept until every consumer migrates to the
+      //    explicit fields above. totalUsers used to count ALL telegram
+      //    end-customers (incl. test tenants); it now means "our real
+      //    salon accounts". ──
+      totalUsers: platform.ourCustomers,
+      activeSubscriptions: platform.paying,
+      trialingCount: platform.activeTrials,
     };
   }),
 

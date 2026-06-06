@@ -72,6 +72,11 @@ function hasRealSubscription(tenant) {
  */
 export function isBillingExpired(tenant, now = nowSec()) {
   if (!tenant) return null;
+  // Defensive: callers MUST pass Unix seconds. A value in the milliseconds
+  // range (> 1e12 ≈ year 33658 in seconds) is unmistakably Date.now() passed by
+  // mistake — normalize rather than silently expiring every tenant. Safety net
+  // behind the cron call site, which now converts to seconds explicitly.
+  if (now > 1e12) now = Math.floor(now / 1000);
   if (tenant.billingStatus === 'trialing' && tenant.trialEndsAt && now > tenant.trialEndsAt) {
     return 'trial_expired';
   }

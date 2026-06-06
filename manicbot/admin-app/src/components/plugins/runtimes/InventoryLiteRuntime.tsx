@@ -113,7 +113,7 @@ export default function InventoryLiteRuntime({ installationId, slug }: PluginRun
     : items;
 
   return (
-    <PluginRuntimeShell slug={slug} flash={flash}>
+    <PluginRuntimeShell slug={slug} flash={flash} width="wide">
       <div className="space-y-4">
         <section className="rounded-2xl bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2 mb-3">
@@ -174,7 +174,7 @@ export default function InventoryLiteRuntime({ installationId, slug }: PluginRun
                   key={it.id}
                   data-testid="inventory-row"
                   data-low={isLow ? "true" : "false"}
-                  className={`flex items-center gap-1.5 p-2 rounded-lg border transition-colors ${
+                  className={`flex flex-wrap items-center gap-1.5 p-2.5 rounded-lg border transition-colors ${
                     isLow
                       ? "border-orange-300 bg-orange-50 dark:border-orange-700/40 dark:bg-orange-900/10"
                       : "border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-white/[0.02]"
@@ -187,7 +187,7 @@ export default function InventoryLiteRuntime({ installationId, slug }: PluginRun
                     placeholder="Название (например, Гель розовый)"
                     maxLength={80}
                     data-testid="inventory-name"
-                    className="flex-1 min-w-0 px-2 py-1 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    className="w-full sm:flex-1 sm:w-auto min-w-0 px-2.5 py-1.5 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                   />
                   <input
                     type="number"

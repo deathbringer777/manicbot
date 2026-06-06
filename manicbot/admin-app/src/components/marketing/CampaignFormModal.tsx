@@ -32,17 +32,19 @@ type Channel = "email" | "sms" | "whatsapp";
 interface Props {
   scope: { mode: "admin" } | { mode: "tenant"; tenantId: string };
   forcedChannel?: Channel;
+  /** Pre-select a segment (used by the Clients-tab "broadcast from selection" handoff). */
+  initialSegmentId?: string;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function CampaignFormModal({ scope, forcedChannel, onClose, onSaved }: Props) {
+export function CampaignFormModal({ scope, forcedChannel, initialSegmentId, onClose, onSaved }: Props) {
   const { lang } = useLang();
 
   const [name, setName] = useState("");
   const [channel, setChannel] = useState<Channel>(forcedChannel ?? "email");
   const [templateId, setTemplateId] = useState<string>("");
-  const [segmentId, setSegmentId] = useState<string>("");
+  const [segmentId, setSegmentId] = useState<string>(initialSegmentId ?? "");
   const [scheduledAt, setScheduledAt] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
 

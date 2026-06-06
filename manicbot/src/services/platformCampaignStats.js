@@ -11,6 +11,7 @@
 
 import { dbGet, dbAll } from '../utils/db.js';
 import { warsawToUTC } from '../utils/date.js';
+import { renderTemplateVars } from './platformCampaignVars.js';
 
 const LOCALE_TAG = { ru: 'ru', ua: 'uk', uk: 'uk', en: 'en', pl: 'pl' };
 
@@ -239,29 +240,38 @@ export function renderSubscriptionReminderBodies(info, locale, ctx) {
 }
 
 /**
- * Render an operator-authored announcement into per-channel bodies. Content
- * comes from the campaign (bodies_json per-channel overrides, else the shared
- * `body`); the email falls back to the standard layout when no HTML is given.
+ * Render an operator-authored announcement (or the welcome singleton) into
+ * per-channel bodies. Content comes from the campaign (bodies_json per-channel
+ * overrides, else the shared `body`); the email falls back to the standard
+ * layout when no HTML is given.
+ *
+ * Personalization: every channel body is run through `renderTemplateVars(vars)`
+ * BEFORE the email `esc()`/`emailLayout` wrap, so substituted values (e.g. the
+ * salon name) are still HTML-escaped — no injection via `{salon_name}`. `vars`
+ * defaults to `{}`, leaving every `{token}` verbatim (backward-compatible for
+ * existing token-free announcements).
  */
-export function renderAnnouncementBodies(campaign, locale, ctx) {
+export function renderAnnouncementBodies(campaign, locale, ctx, vars = {}) {
   let bj = {};
   try { bj = campaign.bodies_json ? JSON.parse(campaign.bodies_json) : {}; } catch { bj = {}; }
   if (!bj || typeof bj !== 'object') bj = {};
 
+  const sub = (s) => renderTemplateVars(s, vars);
+
   const fallback = campaign.body || '';
-  const title = campaign.title || 'ManicBot';
-  const center = bj.center || fallback;
-  const bellBody = bj.bell || (center.length > 200 ? center.slice(0, 200) : center);
-  const telegram = bj.telegram || center;
+  const title = sub(campaign.title || 'ManicBot');
+  const center = sub(bj.center || fallback);
+  const bellBody = bj.bell ? sub(bj.bell) : (center.length > 200 ? center.slice(0, 200) : center);
+  const telegram = bj.telegram ? sub(bj.telegram) : center;
 
   let emailSubject = title;
   let emailHtml;
   const e = bj.email;
   if (e && typeof e === 'object') {
-    emailSubject = e.subject || title;
-    emailHtml = e.html || emailLayout(title, paraHtml(center), copyFor(locale).footer);
+    emailSubject = e.subject ? sub(e.subject) : title;
+    emailHtml = e.html ? sub(e.html) : emailLayout(title, paraHtml(center), copyFor(locale).footer);
   } else if (typeof e === 'string' && e.trim()) {
-    emailHtml = e;
+    emailHtml = sub(e);
   } else {
     emailHtml = emailLayout(title, paraHtml(center), copyFor(locale).footer);
   }

@@ -16,7 +16,7 @@ import { tryConsumePairingCode as tryConsumeOwnerPairingCode } from '../services
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
 import { cancelApt, getApts, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
-import { decodeStartPayload, recordOrigin } from '../services/origins.js';
+import { decodeStartPayload, recordOrigin, lookupTrackingLink } from '../services/origins.js';
 import { logEvent } from '../utils/events.js';
 import { createTicket, appendTicketMessage } from '../support/tickets.js';
 import { setTenantRole, ROLES, getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent } from '../roles/roles.js';
@@ -775,7 +775,13 @@ export async function onMsg(ctx, msg) {
     // defaults to 'telegram' for native TG updates. Decode failures are logged
     // via the events ring buffer but never block the flow.
     if (startPayload && ctx.tenantId) {
-      const decoded = decodeStartPayload(startPayload);
+      // A short code minted by the link generator resolves to stored attribution;
+      // otherwise fall back to decoding an inline base64url/simple token (legacy
+      // links + the public profile's web→TG CTA still mint inline tokens).
+      let decoded = /^[0-9a-f]{8}$/.test(startPayload)
+        ? await lookupTrackingLink(ctx, startPayload)
+        : null;
+      if (!decoded) decoded = decodeStartPayload(startPayload);
       if (decoded) {
         const channel = msg?._inbound?.channel || 'telegram';
         try {

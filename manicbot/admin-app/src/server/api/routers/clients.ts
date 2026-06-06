@@ -27,6 +27,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import {
   and, eq, sql, desc, asc, inArray, isNotNull, isNull, or, gte,
+  type SQL,
 } from "drizzle-orm";
 import {
   createTRPCRouter,
@@ -66,6 +67,11 @@ const MAX_IMPORT_ROWS = 5000;
 const MAX_CSV_BYTES = 1_000_000;
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
+// "Select all matching" upper bound — `listMatchingIds` returns at most this
+// many chat_ids for a bulk selection; the UI then chunks mutations into ≤500
+// batches. Mirrors the 5000 marketing-audience ceiling so the platform's
+// big-operation limit stays consistent.
+const MAX_SELECT_ALL = 5000;
 
 // ─── Input schemas ───────────────────────────────────────────────────────────
 const dobSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
@@ -143,6 +149,77 @@ function buildFtsQuery(raw: string): string {
   return tokens.map((t) => `${t}*`).join(" ");
 }
 
+/**
+ * Shared filter conditions for the client list — tenant scope + soft-delete
+ * exclusion + FTS search + channel/blocked filters + tag LIKEs. Used by
+ * `list`, `listMatchingIds`, and the filtered `exportCsv` path so the three
+ * cannot drift. The `listId` membership restriction is layered on by the
+ * caller (it needs an ownership verify + a DB read — see `assertSegmentOwned`).
+ */
+function buildClientFilterConditions(
+  tenantId: string,
+  opts: { search?: string; filters?: z.infer<typeof filterSchema> },
+): SQL[] {
+  const conditions: SQL[] = [
+    eq(users.tenantId, tenantId),
+    isNull(users.deletedAt),
+  ];
+
+  // Search via FTS5 — joinless EXISTS so we don't bloat the SELECT shape.
+  const ftsQuery = opts.search ? buildFtsQuery(opts.search) : "";
+  if (ftsQuery) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM users_fts
+      WHERE users_fts.tenant_id = ${tenantId}
+        AND users_fts.chat_id = ${users.chatId}
+        AND users_fts MATCH ${ftsQuery}
+    )`);
+  }
+
+  const f = opts.filters ?? {};
+  if (f.hasPhone) conditions.push(isNotNull(users.phone));
+  if (f.hasEmail) conditions.push(isNotNull(users.email));
+  if (f.hasTg)    conditions.push(isNotNull(users.tgUsername));
+  if (f.hasIg)    conditions.push(isNotNull(users.igUsername));
+  if (f.blocked === true)  conditions.push(eq(users.isBlockedGlobal, 1));
+  if (f.blocked === false) conditions.push(eq(users.isBlockedGlobal, 0));
+  if (f.tagsAny && f.tagsAny.length > 0) {
+    // Best-effort LIKE per tag. Tags are stored as a CSV string in
+    // `users.tags`; we wrap with separators on both sides via a virtual
+    // ','||tags||',' search so "vip" doesn't match "vipless".
+    const padded = sql`',' || coalesce(${users.tags},'') || ','`;
+    const tagOr = f.tagsAny.map((tag) => {
+      const needle = `%,${tag.toLowerCase().trim()},%`;
+      return sql`lower(${padded}) LIKE ${needle}`;
+    });
+    conditions.push(or(...tagOr)!);
+  }
+
+  return conditions;
+}
+
+/**
+ * Verify a manual segment (list) belongs to `tenantId`. Throws NOT_FOUND when
+ * the segment doesn't exist and FORBIDDEN when it belongs to another tenant —
+ * the contract shared by every list-scoped read (`list`, `listMatchingIds`).
+ */
+async function assertSegmentOwned(
+  ctx: any,
+  tenantId: string,
+  listId: string,
+): Promise<void> {
+  const seg = await ctx.db
+    .select({ tenantId: marketingSegments.tenantId })
+    // tenant-scan-ignore: ownership IS the check — fetch by id, then throw FORBIDDEN on tenant mismatch below.
+    .from(marketingSegments)
+    .where(eq(marketingSegments.id, listId))
+    .limit(1);
+  if (!seg[0]) throw new TRPCError({ code: "NOT_FOUND" });
+  if (seg[0].tenantId !== tenantId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "List belongs to a different tenant" });
+  }
+}
+
 interface ClientRow {
   tenantId: string;
   chatId: number;
@@ -193,56 +270,17 @@ export const clientsRouter = createTRPCRouter({
       const offset = input.offset ?? 0;
       const sort = input.sort ?? "recent";
 
-      const conditions = [
-        eq(users.tenantId, input.tenantId),
-        isNull(users.deletedAt),
-      ];
-
-      // Search via FTS5 — joinless EXISTS so we don't bloat the SELECT shape.
-      const ftsQuery = input.search ? buildFtsQuery(input.search) : "";
-      if (ftsQuery) {
-        conditions.push(sql`EXISTS (
-          SELECT 1 FROM users_fts
-          WHERE users_fts.tenant_id = ${input.tenantId}
-            AND users_fts.chat_id = ${users.chatId}
-            AND users_fts MATCH ${ftsQuery}
-        )`);
-      }
-
-      const f = input.filters ?? {};
-      if (f.hasPhone) conditions.push(isNotNull(users.phone));
-      if (f.hasEmail) conditions.push(isNotNull(users.email));
-      if (f.hasTg)    conditions.push(isNotNull(users.tgUsername));
-      if (f.hasIg)    conditions.push(isNotNull(users.igUsername));
-      if (f.blocked === true)  conditions.push(eq(users.isBlockedGlobal, 1));
-      if (f.blocked === false) conditions.push(eq(users.isBlockedGlobal, 0));
-      if (f.tagsAny && f.tagsAny.length > 0) {
-        // Best-effort LIKE per tag. Tags are stored as a CSV string in
-        // `users.tags`; we wrap with separators on both sides via a virtual
-        // ','||tags||',' search so "vip" doesn't match "vipless".
-        const padded = sql`',' || coalesce(${users.tags},'') || ','`;
-        const tagOr = f.tagsAny.map((tag) => {
-          const needle = `%,${tag.toLowerCase().trim()},%`;
-          return sql`lower(${padded}) LIKE ${needle}`;
-        });
-        conditions.push(or(...tagOr)!);
-      }
+      const conditions = buildClientFilterConditions(input.tenantId, {
+        search: input.search,
+        filters: input.filters,
+      });
 
       // Shared "Lists" filter — only clients whose linked marketing contact
-      // is a member of this manual segment. Verify the segment belongs to the
-      // tenant first (FORBIDDEN on a crafted foreign id), then correlate on
-      // users.marketing_contact_id. Clients with no linked contact are
-      // naturally excluded (the correlated id is NULL).
+      // is a member of this manual segment. Verify ownership first (FORBIDDEN
+      // on a crafted foreign id), then correlate on users.marketing_contact_id.
+      // Clients with no linked contact are naturally excluded (id is NULL).
       if (input.listId) {
-        const seg = await ctx.db
-          .select({ tenantId: marketingSegments.tenantId })
-          .from(marketingSegments)
-          .where(eq(marketingSegments.id, input.listId))
-          .limit(1);
-        if (!seg[0]) throw new TRPCError({ code: "NOT_FOUND" });
-        if (seg[0].tenantId !== input.tenantId) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "List belongs to a different tenant" });
-        }
+        await assertSegmentOwned(ctx, input.tenantId, input.listId);
         conditions.push(sql`EXISTS (
           SELECT 1 FROM marketing_segment_members msm
           WHERE msm.segment_id = ${input.listId}
@@ -281,6 +319,50 @@ export const clientsRouter = createTRPCRouter({
       const nextOffset = offset + rows.length < total ? offset + rows.length : null;
 
       return { rows: rows as ClientRow[], nextOffset, total };
+    }),
+
+  /**
+   * Return the chat_ids of EVERY client matching the current filter/search/
+   * list scope — powers the Clients-tab "select all N matching" affordance,
+   * which spans the whole result set rather than the loaded page. Shares the
+   * exact filter builder with `list` so the selected set matches the visible
+   * set. Capped at MAX_SELECT_ALL; `capped` flags when the true match set is
+   * larger so the UI can warn the owner.
+   */
+  listMatchingIds: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      search: z.string().max(120).optional(),
+      filters: filterSchema.optional(),
+      listId: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const conditions = buildClientFilterConditions(input.tenantId, {
+        search: input.search,
+        filters: input.filters,
+      });
+      if (input.listId) {
+        await assertSegmentOwned(ctx, input.tenantId, input.listId);
+        conditions.push(sql`EXISTS (
+          SELECT 1 FROM marketing_segment_members msm
+          WHERE msm.segment_id = ${input.listId}
+            AND msm.contact_id = ${users.marketingContactId}
+        )`);
+      }
+
+      const rows = await ctx.db
+        .select({ chatId: users.chatId })
+        .from(users)
+        // tenant-scoped: buildClientFilterConditions always leads with eq(users.tenantId, input.tenantId)
+        .where(and(...conditions))
+        .limit(MAX_SELECT_ALL);
+
+      return {
+        chatIds: (rows as Array<{ chatId: number }>).map((r) => r.chatId),
+        capped: rows.length === MAX_SELECT_ALL,
+      };
     }),
 
   /**
@@ -742,6 +824,88 @@ export const clientsRouter = createTRPCRouter({
     }),
 
   /**
+   * Bulk soft-delete + PII scrub for the Clients-tab selection. Set-based
+   * (single UPDATE via inArray) mirror of `delete`: scrubs users PII + stamps
+   * deleted_at, scrubs the linked marketing_contacts PII + unsubscribes, and
+   * writes ONE summary audit row for the whole batch (not one per client).
+   * Capped at 500 ids/call — the UI chunks larger selections.
+   */
+  bulkDelete: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatIds: z.array(z.number().int()).min(1).max(500),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const now = nowSec();
+      const chatIds = Array.from(new Set(input.chatIds));
+
+      await ctx.db
+        .update(users)
+        .set({
+          name: null, phone: null, email: null, tgUsername: null,
+          igUsername: null, notes: null, tags: null, dob: null,
+          deletedAt: now, updatedAt: now,
+        })
+        .where(and(eq(users.tenantId, input.tenantId), inArray(users.chatId, chatIds)));
+
+      // #D-2 — GDPR erasure also scrubs the PII copy in linked marketing_contacts.
+      await ctx.db
+        .update(marketingContacts)
+        .set({ name: null, email: null, phone: null, unsubscribed: 1 })
+        .where(and(
+          eq(marketingContacts.tenantId, input.tenantId),
+          inArray(marketingContacts.linkedUserChatId, chatIds),
+        ));
+
+      // #D-3 — one summary audit row for the batch (cap the id list in detail).
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "clients.bulkDelete",
+        tenantId: input.tenantId,
+        detail: JSON.stringify({ count: chatIds.length, chatIds: chatIds.slice(0, 100) }),
+        ip: ctxIp(ctx),
+      });
+      return { ok: true, deleted: chatIds.length };
+    }),
+
+  /**
+   * Bulk tenant-wide block / unblock for the Clients-tab selection. Set-based
+   * mirror of `setGlobalBlock` with ONE summary audit row. Capped at 500.
+   */
+  bulkSetGlobalBlock: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      chatIds: z.array(z.number().int()).min(1).max(500),
+      blocked: z.boolean(),
+      reason: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const now = nowSec();
+      const chatIds = Array.from(new Set(input.chatIds));
+
+      await ctx.db
+        .update(users)
+        .set({
+          isBlockedGlobal: input.blocked ? 1 : 0,
+          blockedGlobalReason: input.blocked ? (input.reason ? sanitizeText(input.reason, 500) : null) : null,
+          blockedGlobalAt: input.blocked ? now : null,
+          updatedAt: now,
+        })
+        .where(and(eq(users.tenantId, input.tenantId), inArray(users.chatId, chatIds)));
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: input.blocked ? "clients.bulkBlock" : "clients.bulkUnblock",
+        tenantId: input.tenantId,
+        detail: JSON.stringify({ count: chatIds.length, blocked: input.blocked }),
+        ip: ctxIp(ctx),
+      });
+      return { ok: true, updated: chatIds.length };
+    }),
+
+  /**
    * Export the (filtered) client list as CSV. Re-uses the canonical
    * header from `~/server/clients/csv.ts` so import and export stay in
    * lockstep.
@@ -750,6 +914,10 @@ export const clientsRouter = createTRPCRouter({
     .input(z.object({
       tenantId: z.string(),
       filters: filterSchema.optional(),
+      // "Export selected": exact ticked set from the bulk toolbar. When present,
+      // overrides `filters` (we export precisely these rows). Capped to match
+      // the select-all ceiling.
+      chatIds: z.array(z.number().int()).max(MAX_SELECT_ALL).optional(),
       // 0072: format dispatch. Default "manicbot" preserves the legacy
       // contract (existing callers don't pass `format` and still get our
       // canonical CSV). "google" emits Google Contacts CSV, "apple" emits
@@ -759,17 +927,16 @@ export const clientsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
 
-      const conditions = [
-        eq(users.tenantId, input.tenantId),
-        isNull(users.deletedAt),
-      ];
-      const f = input.filters ?? {};
-      if (f.hasPhone) conditions.push(isNotNull(users.phone));
-      if (f.hasEmail) conditions.push(isNotNull(users.email));
-      if (f.hasTg)    conditions.push(isNotNull(users.tgUsername));
-      if (f.hasIg)    conditions.push(isNotNull(users.igUsername));
-      if (f.blocked === true)  conditions.push(eq(users.isBlockedGlobal, 1));
-      if (f.blocked === false) conditions.push(eq(users.isBlockedGlobal, 0));
+      // "Export selected" passes explicit chatIds (the exact ticked set);
+      // otherwise export the current filtered set. Both lead with the tenant
+      // predicate (conditions[0]) so tenant isolation holds either way.
+      const conditions = input.chatIds && input.chatIds.length > 0
+        ? [
+            eq(users.tenantId, input.tenantId),
+            isNull(users.deletedAt),
+            inArray(users.chatId, Array.from(new Set(input.chatIds))),
+          ]
+        : buildClientFilterConditions(input.tenantId, { filters: input.filters });
 
       const rows = await ctx.db
         .select()

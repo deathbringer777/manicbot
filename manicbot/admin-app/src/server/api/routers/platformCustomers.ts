@@ -35,32 +35,27 @@ import {
   appointments,
   masters,
 } from "~/server/db/schema";
+import { PLAN_PRICES_PLN } from "~/lib/money";
+import { classifyTenant, type ClassifiableTenant } from "~/server/metrics/status";
+import { getPlatformMetrics } from "~/server/metrics/platform";
 
 // ───────────────────────────────────────────────────────────────────
-// Plan price catalog — single source of truth for MRR math.
-// Mirrors `manicbot/src/billing/features.js` plan ladder.
+// MRR math lives in the shared metrics module (single source of truth,
+// see `~/server/metrics/status`). Per-row revenue is derived via
+// `classifyTenant`, so a comped / expired / test tenant never shows
+// phantom MRR. The plan catalog is `PLAN_PRICES_PLN` in `~/lib/money`.
 // ───────────────────────────────────────────────────────────────────
-
-const PLAN_MONTHLY_PLN: Record<string, number> = {
-  start: 45,
-  pro: 60,
-  max: 90,
-};
-
-/** A tenant contributes MRR only while it's actively monetized. */
-const PAYING_STATUSES = new Set(["active", "grace"]);
-const TRIALING_STATUSES = new Set(["trialing", "trial"]);
-const CHURNED_STATUSES = new Set(["expired", "cancelled", "canceled", "past_due"]);
 
 function planPricePln(plan: string | null): number {
   if (!plan) return 0;
-  return PLAN_MONTHLY_PLN[plan] ?? 0;
+  return PLAN_PRICES_PLN[plan] ?? 0;
 }
 
-function mrrFor(plan: string | null, status: string | null): number {
-  if (!status) return 0;
-  if (!PAYING_STATUSES.has(status)) return 0;
-  return planPricePln(plan);
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+/** Real recurring revenue for one tenant row (0 unless truly paying). */
+function rowMrrPln(row: ClassifiableTenant): number {
+  return classifyTenant(row, nowSec()).mrrPln;
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -232,58 +227,26 @@ const subscribersFilterSchema = z.object({
 export const platformCustomersRouter = createTRPCRouter({
   /**
    * Cross-tenant stats card. Keep cheap — KPI numbers only, NO PII.
+   *
+   * All numbers come from the shared `getPlatformMetrics` so this card, the
+   * God-Mode dashboard and the billing overview agree to the cent. Test
+   * tenants, expired trials and comped (grant/promo) accounts are excluded
+   * from `paying` / `mrr_total_pln` and surfaced in their own buckets.
    */
   stats: adminProcedure.query(async ({ ctx }) => {
-    // Owners are the only role that maps to "salon account" (the rest
-    // are platform staff or master accounts).
-    const ownerFilter = eq(webUsers.role, "tenant_owner");
-
-    const [
-      totalAccountsRow,
-      tenantsRow,
-      newsletterCount,
-    ] = await Promise.all([
-      ctx.db
-        .select({ count: sql<number>`count(*)` })
-        .from(webUsers)
-        .where(ownerFilter),
-      // Pull every tenant attached to a tenant_owner row to compute MRR
-      // status-aware. JOIN keeps the math anchored to the registered
-      // owner set (rather than orphaned tenants without an owner).
-      ctx.db
-        .select({
-          plan: tenants.plan,
-          billingStatus: tenants.billingStatus,
-        })
-        .from(tenants)
-        .innerJoin(webUsers, eq(webUsers.tenantId, tenants.id))
-        .where(ownerFilter),
+    const [platform, newsletterCount] = await Promise.all([
+      getPlatformMetrics(ctx.db, nowSec()),
       safeCountSubscribers(ctx.db),
     ]);
 
-    let paying = 0;
-    let trialing = 0;
-    let churned = 0;
-    let mrrTotal = 0;
-
-    for (const row of tenantsRow) {
-      const status = row.billingStatus ?? "";
-      if (PAYING_STATUSES.has(status)) {
-        paying += 1;
-        mrrTotal += planPricePln(row.plan ?? null);
-      } else if (TRIALING_STATUSES.has(status)) {
-        trialing += 1;
-      } else if (CHURNED_STATUSES.has(status)) {
-        churned += 1;
-      }
-    }
-
     return {
-      total_accounts: Number(totalAccountsRow[0]?.count ?? 0),
-      paying,
-      trialing,
-      churned,
-      mrr_total_pln: mrrTotal,
+      total_accounts: platform.ourCustomers,
+      paying: platform.paying,
+      comped: platform.comped,
+      trialing: platform.activeTrials,
+      churned: platform.churned,
+      mrr_total_pln: platform.mrrPln,
+      arr_total_pln: platform.arrPln,
       newsletter_subs: newsletterCount,
     };
   }),
@@ -339,6 +302,7 @@ export const platformCustomersRouter = createTRPCRouter({
             billingStatus: tenants.billingStatus,
             trialEndsAt: tenants.trialEndsAt,
             stripeCustomerId: tenants.stripeCustomerId,
+            stripeSubscriptionId: tenants.stripeSubscriptionId,
             isTest: tenants.isTest,
             isPersonal: tenants.isPersonal,
           })
@@ -401,7 +365,7 @@ export const platformCustomersRouter = createTRPCRouter({
         ...r,
         mastersCount: r.tenantId ? masterCounts[r.tenantId] ?? 0 : 0,
         appointments30d: r.tenantId ? apt30dCounts[r.tenantId] ?? 0 : 0,
-        mrrPln: mrrFor(r.plan ?? null, r.billingStatus ?? null),
+        mrrPln: rowMrrPln(r),
       }));
 
       return {
@@ -521,7 +485,7 @@ export const platformCustomersRouter = createTRPCRouter({
 
       return {
         ...row,
-        mrrPln: mrrFor(row.plan ?? null, row.billingStatus ?? null),
+        mrrPln: rowMrrPln(row),
         mastersCount,
         appointmentsTotal,
         recentAppointments,
@@ -533,13 +497,11 @@ export const platformCustomersRouter = createTRPCRouter({
 });
 
 // Exported for tests so the price math can be asserted in isolation.
+// Bucket/MRR classification now lives in `~/server/metrics/status`
+// (covered by metrics-classify.test.ts).
 export const __testing = {
-  PLAN_MONTHLY_PLN,
-  PAYING_STATUSES,
-  TRIALING_STATUSES,
-  CHURNED_STATUSES,
   planPricePln,
-  mrrFor,
+  rowMrrPln,
   isNoSuchTableError,
 };
 

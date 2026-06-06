@@ -1354,6 +1354,45 @@ export const salonRouter = createTRPCRouter({
     }),
 
   /**
+   * Read the "send a Telegram review ask 24h after the visit" opt-in flag.
+   * Stored in `tenant_config` under `post_visit_followup_tg_enabled`
+   * (default OFF). The Worker's `phasePostVisitFollowup` reads the same key
+   * via `getConfig`; the email channel is configured separately via a
+   * `post_visit_24h` marketing automation.
+   */
+  getPostVisitFollowupTg: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db.select().from(tenantConfig)
+        .where(eq(tenantConfig.tenantId, input.tenantId));
+      const cfg = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+      const v = cfg["post_visit_followup_tg_enabled"];
+      let enabled = false;
+      if (typeof v === "boolean") enabled = v;
+      else if (typeof v === "string") {
+        const s = v.trim().toLowerCase();
+        enabled = s === "true" || s === "1";
+      }
+      return { enabled };
+    }),
+
+  /**
+   * Toggle the post-visit Telegram review ask. Stored as the JSON literal
+   * `true` / `false` so the Worker's `getConfig` parses it back to a boolean.
+   */
+  setPostVisitFollowupTg: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const value = JSON.stringify(input.enabled);
+      await ctx.db.insert(tenantConfig)
+        .values({ tenantId: input.tenantId, key: "post_visit_followup_tg_enabled", value })
+        .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
+      return { success: true };
+    }),
+
+  /**
    * 0074 — read per-channel "auto-suggest favorite master" settings.
    *
    * Defaults to ON for both surfaces because the auto-suggest is a

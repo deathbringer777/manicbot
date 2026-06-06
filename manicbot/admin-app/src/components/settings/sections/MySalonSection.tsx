@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
-  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, FolderOpen, Users,
+  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, FolderOpen, Users, Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "~/trpc/react";
@@ -23,6 +23,7 @@ import { SalonStorefrontBody } from "~/components/salon/SalonStorefrontBody";
 import { SalonPublishBody } from "~/components/salon/SalonPublishBody";
 import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
 import { AutoSuggestFavoriteSettings } from "~/components/salon/AutoSuggestFavoriteSettings";
+import { PostVisitFollowupSettings } from "~/components/salon/PostVisitFollowupSettings";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 
 /**
@@ -270,6 +271,15 @@ export function MySalonSection() {
               defaultOpen
             >
               <AutoSuggestFavoriteSettings tenantId={effectiveTenantId} bare />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={Sparkles}
+              iconClass="text-violet-400"
+              title={t("salon.postVisitFollowup.title", lang)}
+              desc={t("salon.postVisitFollowup.desc", lang)}
+            >
+              <PostVisitFollowupSettings tenantId={effectiveTenantId} bare />
             </CollapsibleSection>
           </>
         )}

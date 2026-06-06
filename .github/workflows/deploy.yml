@@ -301,12 +301,8 @@ jobs:
         env:
           # Supply dummy values so Zod env schema passes at build time (values are
           # not used at runtime — real secrets come from Cloudflare Pages env vars).
-          # Each must satisfy the production length checks in admin-app/src/env.js
-          # (secret() helpers require >= 32 chars in production).
           NEXTAUTH_SECRET: ci-placeholder-not-used-at-runtime
           AUTH_SECRET: ci-placeholder-not-used-at-runtime
-          UPLOAD_TOKEN_SECRET: ci-placeholder-not-used-at-runtime
-          WS_TOKEN_SECRET: ci-placeholder-not-used-at-runtime
           TELEGRAM_BOT_TOKEN: ci-placeholder
           ADMIN_CHAT_ID: "0"
           ADMIN_KEY: ci-placeholder-not-used-at-runtime

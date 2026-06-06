@@ -233,7 +233,12 @@ export class InstagramAdapter {
         },
       },
     };
-    const res = await this._post(`/${this._pageId}/messages`, body);
+    // Mirror send()'s path selection: instagram_direct (IGAA) posts to
+    // /me/messages on graph.instagram.com; legacy posts to /{pageId}/messages.
+    // Hardcoding the pageId path here 400'd on IGAA channels (which still carry
+    // a page_id in config).
+    const path = this._api === 'instagram_direct' ? '/me/messages' : `/${this._pageId}/messages`;
+    const res = await this._post(path, body);
     // If caption provided, follow up with text
     if (caption) {
       await this.send(userId, { text: caption });

@@ -184,7 +184,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     titleKey: "widget.today_appointments.title",
     icon: CalendarClock,
     category: "list",
-    defaultSize: { w: 6, h: 6 },
+    defaultSize: { w: 6, h: 5 },
     minSize: { w: 4, h: 4 },
     singleton: true,
     Component: TodayAppointmentsWidget,
@@ -246,7 +246,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     titleKey: "widget.calendar_heatmap.title",
     icon: CalendarRange,
     category: "calendar",
-    defaultSize: { w: 6, h: 6 },
+    defaultSize: { w: 6, h: 5 },
     minSize: { w: 4, h: 4 },
     options: [VIEW_OPTION],
     singleton: true,
@@ -257,7 +257,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     titleKey: "widget.top_services.title",
     icon: Sparkles,
     category: "list",
-    defaultSize: { w: 4, h: 5 },
+    defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
     options: [PERIOD_OPTION, LIMIT_OPTION],
     singleton: true,
@@ -268,7 +268,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     titleKey: "widget.top_masters.title",
     icon: UserRound,
     category: "list",
-    defaultSize: { w: 4, h: 5 },
+    defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
     options: [PERIOD_OPTION, LIMIT_OPTION],
     singleton: true,
@@ -279,7 +279,7 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
     titleKey: "widget.activity_feed.title",
     icon: Activity,
     category: "list",
-    defaultSize: { w: 4, h: 5 },
+    defaultSize: { w: 4, h: 4 },
     minSize: { w: 3, h: 3 },
     options: [LIMIT_OPTION],
     singleton: true,
@@ -303,17 +303,22 @@ export const WIDGET_REGISTRY: Record<HomeWidgetType, WidgetDef> = {
  * derived by the board (RGL) / collapse to one column on touch.
  */
 export const DEFAULT_HOME_LAYOUT: HomeWidgetItem[] = [
+  // Band 1 — KPI strip: 4 KPIs filling the 12-col row evenly (no orphan row).
   { i: "kpi_total_clients", type: "kpi_total_clients", x: 0, y: 0, w: 3, h: 2 },
   { i: "kpi_week_appointments", type: "kpi_week_appointments", x: 3, y: 0, w: 3, h: 2 },
   { i: "kpi_month_revenue", type: "kpi_month_revenue", x: 6, y: 0, w: 3, h: 2 },
   { i: "kpi_new_clients", type: "kpi_new_clients", x: 9, y: 0, w: 3, h: 2 },
-  { i: "kpi_no_show_rate", type: "kpi_no_show_rate", x: 0, y: 2, w: 3, h: 2 },
-  { i: "today_appointments", type: "today_appointments", x: 0, y: 4, w: 6, h: 6 },
-  { i: "calendar_heatmap", type: "calendar_heatmap", x: 6, y: 4, w: 6, h: 6 },
-  { i: "top_services", type: "top_services", x: 0, y: 10, w: 4, h: 5 },
-  { i: "top_masters", type: "top_masters", x: 4, y: 10, w: 4, h: 5 },
-  { i: "activity_feed", type: "activity_feed", x: 8, y: 10, w: 4, h: 5 },
-  { i: "quick_actions", type: "quick_actions", x: 0, y: 15, w: 3, h: 4 },
+  // Band 2 — today's appointments + activity heatmap, half-and-half.
+  { i: "today_appointments", type: "today_appointments", x: 0, y: 2, w: 6, h: 5 },
+  { i: "calendar_heatmap", type: "calendar_heatmap", x: 6, y: 2, w: 6, h: 5 },
+  // Band 3 — three lists + quick actions, four equal columns (fills the row).
+  { i: "top_services", type: "top_services", x: 0, y: 7, w: 3, h: 4 },
+  { i: "top_masters", type: "top_masters", x: 3, y: 7, w: 3, h: 4 },
+  { i: "activity_feed", type: "activity_feed", x: 6, y: 7, w: 3, h: 4 },
+  { i: "quick_actions", type: "quick_actions", x: 9, y: 7, w: 3, h: 4 },
+  // `kpi_no_show_rate` is intentionally NOT in the first-run board (a 5th KPI
+  // would orphan a half-empty row); it stays in the catalog, addable via
+  // "Добавить виджет" / Settings → Виджеты.
 ];
 
 /** Runtime type guard — drops unknown widget types from persisted layouts. */

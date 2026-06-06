@@ -3,14 +3,14 @@
  * SalonDayView — single-day hour grid with master columns (per §12.1 of
  * the Booksy comparison plan). Pins the layout contract:
  *
- *   - 8:00–22:00 hour scale.
+ *   - Full 00:00–24:00 hour scale (Google-Calendar style), scrollable.
  *   - One column per active master + an "Unassigned" column when at least
  *     one appointment has masterId === null.
  *   - Day navigation buttons (prev / today / next) with stable testids.
  *   - Empty state when there are no masters.
  *   - Current-time red line is rendered on today, hidden on other dates.
  *   - Each appointment is positioned absolutely with top derived from
- *     start time (8:00 = 0, 9:00 = HOUR_HEIGHT, etc.).
+ *     start time against a 00:00 origin (09:00 = 9 × HOUR_HEIGHT, etc.).
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { act, cleanup, screen, fireEvent } from "@testing-library/react";
@@ -175,8 +175,8 @@ describe("SalonDayView", () => {
       "en",
     );
     const block = screen.getByTestId("day-view-event");
-    // 10:00 minus 8:00 start = 2 hours × 56px = 112px top offset.
-    expect(block.style.top).toBe("112px");
+    // Full 24h grid: 10:00 from a 00:00 origin = 10 hours × 56px = 560px.
+    expect(block.style.top).toBe("560px");
     expect(block.style.height).toBe("56px");
   });
 
@@ -333,10 +333,10 @@ describe("SalonDayView", () => {
     expect(overlays.length).toBe(1);
   });
 
-  it("shows NO hatching on a normal full working day (window fits the master's hours)", () => {
-    // Anna works 09:00–18:00 on Mon. The window now fits exactly those hours,
-    // so there's nothing left to hatch (the old fixed 08:00–22:00 grid always
-    // drew before-open + after-close bands here).
+  it("hatches before-open and after-close on the full 24h grid for a working day", () => {
+    // Anna works 09:00–18:00 on Mon. On the full 00:00–24:00 grid the night /
+    // early-morning + evening hours outside her window are hatched as
+    // non-working: a before-open band 00:00–09:00 and an after-close 18:00–24:00.
     const annaMonPartial = [
       { chatId: 100, name: "Anna", workHours: '{"mon":"09:00-18:00"}' },
     ];
@@ -351,12 +351,17 @@ describe("SalonDayView", () => {
       />,
       "en",
     );
-    expect(screen.queryAllByTestId("day-view-non-working").length).toBe(0);
+    const overlays = screen.getAllByTestId("day-view-non-working") as HTMLElement[];
+    // HOUR_HEIGHT=56: before-open 00–09 (top 0, h 9×56=504) +
+    // after-close 18–24 (top 18×56=1008, h 6×56=336).
+    expect(overlays.length).toBe(2);
+    expect(overlays.find((o) => o.style.top === "0px")?.style.height).toBe("504px");
+    expect(overlays.find((o) => o.style.top === "1008px")?.style.height).toBe("336px");
   });
 
-  it("widens the window for out-of-hours bookings and re-introduces before/after hatching", () => {
-    // Anna works 09:00–18:00; bookings at 08:00 and 19:00 push the window to
-    // 08:00–20:00, leaving an off-hours slice above open and below close.
+  it("positions out-of-hours bookings on the full grid (early-morning + evening)", () => {
+    // Bookings at 08:00 and 19:00 — outside Anna's 09:00–18:00 window — are no
+    // longer clipped away; they sit at their absolute offsets on the 24h grid.
     const annaMonPartial = [
       { chatId: 100, name: "Anna", workHours: '{"mon":"09:00-18:00"}' },
     ];
@@ -374,15 +379,14 @@ describe("SalonDayView", () => {
       />,
       "en",
     );
-    const overlays = screen.getAllByTestId("day-view-non-working") as HTMLElement[];
-    // Window 08:00–20:00 (HOUR_HEIGHT=56): before 08–09 (top 0, h 56) +
-    // after 18–20 (top 560, h 112).
-    expect(overlays.length).toBe(2);
-    expect(overlays.find((o) => o.style.top === "0px")?.style.height).toBe("56px");
-    expect(overlays.find((o) => o.style.top === "560px")?.style.height).toBe("112px");
+    const events = screen.getAllByTestId("day-view-event") as HTMLElement[];
+    const byId = (id: string) => events.find((e) => e.getAttribute("data-apt-id") === id)!;
+    // 08:00 → 8×56=448px; 19:00 → 19×56=1064px.
+    expect(byId("1").style.top).toBe("448px");
+    expect(byId("2").style.top).toBe("1064px");
   });
 
-  it("fits the grid to the master's working hours — a 09:00 booking sits at the top", () => {
+  it("positions a 09:00 booking at its absolute offset on the full-day grid", () => {
     const anna9to18 = [
       { chatId: 100, name: "Anna", workHours: '{"mon":"09:00-18:00"}' },
     ];
@@ -398,8 +402,8 @@ describe("SalonDayView", () => {
       "en",
     );
     const ev = screen.getByTestId("day-view-event");
-    // Window opens at 09:00 → flush with the top (was 56px under the old 08:00 grid).
-    expect(ev.style.top).toBe("0px");
+    // Full grid from 00:00 → 09:00 sits at 9×56 = 504px (no longer clipped to top).
+    expect(ev.style.top).toBe("504px");
     expect(ev.style.height).toBe("56px");
   });
 
@@ -420,15 +424,15 @@ describe("SalonDayView", () => {
   });
 
   it("parses the legacy {from, to} global work_hours shape (open 10:00)", () => {
-    // Numeric from/to (legacy) → open 10–18. An 08:00 booking widens the window
-    // below the 10:00 open, so a before-open band appears — proof the {from,to}
-    // shape was parsed to a 10:00 start.
+    // Numeric from/to (legacy) → open 10–18. On the full 24h grid the before-open
+    // band runs 00:00–10:00, so its height proves the {from,to} shape parsed to a
+    // 10:00 start (plus an after-close band 18:00–24:00).
     const legacy = [{ chatId: 100, name: "Anna", workHours: '{"from":10,"to":18}' }];
     renderWithLang(
       <SalonDayView
         date={new Date("2026-05-04T12:00:00")}
         setDate={() => undefined}
-        apts={[apt({ id: 1, date: "2026-05-04", time: "08:00", duration: 60, masterId: 100 })]}
+        apts={[]}
         masters={legacy}
         isLoading={false}
         lang="en"
@@ -436,11 +440,11 @@ describe("SalonDayView", () => {
       "en",
     );
     const overlays = screen.getAllByTestId("day-view-non-working") as HTMLElement[];
-    // Window 08:00–18:00: before-open band 08–10 = top 0, height (10−8)×56 = 112px.
-    // Close (18:00) coincides with the window end → no after band.
-    expect(overlays.length).toBe(1);
-    expect(overlays[0]?.style.top).toBe("0px");
-    expect(overlays[0]?.style.height).toBe("112px");
+    // before-open 00–10 (top 0, h 10×56=560) + after-close 18–24 (top 1008, h 336).
+    expect(overlays.length).toBe(2);
+    const before = overlays.find((o) => o.style.top === "0px");
+    expect(before?.style.height).toBe("560px"); // proves open parsed to 10:00
+    expect(overlays.find((o) => o.style.top === "1008px")?.style.height).toBe("336px");
   });
 
   it("groups multiple appointments under the same master column", () => {

@@ -563,24 +563,31 @@ export async function tryAdminKeyRoutes(request, env, url) {
       // longer overwrite an established tenant's channel. We only write when
       // the column is currently empty so a legitimate id is never clobbered.
       const now = Math.floor(Date.now() / 1000);
+      // Bug #4 — IGAA long-lived tokens last 60d and are refreshable, but the
+      // /me probe doesn't report expiry. Stamp the standard 60d lifetime from a
+      // fresh manual install so the cron refresh (isTokenExpiring → refresh at
+      // T-10d) can actually fire. Without this the column stayed NULL forever.
+      const igExpiresAt = now + 5184000; // 60d
       if (!expectedIg) {
         await dbRun(ec,
           `UPDATE channel_configs
               SET token_encrypted = ?,
                   config = ?,
                   ig_business_id = ?,
+                  token_expires_at = ?,
                   updated_at = ?
             WHERE id = ?`,
-          encrypted, JSON.stringify(newCfg), String(meData.id), now, row.id,
+          encrypted, JSON.stringify(newCfg), String(meData.id), igExpiresAt, now, row.id,
         );
       } else {
         await dbRun(ec,
           `UPDATE channel_configs
               SET token_encrypted = ?,
                   config = ?,
+                  token_expires_at = ?,
                   updated_at = ?
             WHERE id = ?`,
-          encrypted, JSON.stringify(newCfg), now, row.id,
+          encrypted, JSON.stringify(newCfg), igExpiresAt, now, row.id,
         );
       }
 

@@ -260,3 +260,18 @@ body.driver-tour-active .overflow-hidden {
     opacity: 0.85;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Widget board — iOS-style jiggle mode while editing. */
+@keyframes widget-wobble {
+  0%   { transform: rotate(-1deg); }
+  25%  { transform: rotate(1deg); }
+  50%  { transform: rotate(-0.8deg); }
+  75%  { transform: rotate(0.8deg); }
+  100% { transform: rotate(-1deg); }
+}
+
+.widget-wobble {
+  animation: widget-wobble 0.5s ease-in-out infinite;
+  transform-origin: center bottom;
+}

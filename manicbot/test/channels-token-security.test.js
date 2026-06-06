@@ -9,13 +9,14 @@
  * - createChannelConfig refuses to store without encryption key
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { encryptToken, decryptToken } from '../src/utils/security.js';
 import {
   encryptAndStoreToken,
   getDecryptedToken,
   isTokenExpiring,
   createChannelConfig,
+  refreshInstagramToken,
 } from '../src/channels/token-manager.js';
 import { createMockD1 } from './helpers/mock-db.js';
 
@@ -250,6 +251,96 @@ describe('createChannelConfig security enforcement', () => {
     const ctx = { db: null };
     const id = await createChannelConfig(ctx, 'test', 'instagram', {}, 'token', VALID_ENC_KEY);
     expect(id).toBeNull();
+  });
+
+  // Bug #4 — token_expires_at was never written by createChannelConfig, so
+  // every IGAA channel landed with NULL expiry → isTokenExpiring() was always
+  // false → the cron refresh was dead code → 60-day tokens expired silently.
+  it('persists token_expires_at when provided (IGAA long-lived)', async () => {
+    const ctx = makeTokenCtx();
+    const expiresAt = Math.floor(Date.now() / 1000) + 5184000; // 60d
+    const id = await createChannelConfig(
+      ctx, 'test', 'instagram',
+      { page_id: '999', api: 'instagram_direct' },
+      'IGAAtoken', VALID_ENC_KEY, null, expiresAt,
+    );
+    expect(id).not.toBeNull();
+    const row = await ctx.db.prepare(
+      'SELECT token_expires_at FROM channel_configs WHERE id = ?',
+    ).bind(id).first();
+    expect(row.token_expires_at).toBe(expiresAt);
+  });
+
+  it('leaves token_expires_at null when omitted (non-expiring Page token)', async () => {
+    const ctx = makeTokenCtx();
+    const id = await createChannelConfig(
+      ctx, 'test', 'instagram', { page_id: '888' }, 'EAAtoken', VALID_ENC_KEY,
+    );
+    expect(id).not.toBeNull();
+    const row = await ctx.db.prepare(
+      'SELECT token_expires_at FROM channel_configs WHERE id = ?',
+    ).bind(id).first();
+    expect(row.token_expires_at == null).toBe(true);
+  });
+});
+
+// ── refreshInstagramToken host selection (Bug #2) ─────────────────────────
+//
+// IGAA tokens (Instagram Login product) refresh against graph.instagram.com;
+// the old code hardcoded graph.facebook.com, which 400s for IGAA. Pick the
+// host from config.api.
+
+describe('refreshInstagramToken host selection', () => {
+  const KEY = VALID_ENC_KEY;
+
+  async function seedIgRow(ctx, id, plainToken, apiVal) {
+    const enc = await encryptToken(plainToken, KEY, 'channel-token-v1');
+    await ctx.db.prepare(
+      'INSERT OR REPLACE INTO channel_configs (id, tenant_id, channel_type, config, token_encrypted, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
+    ).bind(id, 'test', 'instagram', JSON.stringify({ api: apiVal }), enc, Date.now(), Date.now()).run();
+  }
+
+  it('IG-direct config refreshes via graph.instagram.com', async () => {
+    const ctx = makeTokenCtx();
+    await seedIgRow(ctx, 'cc_ref1', 'IGAAcurrent', 'instagram_direct');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ access_token: 'IGAAnew', expires_in: 5184000 }), { status: 200 }),
+    );
+    const res = await refreshInstagramToken(ctx, 'test', 'cc_ref1', KEY);
+    expect(res.ok).toBe(true);
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).toContain('graph.instagram.com');
+    expect(url).not.toContain('graph.facebook.com');
+    fetchSpy.mockRestore();
+  });
+
+  it('legacy config refreshes via graph.facebook.com', async () => {
+    const ctx = makeTokenCtx();
+    await seedIgRow(ctx, 'cc_ref2', 'EAAcurrent', 'facebook');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ access_token: 'EAAnew', expires_in: 5184000 }), { status: 200 }),
+    );
+    const res = await refreshInstagramToken(ctx, 'test', 'cc_ref2', KEY);
+    expect(res.ok).toBe(true);
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).toContain('graph.facebook.com');
+    fetchSpy.mockRestore();
+  });
+
+  it('persists the rotated token + new expiry', async () => {
+    const ctx = makeTokenCtx();
+    await seedIgRow(ctx, 'cc_ref3', 'IGAAold', 'instagram_direct');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ access_token: 'IGAArotated', expires_in: 100 }), { status: 200 }),
+    );
+    const res = await refreshInstagramToken(ctx, 'test', 'cc_ref3', KEY);
+    expect(res.ok).toBe(true);
+    expect(await getDecryptedToken(ctx, 'test', 'cc_ref3', KEY)).toBe('IGAArotated');
+    const row = await ctx.db.prepare(
+      'SELECT token_expires_at FROM channel_configs WHERE id = ?',
+    ).bind('cc_ref3').first();
+    expect(row.token_expires_at).toBeGreaterThan(Math.floor(Date.now() / 1000));
+    fetchSpy.mockRestore();
   });
 });
 

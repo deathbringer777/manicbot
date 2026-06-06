@@ -743,6 +743,8 @@ async function persistChannelFromDraft(ctx, draft) {
     configObj,
     tokenToStore,
     ctx.BOT_ENCRYPTION_KEY,
+    null,                    // webhookVerifyToken — App-level subscription, not per-channel
+    draft.expiresAt ?? null, // token_expires_at — IGAA 60d expiry; null for non-expiring Page tokens
   );
 
   if (!channelConfigId) {

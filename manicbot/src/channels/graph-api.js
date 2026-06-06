@@ -90,13 +90,14 @@ export async function graphPost(path, token, body, { maxRetries = 2, label = 'gr
  *
  * @param {string} path - Graph API path with optional querystring (e.g. "/{containerId}?fields=status_code")
  * @param {string} token - Access token
- * @param {{ maxRetries?: number, label?: string }} [opts]
+ * @param {{ maxRetries?: number, label?: string, host?: 'facebook'|'instagram' }} [opts]
  * @returns {Promise<{ ok: boolean, data?: any, status?: number, error?: string, errorCode?: number, errorType?: string, tokenDead?: boolean }>}
  */
-export async function graphGet(path, token, { maxRetries = 2, label = 'graph' } = {}) {
+export async function graphGet(path, token, { maxRetries = 2, label = 'graph', host = 'facebook' } = {}) {
+  const base = graphBase(host);
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(`${GRAPH_API}${path}`, {
+      const res = await fetch(`${base}${path}`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
       });

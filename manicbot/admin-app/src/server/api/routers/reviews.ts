@@ -205,4 +205,74 @@ export const reviewsRouter = createTRPCRouter({
         },
       };
     }),
+
+  // ── Salon owner: read review-collection settings ──────────────────────
+  // Drives the worker post-visit rating prompt. `reviews_enabled` is read by
+  // the worker as a truthy STRING ("1" = on, "" = off — never "0", which the
+  // worker would treat as truthy). `reviews_prompt_timing` ∈ immediate|delayed.
+  getSettings: publicProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db.select().from(tenantConfig)
+        .where(and(
+          eq(tenantConfig.tenantId, input.tenantId),
+          inArray(tenantConfig.key, ["reviews_enabled", "reviews_prompt_timing", "reviews_public"]),
+        ));
+      const cfg = Object.fromEntries(rows.map((r) => [r.key, r.value ?? ""]));
+      return {
+        enabled: !!cfg["reviews_enabled"],
+        timing: cfg["reviews_prompt_timing"] === "delayed" ? "delayed" as const : "immediate" as const,
+        publicOnProfile: cfg["reviews_public"] !== "false",
+      };
+    }),
+
+  // ── Salon owner: update review-collection settings ────────────────────
+  // nosemgrep: trpc-public-procedure-mutation -- auth via assertTenantOwner inside handler
+  updateSettings: publicProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      enabled: z.boolean().optional(),
+      timing: z.enum(["immediate", "delayed"]).optional(),
+      publicOnProfile: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const updates: Array<[string, string]> = [];
+      if (input.enabled !== undefined) updates.push(["reviews_enabled", input.enabled ? "1" : ""]);
+      if (input.timing !== undefined) updates.push(["reviews_prompt_timing", input.timing]);
+      if (input.publicOnProfile !== undefined) updates.push(["reviews_public", input.publicOnProfile ? "true" : "false"]);
+      for (const [key, value] of updates) {
+        await ctx.db.insert(tenantConfig)
+          .values({ tenantId: input.tenantId, key, value })
+          .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
+      }
+      return { ok: true };
+    }),
+
+  // ── Salon owner: per-master rating breakdown (monitoring) ─────────────
+  getMasterBreakdown: publicProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db.select({
+        masterId: reviews.masterId,
+        avg: sql<number>`ROUND(AVG(${reviews.rating}), 1)`,
+        count: sql<number>`count(*)`,
+      }).from(reviews)
+        .where(eq(reviews.tenantId, input.tenantId))
+        .groupBy(reviews.masterId);
+      const masterRows = await ctx.db.select({ chatId: masters.chatId, name: masters.name })
+        .from(masters).where(eq(masters.tenantId, input.tenantId));
+      const nameMap = new Map(masterRows.map((m) => [String(m.chatId), m.name]));
+      return rows
+        .filter((r) => r.masterId)
+        .map((r) => ({
+          masterId: r.masterId as string,
+          masterName: nameMap.get(r.masterId as string) ?? null,
+          avg: r.avg ?? 0,
+          count: r.count ?? 0,
+        }))
+        .sort((a, b) => b.count - a.count);
+    }),
 });

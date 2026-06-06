@@ -40,6 +40,8 @@ describe("platformBroadcastsRouter — auth gating", () => {
     ["setMonthlyReportSettings", (c) => c.setMonthlyReportSettings({ enabled: true, channels: ["center"] })],
     ["getSubscriptionReminderSettings", (c) => c.getSubscriptionReminderSettings()],
     ["templateCreate", (c) => c.templateCreate({ name: "T", channels: ["center"], bodies: { center: "x" } })],
+    ["getWelcomeSettings", (c) => c.getWelcomeSettings()],
+    ["setWelcomeSettings", (c) => c.setWelcomeSettings({ enabled: true, channels: ["center"], body: "x" })],
   ];
 
   for (const [name, invoke] of invocations) {
@@ -103,6 +105,50 @@ describe("campaignCreate", () => {
     expect(v.status).toBe("active");
     expect(v.nextRunAt).toBeNull();
     expect(JSON.parse(v.recurrenceJson as string)).toMatchObject({ freq: "weekly", weekday: 1, hour: 10 });
+  });
+});
+
+// ─── welcome settings (sys_welcome singleton) ────────────────────────────────
+
+describe("welcome settings", () => {
+  it("getWelcomeSettings returns defaults when the row is absent", async () => {
+    const { db } = createDbMock([[]]);
+    const res = await createCaller(makeAdminCtx(db) as never).getWelcomeSettings();
+    expect(res).toMatchObject({ enabled: false, channels: [], body: "" });
+  });
+
+  it("getWelcomeSettings parses an active row + center body", async () => {
+    const row = { status: "active", channelsJson: '["center","bell"]', bodiesJson: JSON.stringify({ center: "Привет, {salon_name}!" }), title: "W", body: "fallback" };
+    const { db } = createDbMock([[row]]);
+    const res = await createCaller(makeAdminCtx(db) as never).getWelcomeSettings();
+    expect(res).toMatchObject({ enabled: true, channels: ["center", "bell"], title: "W", body: "Привет, {salon_name}!" });
+  });
+
+  it("setWelcomeSettings upserts kind=welcome, tokens preserved", async () => {
+    const mock = createDbMock();
+    await createCaller(makeAdminCtx(mock.db) as never).setWelcomeSettings({
+      enabled: true, channels: ["center", "bell"], body: "Здравствуйте, {salon_name}! {owner_name}",
+    });
+    const v = mock.insertCalls[0]!.values;
+    expect(v.id).toBe("sys_welcome");
+    expect(v.kind).toBe("welcome");
+    expect(v.status).toBe("active");
+    expect(JSON.parse(v.channelsJson as string)).toEqual(["center", "bell"]);
+    const center = JSON.parse(v.bodiesJson as string).center as string;
+    expect(center).toContain("{salon_name}");
+    expect(center).toContain("{owner_name}");
+  });
+
+  it("setWelcomeSettings stores status=paused when disabled", async () => {
+    const mock = createDbMock();
+    await createCaller(makeAdminCtx(mock.db) as never).setWelcomeSettings({ enabled: false, channels: ["center"], body: "x" });
+    expect(mock.insertCalls[0]!.values.status).toBe("paused");
+  });
+
+  it("setWelcomeSettings rejects an empty body and channels without center", async () => {
+    const caller = createCaller(makeAdminCtx(createDbMock().db) as never);
+    await expect(caller.setWelcomeSettings({ enabled: true, channels: ["center"], body: "" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller.setWelcomeSettings({ enabled: true, channels: ["bell"] as never, body: "x" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });
 

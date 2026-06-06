@@ -9,6 +9,7 @@ import { encryptToken, decryptToken, randomId } from '../utils/security.js';
 import { dbAll, dbRun } from '../utils/db.js';
 import { nowSec } from '../utils/time.js';
 import { log } from '../utils/logger.js';
+import { hostForToken } from './graph-api.js';
 
 // #S6: HKDF subkey label for channel tokens (TG/IG/WA bot access tokens).
 // Separates this trust domain from google-refresh, calendar-hmac, etc.
@@ -85,7 +86,14 @@ export function isTokenExpiring(channelConfig, daysThreshold = 10) {
 
 /**
  * Refresh an Instagram long-lived user access token.
- * Uses GET graph.facebook.com/refresh_access_token
+ *
+ * Host depends on the token generation, derived from the token prefix via
+ * hostForToken():
+ *  - IGAA… (Instagram Login product) → graph.instagram.com
+ *  - EAA…  (legacy / Basic Display)  → graph.facebook.com
+ * The old code hardcoded graph.facebook.com, which 400s for IGAA tokens —
+ * and since only IGAA tokens carry token_expires_at, that was the ONLY case
+ * this function ever runs for in practice.
  *
  * @param {{ db: D1Database }} ctx
  * @param {string} tenantId - owning tenant (threaded to the token read/write)
@@ -94,11 +102,25 @@ export function isTokenExpiring(channelConfig, daysThreshold = 10) {
  * @returns {Promise<{ok: boolean, error?: string}>}
  */
 export async function refreshInstagramToken(ctx, tenantId, channelConfigId, encKey) {
-  const currentToken = await getDecryptedToken(ctx, tenantId, channelConfigId, encKey);
-  if (!currentToken) return { ok: false, error: 'no_token' };
+  if (!ctx?.db) return { ok: false, error: 'no_db' };
+  if (!encKey || String(encKey).length < 32) return { ok: false, error: 'missing_key' };
+
+  const rows = await dbAll(ctx,
+    'SELECT token_encrypted FROM channel_configs WHERE id = ? AND tenant_id = ? LIMIT 1',
+    channelConfigId, tenantId,
+  );
+  if (!rows.length || !rows[0].token_encrypted) return { ok: false, error: 'no_token' };
+  const currentToken = await decryptToken(rows[0].token_encrypted, encKey, CHANNEL_TOKEN_LABEL);
+  if (!currentToken) return { ok: false, error: 'decrypt_failed' };
+
+  // The token prefix is the source of truth for the host (more robust than a
+  // possibly-stale config.api flag): IGAA… → graph.instagram.com.
+  const refreshHost = hostForToken(currentToken) === 'instagram'
+    ? 'https://graph.instagram.com'
+    : 'https://graph.facebook.com';
 
   try {
-    const url = new URL('https://graph.facebook.com/refresh_access_token');
+    const url = new URL(`${refreshHost}/refresh_access_token`);
     url.searchParams.set('grant_type', 'ig_refresh_token');
     url.searchParams.set('access_token', currentToken);
 
@@ -129,9 +151,12 @@ export async function refreshInstagramToken(ctx, tenantId, channelConfigId, encK
  * @param {string} plainToken
  * @param {string|null} encKey
  * @param {string|null} [webhookVerifyToken]
+ * @param {number|null} [expiresAt] - Unix seconds when the token expires (IGAA
+ *   long-lived tokens are 60d). NULL for non-expiring Page tokens. Without this
+ *   the cron refresh never fires (isTokenExpiring needs a non-null expiry).
  * @returns {Promise<string|null>} ID of the created row, or null on failure
  */
-export async function createChannelConfig(ctx, tenantId, channelType, config, plainToken, encKey, webhookVerifyToken = null) {
+export async function createChannelConfig(ctx, tenantId, channelType, config, plainToken, encKey, webhookVerifyToken = null, expiresAt = null) {
   if (!ctx?.db) return null;
   // Refuse to store tokens without an encryption key — prevents plaintext secrets at rest.
   if (!encKey || String(encKey).length < 32) {
@@ -160,14 +185,14 @@ export async function createChannelConfig(ctx, tenantId, channelType, config, pl
     await dbRun(ctx,
       `INSERT OR REPLACE INTO channel_configs
         (id, tenant_id, channel_type, config, token_encrypted, webhook_verify_token, active,
-         page_id, phone_number_id, ig_business_id,
+         page_id, phone_number_id, ig_business_id, token_expires_at,
          created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
       id, tenantId, channelType,
       JSON.stringify(config),
       encrypted,
       webhookVerifyToken,
-      pageId, phoneNumberId, igBusinessId,
+      pageId, phoneNumberId, igBusinessId, expiresAt,
       now, now,
     );
   } catch (e) {

@@ -429,7 +429,7 @@ describe('handleMetaOAuthConsume', () => {
     ctx.kv.store.set(`meta:oauth:draft:${state}`, JSON.stringify({
       provider: 'instagram',
       tenantId: 't_real', webUserId: 'u_owner',
-      accessToken: 'IGAA_LONG', expiresAt: null,
+      accessToken: 'IGAA_LONG', expiresAt: 1783958679,
       graphMe: { id: '17841437' },
       igUserId: '17841437', igUsername: 'manicbot_salon', createdAt: 1,
     }));
@@ -453,6 +453,9 @@ describe('handleMetaOAuthConsume', () => {
     const configObj = args[3];
     expect(configObj.api).toBe('instagram_direct');
     expect(configObj.ig_user_id).toBe('17841437');
+    // Bug #4 — draft.expiresAt must be threaded into createChannelConfig as
+    // token_expires_at (8th arg) so the cron refresh can actually fire.
+    expect(args[7]).toBe(1783958679);
 
     // Subscribe hit graph.instagram.com.
     expect(fetchSpy.mock.calls[0][0].toString()).toContain('graph.instagram.com');

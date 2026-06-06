@@ -1711,6 +1711,33 @@ export async function tryAdminKeyRoutes(request, env, url) {
   }
 
   // Read-only status dashboard. Returns counts by status + recent rows.
+  if (request.method === 'GET' && url.pathname === '/admin/tenants-export') {
+    if (!isNotifyAuthValid(env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    try {
+      const { dbAll } = await import('../utils/db.js');
+      const ec = envCtx(env);
+      const rows = await dbAll(ec,
+        `SELECT id, name, salon, billing_email AS email,
+                plan, billing_status, created_at
+         FROM tenants
+         ORDER BY created_at DESC`,
+      );
+      return Response.json(rows.map(r => ({
+        id: r.id,
+        name: r.name ?? '',
+        salon: r.salon ?? '',
+        email: r.email ?? '',
+        plan: r.plan ?? '',
+        billing_status: r.billing_status ?? '',
+        created_at: r.created_at ?? 0,
+      })));
+    } catch (e) {
+      log.error('admin.tenantsExport', e instanceof Error ? e : new Error(String(e?.message)));
+      return Response.json({ error: 'export failed' }, { status: 500 });
+    }
+  }
+
   if (request.method === 'GET' && url.pathname === '/admin/marketing-status') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return new Response('DB not bound', { status: 500 });

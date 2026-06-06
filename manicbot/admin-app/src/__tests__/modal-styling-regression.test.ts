@@ -99,6 +99,36 @@ describe("modal styling regression (0062)", () => {
     expect(region).not.toMatch(/className=[^"]*"[^"]*\bglass-card\b/);
   });
 
+  // ───────────────────────────────────────────────────────────────────────
+  // 2026-06-06 overnight-audit batch: 10 standalone modal overlays that still
+  // used the legacy `z-50` + `bg-black/60` tone, so the Shell sticky header
+  // (z-30/40) bled a light strip through the "darkened" overlay. They now
+  // follow the same z-[100] / bg-slate-950/70 / backdrop-blur-md contract.
+  // Pin them by banning the legacy overlay pattern outright.
+  // ───────────────────────────────────────────────────────────────────────
+  const AUDIT_MODAL_FILES = [
+    "src/components/dashboards/SalonDashboard.tsx",
+    "src/components/salon/tabs/StaffTab.tsx",
+    "src/components/settings/sections/BillingSection.tsx",
+    "src/components/settings/sections/OwnershipTransferCard.tsx",
+    "src/components/salon/ServiceAddMenu.tsx",
+    "src/app/(dashboard)/leads/LeadsPageClient.tsx",
+  ];
+  describe.each(AUDIT_MODAL_FILES)("audit overlay contract — %s", (file) => {
+    const src = read(file);
+    it("has no legacy z-50 + bg-black/60 modal overlay", () => {
+      // A full-screen overlay is `fixed inset-0` + a backdrop tone. The legacy
+      // pair we banished is z-50 paired with bg-black/60.
+      const overlayLines = src
+        .split("\n")
+        .filter((l) => /fixed inset-0/.test(l) && /bg-black\/60/.test(l));
+      expect(overlayLines).toEqual([]);
+    });
+    it("uses the z-[100] + bg-slate-950/70 overlay tone", () => {
+      expect(src).toMatch(/z-\[100\][^"]*bg-slate-950\/70|bg-slate-950\/70[^"]*z-\[100\]/);
+    });
+  });
+
   // God Mode / role-management modal — the page file itself uses
   // `glass-card` on UserCard rows (it's not a modal), so we cannot pin
   // the whole file. Anchor on the `roleModal && (` block instead, same

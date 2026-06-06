@@ -43,7 +43,7 @@ export function AddServiceDropdown({ lang, onNew, onTemplates }: { lang: Lang; o
 export function ServiceTemplatesSheet({ lang, onClose, onSelect }: { lang: Lang; onClose: () => void; onSelect: (tmpl: ServiceTemplate) => void }) {
   return (
     <div role="dialog" aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
       onClick={onClose}
       onKeyDown={e => e.key === 'Escape' && onClose()}>
       <div

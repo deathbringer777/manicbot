@@ -201,7 +201,7 @@ export function OwnershipTransferCard() {
 
       {/* Confirm modal — recipient picker */}
       {confirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4">
           <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>

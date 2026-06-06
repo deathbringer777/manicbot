@@ -3,7 +3,7 @@ import { log } from '../utils/logger.js';
 import { nowSec } from '../utils/time.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { showInactiveMessage } from '../ui/billing.js';
-import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows, isLooseOmnichannelGreeting } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows, isLooseOmnichannelGreeting, regPhonePrompt } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, dateStrForOffset } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
 import { ticketFwdAckKey } from '../utils/kv-keys.js';
@@ -1504,9 +1504,8 @@ export async function onMsg(ctx, msg) {
     st.step = STEP.REG_PHONE;
     st.name = cleaned;
     await setState(ctx, cid, st);
-    return send(ctx, cid, fill(t(lg, 'reg_phone'), { n: escHtml(cleaned) }), {
-      reply_markup: { keyboard: [[{ text: t(lg, 'reg_phone_btn'), request_contact: true }]], resize_keyboard: true, one_time_keyboard: true },
-    });
+    const prompt = regPhonePrompt(ctx, lg, escHtml(cleaned));
+    return send(ctx, cid, prompt.text, prompt.extra);
   }
 
   if (st.step === STEP.REG_CONFIRM) {

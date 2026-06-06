@@ -84,7 +84,7 @@ export default function LeadsPageClient() {
   // Delete lead confirmation modal
   const deleteConfirmModal = deleteConfirm.active && (
     <div role="dialog" aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
       onClick={() => setDeleteConfirm({ active: false, leadId: null })}>
       <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("gmLeads.deleteConfirm", lang)}</h3>

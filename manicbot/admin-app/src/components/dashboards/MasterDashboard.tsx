@@ -8,7 +8,7 @@ import { api } from "~/trpc/react";
 import { Shell, type NavItem } from "~/components/layout/Shell";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
-import { t, type Lang } from "~/lib/i18n";
+import { t, formatDate, type Lang } from "~/lib/i18n";
 import { TodayTab } from "~/components/master/tabs/TodayTab";
 import { ScheduleTab } from "~/components/master/tabs/ScheduleTab";
 import { MasterTelegramPairingCard } from "~/components/master/MasterTelegramPairingCard";
@@ -408,7 +408,7 @@ export function MasterDashboard({
                         <Star key={s} className={`w-3 h-3 ${s <= rev.rating ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600"}`} />
                       ))}
                     </div>
-                    <span className="text-[10px] text-slate-500">{new Date(rev.createdAt * 1000).toLocaleDateString()}</span>
+                    <span className="text-[10px] text-slate-500">{formatDate(new Date(rev.createdAt * 1000), lang)}</span>
                   </div>
                   {rev.text && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5">{rev.text}</p>}
                   {rev.replyText && (

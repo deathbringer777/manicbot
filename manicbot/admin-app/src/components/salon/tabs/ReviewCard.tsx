@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { Star, Eye, EyeOff, Reply, Trash2 } from "lucide-react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { formatDate } from "~/lib/i18n";
 
 export function ReviewCard({ rev, tenantId }: { rev: any; tenantId: string }) {
+  const { lang } = useLang();
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState(rev.replyText ?? "");
   const utils = api.useUtils();
@@ -44,7 +47,7 @@ export function ReviewCard({ rev, tenantId }: { rev: any; tenantId: string }) {
               <Star key={s} className={`w-3 h-3 ${s <= rev.rating ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600"}`} />
             ))}
             <span className="text-[10px] text-slate-500 ml-1">
-              {new Date(rev.createdAt * 1000).toLocaleDateString()}
+              {formatDate(new Date(rev.createdAt * 1000), lang)}
             </span>
           </div>
           {rev.text && <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 line-clamp-3">{rev.text}</p>}

@@ -1155,14 +1155,14 @@ export function SalonDayView({
                             ...(blockBusy ? { opacity: 0.4 } : {}),
                             ...(blockDrag?.style ?? {}),
                           }}
-                          title={b.reason ?? (b.type === "reservation" ? "Резерв" : "Перерыв / выходной")}
+                          title={b.reason ?? t(b.type === "reservation" ? "cal.block.reserved" : "cal.block.timeOff", lang)}
                         >
                           <div className="flex items-center gap-1 text-[10px] font-bold tabular-nums">
                             <Lock className="h-3 w-3" />
                             {!isMultiDay && <span>{b.time}</span>}
                           </div>
                           <div className="text-[10px] font-medium text-slate-700 dark:text-slate-200 truncate">
-                            {b.reason ?? (b.type === "reservation" ? "Reserved" : "Time off")}
+                            {b.reason ?? t(b.type === "reservation" ? "cal.block.reserved" : "cal.block.timeOff", lang)}
                           </div>
                           {blockResize && (
                             <span

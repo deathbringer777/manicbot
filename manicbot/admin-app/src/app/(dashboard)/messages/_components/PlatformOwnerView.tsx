@@ -4,13 +4,13 @@ import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, formatDate, type Lang } from "~/lib/i18n";
 
-function fmtFull(ts: number): string {
+function fmtFull(ts: number, lang: Lang): string {
   const d = new Date(ts * 1000);
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${d.toLocaleDateString()} ${hh}:${mm}`;
+  return `${formatDate(d, lang)} ${hh}:${mm}`;
 }
 
 /**
@@ -103,7 +103,7 @@ export function PlatformOwnerView() {
                       isPlatform ? "text-slate-400" : "text-fuchsia-100"
                     }`}
                   >
-                    {fmtFull(m.createdAt)}
+                    {fmtFull(m.createdAt, lang)}
                   </div>
                 </div>
               </div>

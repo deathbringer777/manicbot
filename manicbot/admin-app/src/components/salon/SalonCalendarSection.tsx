@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, formatDate, formatTime } from "~/lib/i18n";
 import { SectionHeader, Btn } from "./SalonShared";
 
 export function SalonCalendarSection({ tenantId, bare = false }: { tenantId: string; bare?: boolean }) {
@@ -95,7 +95,7 @@ export function SalonCalendarSection({ tenantId, bare = false }: { tenantId: str
           <div className="flex items-center gap-2 text-[10px] text-slate-500">
             {row.lastSyncAt && (
               <span>
-                {t("gcal.lastSync", lang)}: {new Date(row.lastSyncAt).toLocaleString()}
+                {t("gcal.lastSync", lang)}: {(() => { const d = new Date(row.lastSyncAt); return `${formatDate(d, lang)} ${formatTime(d, lang)}`; })()}
               </span>
             )}
             {row.lastSyncStatus && (

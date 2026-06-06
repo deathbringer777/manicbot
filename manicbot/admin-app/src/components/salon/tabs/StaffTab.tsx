@@ -337,7 +337,7 @@ function InviteMemberModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-5 max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
         <header className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-bold text-slate-900 dark:text-white">Пригласить администратора</h3>
@@ -454,7 +454,7 @@ function ElevationDialog({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-white dark:bg-slate-900 p-5 max-h-[92dvh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
         <header className="mb-3 flex items-center gap-2">
           <KeyRound className="h-5 w-5 text-amber-500 dark:text-amber-400" />

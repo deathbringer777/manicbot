@@ -5,19 +5,17 @@ import { sanitizeChatHtml } from "./sanitizeChatHtml";
 import { ChatDateStrip } from "./ChatDateStrip";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { isDateKeyboard, stripPhotoNavButtons } from "./chatKeyboards";
-
-function formatTime(ts: number): string {
-  const d = new Date(ts * 1000);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
+import { formatTime, type Lang } from "~/lib/i18n";
 
 export function MessageBubble({
   msg,
   salon,
+  lang,
   onButtonClick,
 }: {
   msg: ChatMessage;
   salon: ChatSalon;
+  lang: Lang;
   onButtonClick: (callbackData: string, messageId: string) => void;
 }) {
   const palette = salon.brandPalette?.primary ?? "#EC4899";
@@ -32,7 +30,7 @@ export function MessageBubble({
         >
           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
           <p className="text-[10px] text-white/70 mt-0.5 text-right tabular-nums">
-            {formatTime(msg.ts)}
+            {formatTime(new Date(msg.ts * 1000), lang)}
           </p>
         </div>
       </div>
@@ -81,7 +79,7 @@ export function MessageBubble({
             dangerouslySetInnerHTML={{ __html: safeHtml }}
           />
           <p className="text-[10px] text-slate-400 mt-1 text-right tabular-nums">
-            {formatTime(msg.ts)}
+            {formatTime(new Date(msg.ts * 1000), lang)}
           </p>
         </div>
         {buttonRows && buttonRows.length > 0 &&

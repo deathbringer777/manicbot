@@ -175,7 +175,7 @@ function ServiceModal({ svc, onClose, tenantId, initialData }: { svc: any | null
 
   return (
     <div role="dialog" aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
       onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
       <div
         className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-y-auto max-h-[92dvh]"
@@ -372,7 +372,7 @@ function CreateMasterAccountModal({ onClose, tenantId }: { onClose: () => void; 
 
   return (
     <div role="dialog" aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
       onClick={onClose} onKeyDown={e => e.key === "Escape" && onClose()}>
       <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
@@ -450,7 +450,7 @@ function AddMasterModal({ onClose, tenantId }: { onClose: () => void; tenantId: 
   });
 
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md" onClick={onClose} onKeyDown={e => e.key === 'Escape' && onClose()}>
       <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("master.addMaster", lang)}</h3>
@@ -2053,7 +2053,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
   // Delete service confirmation modal
   const deleteSvcConfirmModal = deleteSvcConfirm.active && (
     <div role="dialog" aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md"
       onClick={() => setDeleteSvcConfirm({ active: false, svcId: null })}>
       <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <h3 className="text-base font-bold text-slate-900 dark:text-white">{t("confirm.deleteService", lang)}</h3>
@@ -2595,7 +2595,7 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900 dark:text-white text-sm">{name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{s.duration} {t("service.duration", lang).split("(")[0]?.trim()} · {`${s.price} zł`}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{s.duration} {t("service.min", lang)} · {`${s.price} zł`}</p>
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.active ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-200 dark:bg-slate-700 text-slate-500"}`}>
                       {s.active ? t("service.active", lang) : t("service.hidden", lang)}

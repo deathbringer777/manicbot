@@ -77,6 +77,7 @@ vi.mock("~/components/salon/SalonStorefrontBody", () => ({ SalonStorefrontBody: 
 vi.mock("~/components/salon/SalonPublishBody", () => ({ SalonPublishBody: () => React.createElement("div", { "data-testid": "body-publish" }) }));
 vi.mock("~/components/salon/AutoConfirmSettings", () => ({ AutoConfirmSettings: () => React.createElement("div", { "data-testid": "body-autoconfirm" }) }));
 vi.mock("~/components/salon/AutoSuggestFavoriteSettings", () => ({ AutoSuggestFavoriteSettings: () => React.createElement("div", { "data-testid": "body-favorite" }) }));
+vi.mock("~/components/salon/PostVisitFollowupSettings", () => ({ PostVisitFollowupSettings: () => React.createElement("div", { "data-testid": "body-post-visit-followup" }) }));
 vi.mock("~/components/salon/SalonCalendarSection", () => ({ SalonCalendarSection: () => React.createElement("div", { "data-testid": "body-calendar" }) }));
 
 import { MySalonSection } from "~/components/settings/sections/MySalonSection";
@@ -84,7 +85,7 @@ import { MySalonSection } from "~/components/settings/sections/MySalonSection";
 function visibleBodies() {
   return [
     "body-basic", "body-hours", "body-gallery", "body-branding", "body-albums",
-    "body-storefront", "body-publish", "body-autoconfirm", "body-favorite", "body-calendar",
+    "body-storefront", "body-publish", "body-autoconfirm", "body-favorite", "body-post-visit-followup", "body-calendar",
   ].filter((id) => screen.queryByTestId(id));
 }
 
@@ -132,7 +133,7 @@ describe("MySalonSection — top sub-tabs", () => {
   it("groups booking (auto-confirm + favorite) and integrations (calendar) correctly", () => {
     render(React.createElement(MySalonSection));
     fireEvent.click(screen.getByRole("tab", { name: /Бронирование/ }));
-    expect(visibleBodies()).toEqual(["body-autoconfirm", "body-favorite"]);
+    expect(visibleBodies()).toEqual(["body-autoconfirm", "body-favorite", "body-post-visit-followup"]);
     fireEvent.click(screen.getByRole("tab", { name: /Интеграции/ }));
     expect(visibleBodies()).toEqual(["body-calendar"]);
   });

@@ -1,4 +1,4 @@
--- 0116_tenants_parent_tenant.sql
+-- 0117_tenants_parent_tenant.sql
 --
 -- Multi-salon ownership (MAX plan). A "secondary" salon created by a MAX-plan
 -- owner is billed UNDER its parent (the owner's home tenant), not as a separate

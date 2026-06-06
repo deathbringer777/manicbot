@@ -2,8 +2,8 @@
 /**
  * HomeWidgetBoard — render smoke-test.
  *
- * Verifies the board mounts the DEFAULT_HOME_LAYOUT (every catalog-v1 widget is
- * a singleton, so the default board contains one of each) and that toggling
+ * Verifies the board mounts the DEFAULT_HOME_LAYOUT (the first-run widget set)
+ * and that toggling
  * edit mode flips the toolbar between "Customize" and "Done" and reveals the
  * add-widget control + reset. tRPC is stubbed (no provider in happy-dom); the
  * salonMetrics calls return loading-ish empty data so widgets render their
@@ -108,10 +108,12 @@ describe("HomeWidgetBoard", () => {
     expect(screen.getByText("Сбросить раскладку")).toBeTruthy();
   });
 
-  it("shows 'all added' in the add-widget control for a full default board", () => {
+  it("offers catalog widgets missing from the first-run board", () => {
     renderBoard();
     fireEvent.click(screen.getByTestId("home-edit-toggle"));
-    // Default board already contains every singleton widget → nothing to add.
-    expect(screen.getByText("Все виджеты добавлены")).toBeTruthy();
+    // The first-run board omits kpi_no_show_rate (a 5th KPI would orphan a
+    // half-empty row), so the add-widget control is active — NOT "all added".
+    expect(screen.getByTestId("home-add-widget")).toBeTruthy();
+    expect(screen.queryByText("Все виджеты добавлены")).toBeNull();
   });
 });

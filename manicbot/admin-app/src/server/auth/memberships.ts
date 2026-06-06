@@ -132,31 +132,29 @@ export async function listMembershipsForWebUser(
     isPersonal: !!r.isPersonal,
   }));
 
-  // Secondary salons this user OWNS (multi-salon, MAX plan): tenant_roles rows
-  // with role='tenant_owner' keyed by the user's deterministic synthetic chat
-  // id. No `masters` row exists for these (keeps the owner out of staff lists),
-  // so they are read here directly from tenant_roles.
-  const ownedRowsRaw = await db
-    .select({
-      tenantId: tenantRoles.tenantId,
-      role: tenantRoles.role,
-      name: tenants.name,
-      displayName: tenants.displayName,
-      isPersonal: tenants.isPersonal,
-    })
-    .from(tenantRoles)
-    .innerJoin(tenants, eq(tenants.id, tenantRoles.tenantId))
-    .where(and(
-      eq(tenantRoles.chatId, syntheticChatIdForWebUser(args.webUserId)),
-      eq(tenantRoles.role, "tenant_owner"),
-    ));
-
-  const ownedRows = ownedRowsRaw.map((r) => ({
-    tenantId: r.tenantId,
-    role: r.role,
-    tenantName: r.displayName || r.name,
-    isPersonal: !!r.isPersonal,
-  }));
+  // Secondary salons this user OWNS (multi-salon, MAX plan): tenants whose
+  // billing parent is the user's HOME tenant. Bound by the unique home tenant
+  // id (NOT the synthetic chat id, which could collide across accounts), so an
+  // owner only ever sees salons they actually own. No `masters` row exists for
+  // these, which keeps the owner out of staff lists / public booking / limits.
+  let ownedRows: Array<{ tenantId: string; role: string; tenantName: string | null; isPersonal: boolean }> = [];
+  if (args.homeTenantId) {
+    const ownedRaw = await db
+      .select({
+        tenantId: tenants.id,
+        name: tenants.name,
+        displayName: tenants.displayName,
+        isPersonal: tenants.isPersonal,
+      })
+      .from(tenants)
+      .where(eq(tenants.parentTenantId, args.homeTenantId));
+    ownedRows = ownedRaw.map((r) => ({
+      tenantId: r.tenantId,
+      role: "tenant_owner",
+      tenantName: r.displayName || r.name,
+      isPersonal: !!r.isPersonal,
+    }));
+  }
 
   return mergeMemberships(home, masterRows, ownedRows);
 }
@@ -184,20 +182,16 @@ export async function resolveActiveMembership(
 
   let activeRole: string | null = row?.role ?? null;
   // Not a master membership? The active tenant may be a SECONDARY salon this
-  // user OWNS (multi-salon, MAX plan): a tenant_roles row with role='tenant_owner'
-  // keyed by the synthetic chat id, with no backing `masters` row. Prove it
-  // authoritatively the same way before granting owner access.
-  if (!activeRole) {
+  // user OWNS (multi-salon, MAX plan): its billing parent is the user's HOME
+  // tenant. Bound by the unique home tenant id (collision-free), never the
+  // synthetic chat id — so a user can only become owner of salons they own.
+  if (!activeRole && homeTenantId) {
     const [ownedRow] = await db
-      .select({ role: tenantRoles.role })
-      .from(tenantRoles)
-      .where(and(
-        eq(tenantRoles.tenantId, activeTenantId),
-        eq(tenantRoles.chatId, syntheticChatIdForWebUser(webUserId)),
-        eq(tenantRoles.role, "tenant_owner"),
-      ))
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(and(eq(tenants.id, activeTenantId), eq(tenants.parentTenantId, homeTenantId)))
       .limit(1);
-    activeRole = ownedRow?.role ?? null;
+    if (ownedRow) activeRole = "tenant_owner";
   }
 
   const decision = pickActiveMembership({

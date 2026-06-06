@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, tenantOwnerProcedure, protectedProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
-import { syntheticChatIdForWebUser, listMembershipsForWebUser } from "~/server/auth/memberships";
+import { listMembershipsForWebUser } from "~/server/auth/memberships";
 import { canOwnMultipleSalons, MAX_OWNED_SALONS } from "~/lib/plan";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
@@ -306,53 +306,32 @@ export const salonRouter = createTRPCRouter({
         .map((b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36])
         .join("");
       const newTenantId = "t_" + rand;
-      const synth = syntheticChatIdForWebUser(ctx.webUser!.id);
       const salonName = sanitizeText(input.name, 200);
 
-      const insTenant = ctx.db.insert(tenants).values({
-        id: newTenantId,
-        name: salonName,
-        active: 1,
-        plan: "max",
-        billingStatus: "active",
-        parentTenantId: homeTenantId,
-        isPersonal: 0,
-        cancelAtPeriodEnd: 0,
-        createdAt: now,
-        updatedAt: now,
-      });
-      const insRole = ctx.db
-        .insert(tenantRoles)
-        .values({ tenantId: newTenantId, chatId: synth, role: "tenant_owner", createdAt: now })
-        .onConflictDoUpdate({
-          target: [tenantRoles.tenantId, tenantRoles.chatId],
-          set: { role: "tenant_owner", createdAt: now },
-        });
-
+      // A secondary salon is a single `tenants` row whose billing parent is the
+      // owner's HOME tenant. Ownership is resolved by parent_tenant_id (unique
+      // per owner, collision-free) — NOT by a synthetic chat id, and with NO
+      // `masters`/`tenant_roles` row, so the owner never leaks into the new
+      // salon's staff list / public booking / master limit. See memberships.ts.
       try {
-        // D1 batch is atomic — first failure rolls back the whole batch. Fall
-        // back to sequential awaits outside D1 (mock db / libsql).
-        const batchCapable = typeof (ctx.db as unknown as { batch?: unknown }).batch === "function";
-        if (batchCapable) {
-          const batch = [insTenant, insRole] as unknown as [unknown, ...unknown[]];
-          await (ctx.db as unknown as { batch: (b: typeof batch) => Promise<unknown> }).batch(batch);
-        } else {
-          await insTenant;
-          await insRole;
-        }
+        await ctx.db.insert(tenants).values({
+          id: newTenantId,
+          name: salonName,
+          active: 1,
+          plan: "max",
+          billingStatus: "active",
+          parentTenantId: homeTenantId,
+          isPersonal: 0,
+          cancelAtPeriodEnd: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
       } catch (e) {
         log.error(
           "salon.createOwnedSalon.insert",
           e instanceof Error ? e : new Error(String(e)),
           { homeTenantId, newTenantId },
         );
-        // Best-effort cleanup when the runtime didn't give us atomicity.
-        try {
-          await ctx.db.delete(tenantRoles).where(and(eq(tenantRoles.tenantId, newTenantId), eq(tenantRoles.chatId, synth)));
-        } catch { /* noop */ }
-        try {
-          await ctx.db.delete(tenants).where(eq(tenants.id, newTenantId));
-        } catch { /* noop */ }
         const msg = e instanceof Error ? e.message : String(e);
         throw new TRPCError({ code: "BAD_REQUEST", message: `Не удалось создать салон: ${msg.slice(0, 200)}` });
       }
@@ -2948,6 +2927,11 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.update(tenants)
         .set({ billingStatus: "paused", pauseResumesAt: resumesAt, updatedAt: now })
         .where(eq(tenants.id, input.tenantId));
+      // Multi-salon cascade (0113): freeze this owner's secondary salons
+      // synchronously so they can't be used during the webhook-delay window.
+      await ctx.db.update(tenants)
+        .set({ billingStatus: "inactive", updatedAt: now })
+        .where(eq(tenants.parentTenantId, input.tenantId));
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null, action: "salon.pauseSubscription",
         tenantId: input.tenantId, detail: resumesAt ? `resumesAt=${resumesAt}` : "indefinite", ip: ctxIp(ctx),
@@ -2973,6 +2957,10 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.update(tenants)
         .set({ billingStatus: "active", pauseResumesAt: null, updatedAt: now })
         .where(eq(tenants.id, input.tenantId));
+      // Multi-salon cascade (0113): restore this owner's secondary salons.
+      await ctx.db.update(tenants)
+        .set({ billingStatus: "active", updatedAt: now })
+        .where(eq(tenants.parentTenantId, input.tenantId));
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null, action: "salon.resumeSubscription",
         tenantId: input.tenantId, detail: "resumed", ip: ctxIp(ctx),

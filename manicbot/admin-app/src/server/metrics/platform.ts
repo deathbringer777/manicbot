@@ -47,6 +47,10 @@ export async function getPlatformMetrics(db: any, nowSec: number): Promise<Platf
       trialEndsAt: tenants.trialEndsAt,
       stripeSubscriptionId: tenants.stripeSubscriptionId,
       isTest: tenants.isTest,
+      // 0113 — let classifyTenant exclude secondary salons. The webUsers JOIN
+      // already drops them (a secondary has no web_users row), but selecting
+      // this keeps the classifier's guard correct if that ever changes.
+      parentTenantId: tenants.parentTenantId,
     })
     .from(tenants)
     .innerJoin(webUsers, eq(webUsers.tenantId, tenants.id))
@@ -56,6 +60,7 @@ export async function getPlatformMetrics(db: any, nowSec: number): Promise<Platf
     trialEndsAt: number | null;
     stripeSubscriptionId: string | null;
     isTest: number | null;
+    parentTenantId: string | null;
   }>;
 
   let ourCustomers = 0;

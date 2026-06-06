@@ -421,6 +421,17 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
             updatedAt: nowSec(),
           });
         }
+        // Multi-salon cascade (0113): mirror the parent's (possibly recovered)
+        // MAX entitlement onto its secondary salons — restore them when the card
+        // clears, keep them frozen if the parent is no longer an active MAX.
+        try {
+          const parent = await dbGet(ctx, 'SELECT plan, billing_status FROM tenants WHERE id = ?', tenantId);
+          const entitled = !!parent && parent.plan === 'max' &&
+            (parent.billing_status === 'active' || parent.billing_status === 'trialing');
+          await setSecondarySalonsBillingStatus(ctx, tenantId, entitled ? 'active' : 'inactive');
+        } catch (e) {
+          log.error('webhook.multiSalonCascade.invoicePaid', e instanceof Error ? e : new Error(String(e)), { tenantId });
+        }
         if (ctx.resendApiKey && ctx.resendFrom) {
           // fire-and-forget: don't block 200 response on email delivery
           sendInvoiceEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, invoice)
@@ -445,6 +456,14 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
           graceEndsAt: nowSec() + msToSec(GRACE_DURATION_MS),
           updatedAt: nowSec(),
         });
+        // Multi-salon cascade (0113): the parent entered grace (card declined) —
+        // freeze its secondary salons so they can't use premium features while
+        // the parent is only entitled to booking during dunning.
+        try {
+          await setSecondarySalonsBillingStatus(ctx, tenantId, 'inactive');
+        } catch (e) {
+          log.error('webhook.multiSalonCascade.paymentFailed', e instanceof Error ? e : new Error(String(e)), { tenantId });
+        }
         // #P1-5 (relax.md §5) — payment_failed notification email.
         // Fire-and-forget so a slow Resend never blocks the 200 we owe Stripe.
         if (ctx.resendApiKey && ctx.resendFrom) {

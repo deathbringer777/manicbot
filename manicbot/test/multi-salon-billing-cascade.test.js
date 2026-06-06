@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { putTenant, getTenant } from '../src/tenant/storage.js';
 import { setSecondarySalonsBillingStatus } from '../src/billing/storage.js';
+import { phaseBillingReconcileSecondaries } from '../src/handlers/cron.js';
 import { createMockD1 } from './helpers/mock-db.js';
 import { nowSec } from '../src/utils/time.js';
 
@@ -65,5 +66,32 @@ describe('setSecondarySalonsBillingStatus — multi-salon cascade (0109)', () =>
   it('is a no-op when the parent has no secondaries', async () => {
     await setSecondarySalonsBillingStatus(ctx, 'no_such_parent', 'inactive');
     expect((await getTenant(ctx, 'sec1')).billingStatus).toBe('active');
+  });
+});
+
+describe('phaseBillingReconcileSecondaries — cascade backstop (0113)', () => {
+  it('re-derives each secondary billing status from its parent and repairs drift', async () => {
+    const ctx = makeCtx();
+    await seed(ctx, 'home', { plan: 'max', billingStatus: 'active' });
+    await seed(ctx, 'sec_drifted', { parentTenantId: 'home', plan: 'max', billingStatus: 'inactive' }); // -> active
+    await seed(ctx, 'sec_ok', { parentTenantId: 'home', plan: 'max', billingStatus: 'active' }); // stays active
+    await seed(ctx, 'pro_home', { plan: 'pro', billingStatus: 'active' }); // not MAX
+    await seed(ctx, 'sec_overactive', { parentTenantId: 'pro_home', plan: 'max', billingStatus: 'active' }); // -> inactive
+
+    await phaseBillingReconcileSecondaries(ctx, Date.now());
+
+    expect((await getTenant(ctx, 'sec_drifted')).billingStatus).toBe('active');
+    expect((await getTenant(ctx, 'sec_ok')).billingStatus).toBe('active');
+    expect((await getTenant(ctx, 'sec_overactive')).billingStatus).toBe('inactive');
+    // Parents are never touched by the backstop.
+    expect((await getTenant(ctx, 'home')).billingStatus).toBe('active');
+    expect((await getTenant(ctx, 'pro_home')).billingStatus).toBe('active');
+  });
+
+  it('is a no-op when there are no secondary salons', async () => {
+    const ctx = makeCtx();
+    await seed(ctx, 'solo', { plan: 'max', billingStatus: 'active' });
+    await phaseBillingReconcileSecondaries(ctx, Date.now());
+    expect((await getTenant(ctx, 'solo')).billingStatus).toBe('active');
   });
 });

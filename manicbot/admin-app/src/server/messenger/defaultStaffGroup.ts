@@ -33,6 +33,7 @@ import {
   threadMembers,
   webUsers,
   masters,
+  tenants,
 } from "~/server/db/schema";
 import { ulid } from "~/lib/ulid";
 import { log } from "~/server/utils/logger";
@@ -69,10 +70,19 @@ export async function ensureDefaultStaffGroup(
     return { threadId: existing[0].id, created: false };
   }
 
+  // For a secondary salon (multi-salon, 0113) the owner's web_users row points
+  // at their HOME tenant, not this salon — resolve ownership via parent_tenant_id
+  // so the default group is still seeded with the owner as its owner member.
+  const [tenantRow] = await db
+    .select({ parentTenantId: tenants.parentTenantId })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  const ownerLookupTenantId = tenantRow?.parentTenantId ?? tenantId;
   const ownerRows = await db
     .select({ id: webUsers.id })
     .from(webUsers)
-    .where(and(eq(webUsers.tenantId, tenantId), eq(webUsers.role, "tenant_owner")))
+    .where(and(eq(webUsers.tenantId, ownerLookupTenantId), eq(webUsers.role, "tenant_owner")))
     .limit(1);
   const ownerWebUserId = ownerRows[0]?.id ?? null;
 

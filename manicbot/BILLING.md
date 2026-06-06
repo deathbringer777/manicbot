@@ -17,22 +17,26 @@ Plan limits are set in `src/billing/config.js` (constant `PLAN_LIMITS`).
 A **MAX-plan** account can own multiple salons (home + up to `MAX_OWNED_SALONS`,
 default 10).
 
-- A **secondary** salon is a `tenants` row with `parent_tenant_id` = the owner's
-  **home** tenant (the billing root), plus a `tenant_roles(role='tenant_owner')`
-  row keyed by the owner's deterministic synthetic chat id (`memberships.ts`).
-  **No `masters` row** — the owner never appears in the new salon's staff list,
-  public booking, or master limit. Ownership is resolved by
-  `listMembershipsForWebUser` / `resolveActiveMembership` (role-agnostic), so the
-  existing salon switcher and tenant guards work unchanged.
+- A **secondary** salon is simply a `tenants` row with `parent_tenant_id` = the
+  owner's **home** tenant (the billing root). **No `masters` row and no
+  `tenant_roles` row** — so the owner never appears in the new salon's staff
+  list, public booking, or master limit. Ownership is resolved by
+  `listMembershipsForWebUser` / `resolveActiveMembership` (`memberships.ts`)
+  purely from `parent_tenant_id = <my home tenant>` — bound by the unique home
+  tenant id (collision-free), **never** a synthetic chat id. The existing salon
+  switcher and tenant guards (`assertTenantOwner`) work unchanged.
 - **Creation:** `salon.createOwnedSalon` (gated on the home plan being `max` +
   the `MAX_OWNED_SALONS` cap). UI: the header `TenantSwitcher` "Create salon"
   entry (visible to MAX owners) → `CreateSalonModal`.
 - **Billing:** secondaries are billed **under the parent's single MAX
   subscription** — they shadow `plan='max'/billingStatus='active'` so `canUse`
-  works locally, are **excluded from MRR / customer counts** (`metrics.ts`,
-  `billing.ts` filter out `parent_tenant_id`-set rows), and are **cascade-frozen**
-  when the parent leaves MAX (`setSecondarySalonsBillingStatus`, fired from the
-  `customer.subscription.updated/deleted` webhook).
+  works locally, are **excluded from MRR / customer counts** (`classifyTenant`
+  buckets a `parent_tenant_id`-set tenant as `none`; the platform JOIN also
+  drops them), and are **cascade-frozen/restored** when the parent's MAX
+  entitlement changes — via `setSecondarySalonsBillingStatus` fired from the
+  `customer.subscription.updated/deleted`, `invoice.payment_failed`, and
+  `invoice.paid` webhooks, plus `pause/resumeSubscription`, with a daily
+  `phaseBillingReconcileSecondaries` cron backstop for lost webhooks.
 
 ---
 

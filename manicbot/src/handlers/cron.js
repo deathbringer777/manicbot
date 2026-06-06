@@ -75,6 +75,9 @@ export const PHASE_WINDOWS = Object.freeze({
   cleanup: 24 * 60 * 60,      // 24 h
   retention: 24 * 60 * 60,    // 24 h (P1-10)
   attachmentGc: 24 * 60 * 60, // 24 h — orphaned messenger attachment sweep
+  // Multi-salon (0113) backstop: re-derive each secondary salon's billing
+  // status from its parent in case a cascade webhook was lost/out-of-order.
+  billingReconcileSecondaries: 24 * 60 * 60, // 24 h
   // PR-A marketing send dispatch — tight window because we want scheduled
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
   marketingDispatch: 60,
@@ -1120,6 +1123,59 @@ export async function phasePluginCron(ctx, nowMs, dispatchers = PLUGIN_CRON_DISP
  *   - Catches throws, emits `cron.phase.error`, and continues to next phase.
  *   - Persists the last-run epoch on success.
  */
+/**
+ * Multi-salon billing backstop (0113). Stripe webhook delivery is not
+ * guaranteed, so a secondary salon's billing_status can drift out of sync with
+ * its parent's MAX entitlement. Once a day, re-derive each secondary's status
+ * from its parent (active iff the parent is an active/trialing MAX) and repair
+ * any mismatch. Idempotent: rows already in the correct state are skipped.
+ */
+export async function phaseBillingReconcileSecondaries(ctx, _now) {
+  if (!ctx?.db) return;
+  const secondaries = await dbAll(
+    ctx,
+    'SELECT id, parent_tenant_id, billing_status FROM tenants WHERE parent_tenant_id IS NOT NULL',
+  );
+  if (!secondaries?.length) return;
+
+  // Cache parent entitlement so N secondaries of one parent cost one lookup.
+  const parentEntitled = new Map();
+  const ts = Math.floor(Date.now() / 1000);
+  let repaired = 0;
+
+  for (const sec of secondaries) {
+    const pid = sec.parent_tenant_id;
+    if (!parentEntitled.has(pid)) {
+      const parent = await dbGet(ctx, 'SELECT plan, billing_status FROM tenants WHERE id = ?', pid);
+      const entitled = !!parent && parent.plan === 'max' &&
+        (parent.billing_status === 'active' || parent.billing_status === 'trialing');
+      parentEntitled.set(pid, entitled);
+    }
+    const target = parentEntitled.get(pid) ? 'active' : 'inactive';
+    if (sec.billing_status !== target) {
+      try {
+        await dbRun(ctx, 'UPDATE tenants SET billing_status = ?, updated_at = ? WHERE id = ?', target, ts, sec.id);
+        repaired += 1;
+      } catch (e) {
+        log.warn('handlers.cron', {
+          action: 'billing_reconcile_secondary_failed',
+          secondaryId: sec.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+  }
+
+  if (repaired > 0) {
+    void logEvent(ctx, 'cron.billing.secondaries_reconciled', {
+      level: 'info',
+      tenantId: ctx.tenantId,
+      message: `Repaired billing status for ${repaired} secondary salon(s)`,
+      repaired,
+    });
+  }
+}
+
 export async function handleCron(ctx) {
   try {
     await initServices(ctx);
@@ -1197,6 +1253,9 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));
     await runPhase(ctx, 'attachmentGc', () => phaseAttachmentGc(ctx, ctx.tenantId, now));
+    // Multi-salon (0113): repair any secondary-salon billing drift left by a
+    // lost/out-of-order cascade webhook. Idempotent; windowed to 24h.
+    await runPhase(ctx, 'billingReconcileSecondaries', () => phaseBillingReconcileSecondaries(ctx, now));
     // PR-A: marketing campaign dispatch. Picks up status='scheduled' rows
     // whose scheduled_at <= now, plus rebooks any campaign stuck in
     // status='sending' for >30min (crashed mid-fan-out).

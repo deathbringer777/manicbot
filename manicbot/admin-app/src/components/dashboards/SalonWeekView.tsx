@@ -858,10 +858,10 @@ export function SalonWeekView({
                             ...(blockBusy ? { opacity: 0.4 } : {}),
                             ...(blockDrag?.style ?? {}),
                           }}
-                          title={b.reason ?? (b.type === "reservation" ? "Резерв" : "Перерыв / выходной")}
+                          title={b.reason ?? t(b.type === "reservation" ? "cal.block.reserved" : "cal.block.timeOff", lang)}
                         >
                           <Lock className="h-2.5 w-2.5 shrink-0" />
-                          <span className="text-[9px] font-medium truncate">{b.reason ?? (b.type === "reservation" ? "Reserved" : "Time off")}</span>
+                          <span className="text-[9px] font-medium truncate">{b.reason ?? t(b.type === "reservation" ? "cal.block.reserved" : "cal.block.timeOff", lang)}</span>
                           {blockResize && (
                             <span
                               data-no-drag

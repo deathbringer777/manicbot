@@ -639,6 +639,10 @@ const translations = {
   "salon.fab.timeOffDesc":               { ru: "Обед, выходной, отпуск", ua: "Обід, вихідний, відпустка", en: "Lunch, day off, vacation", pl: "Lunch, wolne, urlop" },
   "salon.fab.comingSoon":                { ru: "Скоро", ua: "Скоро", en: "Soon", pl: "Wkrótce" },
 
+  // Compact band labels rendered on the calendar grid (day + week views).
+  "cal.block.reserved":                  { ru: "Резерв", ua: "Резерв", en: "Reserved", pl: "Rezerwacja" },
+  "cal.block.timeOff":                   { ru: "Перерыв", ua: "Перерва", en: "Time off", pl: "Wolne" },
+
   // Calendar overhaul (2026-05-16) — Time-reservation dialog (FAB scenario 2).
   "block.reservation.title":             { ru: "Резерв времени", ua: "Резерв часу", en: "Time reservation", pl: "Rezerwacja czasu" },
   "block.reservation.subtitle":          { ru: "Заблокируйте слот в календаре без записи клиента", ua: "Заблокуйте слот без клієнта", en: "Hold a slot in the calendar without a client", pl: "Zablokuj slot bez klienta" },

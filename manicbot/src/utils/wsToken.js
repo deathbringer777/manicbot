@@ -24,14 +24,14 @@ function base64urlEncode(buf) {
   let s = '';
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
   // btoa is available in workers/edge runtime
-  // eslint-disable-next-line no-undef
+   
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function base64urlDecodeToBytes(s) {
   const pad = '='.repeat((4 - (s.length % 4)) % 4);
   const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
-  // eslint-disable-next-line no-undef
+   
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);

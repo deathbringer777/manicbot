@@ -2,8 +2,10 @@ import { send, sendIcs } from './telegram.js';
 import { log } from './utils/logger.js';
 import { escHtml, fill, t, svcName, isCorrectionSvc, p2 } from './utils/helpers.js';
 import { fmtDT, fmtDate, warsawNow } from './utils/date.js';
-import { ADDRESS, MAPS_URL, CB } from './config.js';
+import { ADDRESS, MAPS_URL, CB, EMAIL_CAPTURE } from './config.js';
 import { listMasters, getAdminId, getUser, canManageApt, masterTelegramRecipient } from './services/users.js';
+import { shouldAskEmail } from './services/marketing/contacts.js';
+import { askEmail } from './ui/emailAsk.js';
 import { getLang } from './services/chat.js';
 import { kvPut, kvGet } from './utils/kv.js';
 import { makeICS, makeCalendarUrl } from './utils/ics.js';
@@ -283,6 +285,14 @@ export async function sendAptConfirmedToClient(ctx, apt) {
   if (calUrl) {
     const linkText = { ru: '📅 Добавить в календарь', en: '📅 Add to calendar', pl: '📅 Dodaj do kalendarza', ua: '📅 Додати до календаря' };
     await send(ctx, apt.chatId, `<a href="${calUrl}">${linkText[lg] || linkText.ru}</a>`, { parse_mode: 'HTML' });
+  }
+
+  // Scenario A — after a confirmed booking, invite the client to leave an email
+  // (gated by anti-nag + flag). This is the primary capture point; it never
+  // fires mid-booking — the booking is already confirmed by the time we're here.
+  if (EMAIL_CAPTURE.enabled && EMAIL_CAPTURE.postBooking) {
+    const u = await getUser(ctx, apt.chatId).catch(() => null);
+    if (shouldAskEmail(u)) await askEmail(ctx, apt.chatId, lg).catch(() => {});
   }
 }
 

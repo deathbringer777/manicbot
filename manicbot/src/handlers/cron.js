@@ -21,7 +21,7 @@
  * isolation.
  */
 
-import { CLEANUP_AFTER_MS, ADDRESS, MAPS_URL } from '../config.js';
+import { CLEANUP_AFTER_MS, ADDRESS, MAPS_URL, EMAIL_CAPTURE } from '../config.js';
 import { log } from '../utils/logger.js';
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { extractAttachmentKeys } from '../services/attachmentKeys.js';
@@ -43,6 +43,8 @@ import { isTokenExpiring, refreshInstagramToken } from '../channels/token-manage
 import { cleanupExpired as cleanupRateLimits } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
 import { runCampaignSend as runMarketingCampaign } from '../services/marketing/sender.js';
+import { isReaskEligible, EMAIL_REASK_BATCH, EMAIL_REASK_SCAN_LIMIT } from '../services/marketing/contacts.js';
+import { askEmail } from '../ui/emailAsk.js';
 import { fireAutomationForEvent } from '../services/marketing/automations.js';
 import { phasePlatformCampaigns } from '../services/platformCampaigns.js';
 
@@ -81,6 +83,7 @@ export const PHASE_WINDOWS = Object.freeze({
   cleanup: 24 * 60 * 60,      // 24 h
   retention: 24 * 60 * 60,    // 24 h (P1-10)
   attachmentGc: 24 * 60 * 60, // 24 h — orphaned messenger attachment sweep
+  emailPrompt: 24 * 60 * 60,  // 24 h — proactive email re-ask (Scenario C, OFF by default)
   // PR-A marketing send dispatch — tight window because we want scheduled
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
   marketingDispatch: 60,
@@ -1172,6 +1175,54 @@ export async function phaseRetention(ctx, tenantId, _now) {
   }
 }
 
+/**
+ * Scenario C — proactive email re-ask (Telegram-only, OFF by default).
+ *
+ * When enabled (EMAIL_CAPTURE.reaskCron), each tick picks a small capped batch
+ * of THIS tenant's clients who have no email, never answered the ask, are under
+ * the prompt cap + past the cooldown, and first contacted us long enough ago
+ * (isReaskEligible) — including people who only used the bot and never booked.
+ * They get the same askEmail (which stamps the anti-nag cooldown).
+ *
+ * Telegram-only via chat_id > 0 (TG private chats are positive; web/synthetic
+ * ids are negative or session-hashed). WhatsApp/Instagram forbid messaging
+ * outside a 24h window and the web widget can't be pushed to. Refine via
+ * channel_identities before enabling in production.
+ */
+export async function phaseEmailPrompt(ctx, now) {
+  if (!ctx?.db || !ctx?.tenantId) return;
+  if (!(EMAIL_CAPTURE.enabled && EMAIL_CAPTURE.reaskCron)) return;
+  const nowS = Math.floor(now / 1000);
+  const rows = await dbAll(ctx,
+    `SELECT chat_id, email, email_opt_in, email_prompt_count, email_prompt_last_at, first_touch_at, registered_at
+       FROM users
+      WHERE tenant_id = ? AND email IS NULL AND email_opt_in IS NULL AND chat_id > 0 AND deleted_at IS NULL
+      LIMIT ?`,
+    ctx.tenantId, EMAIL_REASK_SCAN_LIMIT,
+  ).catch(() => []);
+  let sent = 0;
+  for (const r of rows) {
+    if (sent >= EMAIL_REASK_BATCH) break;
+    const user = {
+      email: r.email, emailOptIn: r.email_opt_in, emailPromptCount: r.email_prompt_count,
+      emailPromptLastAt: r.email_prompt_last_at, firstTouchAt: r.first_touch_at, registeredAt: r.registered_at,
+    };
+    if (!isReaskEligible(user, nowS)) continue;
+    const cid = Number(r.chat_id);
+    if (!Number.isFinite(cid)) continue;
+    const lg = (await getLang(ctx, cid).catch(() => null)) || 'ru';
+    try {
+      await askEmail(ctx, cid, lg);
+      sent++;
+    } catch (e) {
+      log.warn('handlers.cron', { action: 'email_prompt_send_failed', error: e?.message?.slice(0, 120) });
+    }
+  }
+  if (sent > 0) {
+    void logEvent(ctx, 'cron.email_prompt.sent', { level: 'info', tenantId: ctx.tenantId, message: `Re-asked ${sent} clients for email`, count: sent });
+  }
+}
+
 // ─── PR-A: Marketing campaign dispatch ───────────────────────────────────
 /**
  * Pick up `marketing_campaigns` that are due and fan them out via the
@@ -1397,6 +1448,9 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));
     await runPhase(ctx, 'attachmentGc', () => phaseAttachmentGc(ctx, ctx.tenantId, now));
+    // Scenario C: proactive email re-ask (Telegram-only). No-op unless
+    // EMAIL_CAPTURE.reaskCron is enabled; gated + capped + anti-nag inside.
+    await runPhase(ctx, 'emailPrompt', () => phaseEmailPrompt(ctx, now));
     // PR-A: marketing campaign dispatch. Picks up status='scheduled' rows
     // whose scheduled_at <= now, plus rebooks any campaign stuck in
     // status='sending' for >30min (crashed mid-fan-out).

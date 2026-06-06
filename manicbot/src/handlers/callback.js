@@ -158,6 +158,28 @@ export async function onCb(ctx, cb) {
     return showHomeByRole(ctx, cid, name);
   }
 
+  // ── Email capture: client tapped a button on the "leave your email" ask ──
+  if (d === CB.EMAIL_YES) {
+    const lg = (await getLang(ctx, cid)) || 'ru';
+    const st = await getState(ctx, cid);
+    st.step = STEP.EMAIL_WAIT;
+    await setState(ctx, cid, st);
+    return send(ctx, cid, t(lg, 'email_ask_prompt'));
+  }
+  if (d === CB.EMAIL_NO) {
+    // Soft decline: the prompt was already stamped at ask time (cooldown +
+    // count). Leave email_opt_in NULL so a later scenario can re-ask within the
+    // cap; the hard "never" path is the in-chat unsubscribe (CB.EMAIL_OPTOUT).
+    const lg = (await getLang(ctx, cid)) || 'ru';
+    return send(ctx, cid, t(lg, 'email_declined'));
+  }
+  if (d === CB.EMAIL_OPTOUT) {
+    const lg = (await getLang(ctx, cid)) || 'ru';
+    const { setChatEmailOptOut } = await import('../services/marketing/contacts.js');
+    await setChatEmailOptOut(ctx, cid, { source: 'chat_settings' }).catch(() => {});
+    return send(ctx, cid, t(lg, 'email_optout_done'));
+  }
+
   // Sprint 3 §8: post-visit confirmation callbacks (master clicks Yes/No-show).
   if (d.startsWith('visit_ok:') || d.startsWith('visit_noshow:')) {
     const aptId = d.split(':', 2)[1];

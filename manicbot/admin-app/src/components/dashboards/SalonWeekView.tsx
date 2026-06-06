@@ -37,13 +37,11 @@ import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHour
 
 const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row in Week)
 
-// The visible hour window is computed per-week from the salon's working hours
-// (see computeVisibleHourWindow). These are only the FALLBACK bounds, used when
-// no workHours are supplied (God-Mode / per-master callers), plus the floor for
-// how small the window may shrink.
-const DEFAULT_HOUR_START = 8; // 08:00
-const DEFAULT_HOUR_END = 22; // 22:00
-const MIN_WINDOW_HOURS = 6; // never collapse the grid to a cramped sliver
+// The grid always renders the FULL 24h day (Google-Calendar style) so night and
+// early-morning slots stay reachable by scrolling. Working hours no longer clip
+// the grid — they only pick the default scroll anchor (see preferredStartHour),
+// capped at PREFERRED_SCROLL_HOUR so the viewport opens on the working morning.
+const PREFERRED_SCROLL_HOUR = 9; // default viewport top — 09:00
 
 // Softened diagonal gray for closed / blocked time. Deliberately lighter than a
 // solid fill so a week with legitimate days off reads as "lightly closed", not
@@ -193,77 +191,6 @@ function weekDays(d: Date): Date[] {
   return out;
 }
 
-/**
- * Pick the [start, end] hour window the week grid renders.
- *
- * Policy (tunable):
- *   1. Base window = the salon's working hours — earliest open / latest close
- *      across the seven visible weekdays. Without workHours (God-Mode / per-
- *      master callers) fall back to the broad DEFAULT_HOUR_START..END so their
- *      behaviour is unchanged.
- *   2. Never clip real data: widen the window to cover any appointment or timed
- *      block in the week that falls outside the base window. Full-day and
- *      multi-day bands are skipped — they span 00:00–24:00 and would blow the
- *      window back open to the whole day, defeating the point.
- *   3. Snap to whole hours, clamp to [0, 24], and guarantee MIN_WINDOW_HOURS so
- *      a single short appointment can't collapse the grid to a sliver.
- *
- * Fitting the window to working hours is what removes both reported problems:
- * the morning is no longer scrolled away behind a fixed 08:00–22:00 grid, and a
- * normal working day shows no off-hours hatching (the window edges ARE the
- * open/close times).
- */
-function computeVisibleHourWindow(
-  workHours: WorkHoursState | undefined,
-  apts: AptRow[],
-  blocks: DayViewBlock[] | undefined,
-  days: Date[],
-): { start: number; end: number } {
-  let openMin = DEFAULT_HOUR_START * 60;
-  let closeMin = DEFAULT_HOUR_END * 60;
-
-  if (workHours) {
-    let minOpen = Infinity;
-    let maxClose = -Infinity;
-    for (const key of WEEKDAY_KEYS) {
-      const dh = workHours[key];
-      if (!dh) continue;
-      minOpen = Math.min(minOpen, parseHHMMToMinutes(dh.open));
-      maxClose = Math.max(maxClose, parseHHMMToMinutes(dh.close));
-    }
-    // Only adopt the salon hours when they form a valid window; an all-days-off
-    // or malformed config falls through to the default bounds above.
-    if (minOpen < maxClose) {
-      openMin = minOpen;
-      closeMin = maxClose;
-    }
-  }
-
-  const dayIso = new Set(days.map(fmtIsoDate));
-  for (const a of apts) {
-    if (!dayIso.has(a.date)) continue;
-    const s = parseHHMMToMinutes(a.time);
-    openMin = Math.min(openMin, s);
-    closeMin = Math.max(closeMin, s + (typeof a.duration === "number" ? a.duration : 60));
-  }
-  for (const b of blocks ?? []) {
-    const isMultiDay = !!b.endDate && b.endDate !== b.date;
-    if (isMultiDay || b.durationMin >= 24 * 60) continue;
-    if (!dayIso.has(b.date)) continue;
-    const s = parseHHMMToMinutes(b.time);
-    openMin = Math.min(openMin, s);
-    closeMin = Math.max(closeMin, s + b.durationMin);
-  }
-
-  let start = Math.max(0, Math.floor(openMin / 60));
-  let end = Math.min(24, Math.ceil(closeMin / 60));
-  if (end - start < MIN_WINDOW_HOURS) {
-    end = Math.min(24, start + MIN_WINDOW_HOURS);
-    start = Math.max(0, end - MIN_WINDOW_HOURS);
-  }
-  return { start, end };
-}
-
 export function SalonWeekView({
   date,
   setDate,
@@ -294,14 +221,28 @@ export function SalonWeekView({
   // the "+ Запись" button instead. Desktop (mouse/trackpad) is unchanged.
   const isTouch = useCoarsePointer();
   const days = useMemo(() => weekDays(date), [date]);
-  // Visible hour window — fitted to the salon's working hours, widened to cover
-  // any out-of-hours item. Computed BEFORE the drag hooks because they map a
-  // pointer's Y → time against [hourStart, hourEnd].
-  const { start: hourStart, end: hourEnd } = useMemo(
-    () => computeVisibleHourWindow(workHours, apts, blocks, days),
-    [workHours, apts, blocks, days],
-  );
+  // Full 24h grid (Google-Calendar style). hourStart/hourEnd are fixed; the drag
+  // hooks + geometry below map a pointer's Y → time against [hourStart, hourEnd],
+  // so a 0..24 range simply means nothing is clipped.
+  const hourStart = 0;
+  const hourEnd = 24;
   const totalHours = hourEnd - hourStart;
+  // Default scroll anchor — earliest salon open across the week, capped at 09:00
+  // so the viewport opens on the working morning but still reveals an earlier
+  // opening (e.g. a 07:00 cleaning shift) instead of hiding it above.
+  const preferredStartHour = useMemo(() => {
+    let openMin = PREFERRED_SCROLL_HOUR * 60;
+    if (workHours) {
+      for (const key of WEEKDAY_KEYS) {
+        const dh = workHours[key];
+        if (!dh) continue;
+        const o = parseHHMMToMinutes(dh.open);
+        const c = parseHHMMToMinutes(dh.close);
+        if (c > o) openMin = Math.min(openMin, o);
+      }
+    }
+    return Math.max(0, Math.floor(openMin / 60));
+  }, [workHours]);
   const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
     hourHeight: HOUR_HEIGHT,
     hourStart,
@@ -388,15 +329,19 @@ export function SalonWeekView({
   // Horizontal scroll keeps today centred on mobile (where the 7 columns
   // overflow the viewport and the user otherwise lands on Monday).
   useEffect(() => {
-    if (!weekHasToday || !scrollerRef.current) return;
+    if (!scrollerRef.current) return;
+    // Vertical: land on "now" when the visible week contains today, otherwise
+    // open on the working morning (the full 24h grid would else show 00:00).
     const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    const top = ((minutes - hourStart * 60) / 60) * HOUR_HEIGHT;
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const targetMin = weekHasToday ? Math.max(nowMin, preferredStartHour * 60) : preferredStartHour * 60;
+    const top = (targetMin / 60) * HOUR_HEIGHT;
     const todayIdx = days.findIndex((d) => fmtIsoDate(d) === todayIso);
     const tid = window.setTimeout(() => {
       const el = scrollerRef.current;
       if (!el) return;
-      if (top >= 0) el.scrollTo({ top: Math.max(0, top - HOUR_HEIGHT * 1.5), behavior: "smooth" });
+      el.scrollTo({ top: Math.max(0, top - HOUR_HEIGHT * 1.5), behavior: "smooth" });
+      // Horizontal: keep today centred on mobile, where the 7 columns overflow.
       if (todayIdx >= 0) {
         const colWidthNow = isMobile ? 100 : 140;
         const left = todayIdx * colWidthNow;
@@ -404,7 +349,7 @@ export function SalonWeekView({
       }
     }, 100);
     return () => window.clearTimeout(tid);
-  }, [weekHasToday, days, todayIso, isMobile, hourStart]);
+  }, [weekHasToday, days, todayIso, isMobile, preferredStartHour]);
 
   // Current-time line.
   const [nowMinutes, setNowMinutes] = useState(() => {

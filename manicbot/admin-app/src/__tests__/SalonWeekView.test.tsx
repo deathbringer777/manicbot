@@ -187,7 +187,7 @@ describe("SalonWeekView", () => {
     expect(events[0]?.getAttribute("data-apt-id")).toBe("1");
   });
 
-  it("positions an event at the correct top offset (10:00 → 96px @ 48px/hour)", () => {
+  it("positions an event at the correct top offset (10:00 → 480px @ 48px/hour)", () => {
     renderWithLang(
       <SalonWeekView
         date={new Date("2026-05-10T12:00:00")}
@@ -200,8 +200,8 @@ describe("SalonWeekView", () => {
       "en",
     );
     const block = screen.getByTestId("week-view-event");
-    // 10:00 minus 8:00 = 2 hours × 48px = 96px
-    expect(block.style.top).toBe("96px");
+    // Full 24h grid: 10:00 from a 00:00 origin = 10 hours × 48px = 480px.
+    expect(block.style.top).toBe("480px");
     expect(block.style.height).toBe("48px");
   });
 
@@ -381,13 +381,12 @@ describe("SalonWeekView", () => {
         "[data-testid='week-view-non-working']",
       );
       expect(bands.length).toBe(1);
-      // The window now fits the salon hours (09:00–20:00) → 11h × 48px = 528px
-      // full-height band (was 672px under the old fixed 08:00–22:00 grid).
-      expect((bands[0] as HTMLElement).style.height).toBe("528px");
+      // Full 24h grid → a day off is one full-height band: 24h × 48px = 1152px.
+      expect((bands[0] as HTMLElement).style.height).toBe("1152px");
       expect(bands[0]!.getAttribute("style")).toContain("repeating-linear-gradient");
     });
 
-    it("fits the grid to salon working hours — a 09:00 appointment sits at the very top", () => {
+    it("positions a 09:00 appointment at its absolute offset on the full-day grid", () => {
       renderWithLang(
         <SalonWeekView
           date={new Date("2026-05-10T12:00:00")}
@@ -403,13 +402,12 @@ describe("SalonWeekView", () => {
       const ev = colByDay("2026-05-04").querySelector(
         "[data-testid='week-view-event']",
       ) as HTMLElement;
-      // Window starts at 09:00, so a 09:00 booking is flush with the top
-      // (it would have been 48px down under the old fixed 08:00 grid).
-      expect(ev.style.top).toBe("0px");
+      // Full grid from 00:00 → 09:00 sits at 9×48 = 432px (no longer clipped).
+      expect(ev.style.top).toBe("432px");
       expect(ev.style.height).toBe("48px");
     });
 
-    it("shows NO off-hours shading on a normal working day (window == working hours)", () => {
+    it("hatches before-open and after-close on the full 24h grid for a working day", () => {
       renderWithLang(
         <SalonWeekView
           date={new Date("2026-05-10T12:00:00")}
@@ -422,21 +420,24 @@ describe("SalonWeekView", () => {
         />,
         "en",
       );
-      // Mon–Sat 09:00–20:00 with the window fitted to those exact hours leaves
-      // nothing to hatch — the previous fixed 08:00–22:00 grid always drew
-      // before-open + after-close bands here.
-      const bands = colByDay("2026-05-04").querySelectorAll(
-        "[data-testid='week-view-non-working']",
-      );
-      expect(bands.length).toBe(0);
+      // Mon 09:00–20:00 on the full 00:00–24:00 grid leaves the night / early
+      // morning (00:00–09:00) and the evening (20:00–24:00) hatched as off-hours.
+      const bands = Array.from(
+        colByDay("2026-05-04").querySelectorAll("[data-testid='week-view-non-working']"),
+      ) as HTMLElement[];
+      // before-open 00–09 (top 0, h 9×48=432) + after-close 20–24 (top 960, h 192).
+      expect(bands.length).toBe(2);
+      expect(bands.find((b) => b.style.top === "0px")?.style.height).toBe("432px");
+      expect(bands.find((b) => b.style.top === "960px")?.style.height).toBe("192px");
     });
 
-    it("widens the window for an out-of-hours appointment and shades the leftover off-hours", () => {
+    it("positions an out-of-hours (21:00) appointment on the full grid", () => {
       renderWithLang(
         <SalonWeekView
           date={new Date("2026-05-10T12:00:00")}
           setDate={() => undefined}
-          // 21:00 booking on Monday pushes the close to 22:00 → window 09:00–22:00.
+          // 21:00 booking on Monday — outside the 09:00–20:00 window — is no
+          // longer clipped; it sits at its absolute offset on the 24h grid.
           apts={[apt({ id: 1, date: "2026-05-04", time: "21:00", duration: 60 })]}
           masters={masters}
           isLoading={false}
@@ -445,15 +446,11 @@ describe("SalonWeekView", () => {
         />,
         "en",
       );
-      const bands = Array.from(
-        colByDay("2026-05-04").querySelectorAll("[data-testid='week-view-non-working']"),
-      ) as HTMLElement[];
-      // Monday closes at 20:00 inside a 09:00–22:00 window → one after-close band:
-      // top = (20−9)×48 = 528px, height = (22−20)×48 = 96px. No before-open band
-      // because the window opens exactly at 09:00.
-      expect(bands.length).toBe(1);
-      const after = bands.find((b) => b.style.top === "528px");
-      expect(after?.style.height).toBe("96px");
+      const ev = colByDay("2026-05-04").querySelector(
+        "[data-testid='week-view-event']",
+      ) as HTMLElement;
+      // 21:00 → 21×48 = 1008px.
+      expect(ev.style.top).toBe("1008px");
     });
 
     it("shades the whole column when the salon is closed that weekday", () => {
@@ -473,8 +470,8 @@ describe("SalonWeekView", () => {
         "[data-testid='week-view-non-working']",
       );
       expect(bands.length).toBe(1);
-      // Other days keep 09:00–20:00 → window 11h → 528px full band on Monday.
-      expect((bands[0] as HTMLElement).style.height).toBe("528px");
+      // Full 24h grid → closed day is one full-height band: 24h × 48px = 1152px.
+      expect((bands[0] as HTMLElement).style.height).toBe("1152px");
     });
   });
 });

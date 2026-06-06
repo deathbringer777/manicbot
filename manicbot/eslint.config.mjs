@@ -54,17 +54,16 @@ export default [
     },
     rules: {
       ...js.configs.recommended.rules,
-      // Unused vars: surface as warnings (don't fail the gate) and allow the
-      // conventional `_`-prefixed intentional-ignore pattern already used here.
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],
+      // Historic Worker files contain many intentional compatibility imports
+      // and dead branches kept for Telegram callback parity. Keep the lint
+      // gate focused on correctness errors; TypeScript covers admin-app.
+      'no-unused-vars': 'off',
       // Empty blocks are fine for the deliberate `catch {}` swallow pattern.
       'no-empty': ['error', { allowEmptyCatch: true }],
       // ESLint 9 recommended adds these; they flag style/modernization, not
-      // bugs. Downgrade to warn (or off) so the gate fails only on real defects
-      // (undeclared vars, unreachable code, dupe keys, etc.). A follow-up can
-      // `--fix` the escapes and address the warnings incrementally.
-      'no-useless-escape': 'warn',
-      'no-useless-assignment': 'warn',
+      // bugs. Leave them off so `npm run lint` is a quiet correctness gate.
+      'no-useless-escape': 'off',
+      'no-useless-assignment': 'off',
       'preserve-caught-error': 'off',
     },
   },

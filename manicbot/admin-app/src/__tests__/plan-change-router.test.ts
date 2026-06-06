@@ -191,7 +191,7 @@ describe("salon.pauseSubscription / resumeSubscription", () => {
     const res = await ownerCaller(db).pauseSubscription({ tenantId: TENANT });
     expect(res).toEqual({ ok: true, resumesAt: null });
     expect(stripePauseSubscription).toHaveBeenCalledWith("sk_test_xxx", SUB_ID, null);
-    // [0] = the tenant's own pause; [1] = the multi-salon cascade (0113) that
+    // [0] = the tenant's own pause; [1] = the multi-salon cascade (0116) that
     // freezes this owner's secondary salons.
     expect(updateCalls[0]!.values).toMatchObject({ billingStatus: "paused", pauseResumesAt: null });
     expect(updateCalls).toHaveLength(2);
@@ -224,7 +224,7 @@ describe("salon.pauseSubscription / resumeSubscription", () => {
     const res = await ownerCaller(db).resumeSubscription({ tenantId: TENANT });
     expect(res).toEqual({ ok: true });
     expect(stripeResumeSubscription).toHaveBeenCalledWith("sk_test_xxx", SUB_ID);
-    // [0] = the tenant's own resume; [1] = the multi-salon cascade (0113) that
+    // [0] = the tenant's own resume; [1] = the multi-salon cascade (0116) that
     // restores this owner's secondary salons.
     expect(updateCalls[0]!.values).toMatchObject({ billingStatus: "active", pauseResumesAt: null });
     expect(updateCalls).toHaveLength(2);

@@ -21,7 +21,7 @@
  * isolation.
  */
 
-import { CLEANUP_AFTER_MS, ADDRESS, MAPS_URL } from '../config.js';
+import { CLEANUP_AFTER_MS, ADDRESS, MAPS_URL, EMAIL_CAPTURE } from '../config.js';
 import { log } from '../utils/logger.js';
 import { dbAll, dbGet, dbRun } from '../utils/db.js';
 import { extractAttachmentKeys } from '../services/attachmentKeys.js';
@@ -30,7 +30,8 @@ import { warsawNow, fmtDT } from '../utils/date.js';
 import { send } from '../telegram.js';
 import { getLang } from '../services/chat.js';
 import { initServices, getConfig } from '../services/services.js';
-import { checkBillingExpiry } from '../billing/lifecycle.js';
+import { checkBillingExpiry, billingLockoutDeadline } from '../billing/lifecycle.js';
+import { notifyTenantOwner } from '../services/userNotify.js';
 import { renewExpiringGoogleWatches, syncAppointmentCalendar } from '../services/google-calendar-oauth.js';
 import { canUse } from '../billing/features.js';
 import { isWithinMessageWindow } from './inbound.js';
@@ -42,6 +43,9 @@ import { isTokenExpiring, refreshInstagramToken } from '../channels/token-manage
 import { cleanupExpired as cleanupRateLimits } from '../utils/rateLimit.js';
 import { logEvent } from '../utils/events.js';
 import { runCampaignSend as runMarketingCampaign } from '../services/marketing/sender.js';
+import { isReaskEligible, EMAIL_REASK_BATCH, EMAIL_REASK_SCAN_LIMIT } from '../services/marketing/contacts.js';
+import { askEmail } from '../ui/emailAsk.js';
+import { fireAutomationForEvent } from '../services/marketing/automations.js';
 import { phasePlatformCampaigns } from '../services/platformCampaigns.js';
 
 /**
@@ -71,13 +75,18 @@ export const PHASE_WINDOWS = Object.freeze({
   reviews: 24 * 60 * 60,      // 24 h
   gcalSync: 10 * 60,          // 10 min
   postVisit: 60 * 60,         // 1 h
+  // Post-visit follow-up sweep (24h after the visit). 10-min window so it
+  // catches up within a tick or two; the followup_24h_sent_at flag is the
+  // real idempotency, not this window.
+  postVisitFollowup: 10 * 60, // 10 min
   promos: 24 * 60 * 60,       // 24 h
   cleanup: 24 * 60 * 60,      // 24 h
   retention: 24 * 60 * 60,    // 24 h (P1-10)
   attachmentGc: 24 * 60 * 60, // 24 h — orphaned messenger attachment sweep
-  // Multi-salon (0113) backstop: re-derive each secondary salon's billing
+  // Multi-salon (0116) backstop: re-derive each secondary salon's billing
   // status from its parent in case a cascade webhook was lost/out-of-order.
   billingReconcileSecondaries: 24 * 60 * 60, // 24 h
+  emailPrompt: 24 * 60 * 60,  // 24 h — proactive email re-ask (Scenario C, OFF by default)
   // PR-A marketing send dispatch — tight window because we want scheduled
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
   marketingDispatch: 60,
@@ -87,6 +96,11 @@ export const PHASE_WINDOWS = Object.freeze({
   // fire within ~one cron tick of becoming due. Idempotency is the delivery
   // ledger, not this window.
   platformCampaigns: 60,
+  // Billing lockout warnings (24h-before notice). 6h window: the bell only
+  // ever fires once per deadline-day (sourceId is the deadline's date), so a
+  // tight tick cadence buys nothing — 6h keeps the per-tenant DB write rate low
+  // while still surfacing the warning comfortably inside the final 24h.
+  billingWarnings: 6 * 60 * 60,
 });
 
 /**
@@ -329,6 +343,71 @@ export async function phaseChannelHealth(ctx, nowMs) {
     return;
   }
   await setPhaseLastRun(ctx, 'channel_health', nowSec);
+}
+
+// 24h before a hard billing lockout we warn the salon owner once. The bot
+// keeps booking through the buffer/grace and only turns OFF at the lockout
+// itself (canUse handles that) — this phase is purely the heads-up bell.
+const BILLING_WARNING_LEAD_SEC = 24 * 60 * 60;
+
+/**
+ * Fire a one-shot "your access is about to change" bell at the tenant owner
+ * within the final 24h before a billing transition.
+ *
+ * Two flavours, derived purely from the tenant row (see billingLockoutDeadline):
+ *   - kind 'lockout'      → hard `billing.access_limiting_soon` (grace_period
+ *     running out, or a cancel-at-period-end subscription). telegram:true.
+ *   - kind 'grant_ending' → soft `billing.grant_ending` for comped (free-grant)
+ *     accounts. NO lockout language — comped is never auto-disabled.
+ *
+ * Idempotency is layered: `runPhase` claims a 6h window, AND the bell's
+ * `sourceId` is bucketed by the deadline's calendar day so notifyTenantOwner's
+ * (web_user_id, source_slug, source_id, kind) UNIQUE collapses repeats to one
+ * row per deadline-day even if the window is bypassed.
+ *
+ * @param {object} ctx   - tenant ctx (db, tenantId, tenant, bot…)
+ * @param {number} nowMs - epoch ms
+ */
+export async function phaseBillingWarnings(ctx, nowMs) {
+  if (!ctx?.db || !ctx?.tenantId || !ctx?.tenant) return;
+  const nowSec = Math.floor((nowMs ?? Date.now()) / 1000);
+
+  const { deadline, kind } = billingLockoutDeadline(ctx.tenant, nowSec);
+  // Nothing pending, already passed, or still more than 24h out → no warning.
+  if (!kind || !deadline) return;
+  if (deadline <= nowSec || (deadline - nowSec) > BILLING_WARNING_LEAD_SEC) return;
+
+  // Bucket by the deadline's date so the bell fires at most once per deadline.
+  const deadlineDayBucket = new Date(deadline * 1000).toISOString().slice(0, 10);
+
+  try {
+    if (kind === 'lockout') {
+      await notifyTenantOwner(ctx, {
+        kind: 'billing.access_limiting_soon',
+        title: 'Доступ к панели скоро ограничат',
+        body: 'В течение 24 часов оплатите подписку, иначе доступ к панели будет ограничен: вы не увидите записи, услуги и большинство разделов. Запись через бота временно сохранится.',
+        link: '/settings?section=billing',
+        sourceSlug: 'billing',
+        sourceId: `access_limiting:${deadlineDayBucket}`,
+        inapp: true,
+        telegram: true,
+      });
+    } else {
+      // grant_ending — soft notice for comped accounts. No lockout wording.
+      await notifyTenantOwner(ctx, {
+        kind: 'billing.grant_ending',
+        title: 'Бесплатный доступ скоро закончится',
+        body: `Бесплатный доступ заканчивается ${deadlineDayBucket}. Оформите подписку в Настройки → Биллинг, чтобы салон продолжил работу без перерыва.`,
+        link: '/settings?section=billing',
+        sourceSlug: 'billing',
+        sourceId: `grant_ending:${deadlineDayBucket}`,
+        inapp: true,
+        telegram: true,
+      });
+    }
+  } catch (e) {
+    log.warn('handlers.cron', { action: 'billing_warning_bell_failed', kind, error: e?.message });
+  }
 }
 
 /**
@@ -705,6 +784,121 @@ export async function phaseReviews(ctx, now) {
   }
 }
 
+// ─── Phase: post-visit follow-up (24h after the visit) ──────────────────
+/**
+ * Marketing trigger fired by the 24h-after-visit sweep. Distinct from the
+ * immediate `appointment.done` dispatch (appointmentAutomations.js) so the
+ * delayed follow-up and the at-done message stay independently configurable
+ * and never collide on the same automation row.
+ */
+export const POST_VISIT_FOLLOWUP_TRIGGER = 'post_visit_24h';
+/** Send the follow-up once the visit ended at least this long ago. */
+export const POST_VISIT_FOLLOWUP_DELAY_SEC = 24 * 60 * 60;
+/**
+ * Don't follow up on visits older than DELAY + LOOKBACK. The
+ * `followup_24h_sent_at` flag already prevents re-sends; this floor just
+ * stops a first deploy (or a long worker outage) from blasting weeks-old
+ * visits in a single tick.
+ */
+export const POST_VISIT_FOLLOWUP_LOOKBACK_SEC = 48 * 60 * 60;
+
+/**
+ * Pure decision helper: is an appointment whose visit ended at `endSec`
+ * (unix seconds) due for the 24h-after follow-up at `nowSec`?
+ *
+ * Due when the visit ended >=24h ago but still within the look-back floor.
+ * Exported so the window can be locked in by unit tests without a DB.
+ */
+export function isPostVisitFollowupDue(endSec, nowSec, lookbackSec = POST_VISIT_FOLLOWUP_LOOKBACK_SEC) {
+  if (!Number.isFinite(endSec)) return false;
+  const dueAt = nowSec - POST_VISIT_FOLLOWUP_DELAY_SEC;
+  const floor = dueAt - lookbackSec;
+  return endSec <= dueAt && endSec > floor;
+}
+
+/**
+ * Fire the post-visit follow-up ~24h after a visit, on both channels:
+ *   - email/SMS via the marketing pipeline (any enabled `post_visit_24h`
+ *     automation; consent-gated inside fireAutomationForEvent)
+ *   - Telegram star review ask (opt-in via `post_visit_followup_tg_enabled`),
+ *     reusing the existing `rev:` rating keyboard
+ *
+ * Idempotency: claim-by-conditional-UPDATE on
+ * `appointments.followup_24h_sent_at` so overlapping cron ticks / queue
+ * redeliveries can never double-send. The claim runs BEFORE the sends, so a
+ * crash mid-phase drops at most one follow-up rather than risking a
+ * duplicate.
+ *
+ * Mirrors processPostVisitConfirmations: a coarse SQL pre-filter (simple
+ * status flags + `ts <= now`) plus a JS time-window decision via
+ * isPostVisitFollowupDue, so the SQL stays simple enough for the test
+ * mock-db parser.
+ */
+export async function phasePostVisitFollowup(ctx, now) {
+  const nowSec = Math.floor(now / 1000);
+
+  // Cheap early-out: do nothing unless the owner enabled the Telegram ask
+  // OR configured an enabled post_visit_24h email/SMS automation (a
+  // platform-default tenant_id=NULL row counts too).
+  const tgEnabled = !!(await getConfig(ctx, 'post_visit_followup_tg_enabled'));
+  const hasEmailAuto = !!(await dbGet(ctx,
+    'SELECT 1 AS x FROM marketing_automations WHERE trigger_type = ? AND enabled = 1 AND (tenant_id = ? OR tenant_id IS NULL) LIMIT 1',
+    POST_VISIT_FOLLOWUP_TRIGGER, ctx.tenantId,
+  ));
+  if (!tgEnabled && !hasEmailAuto) return;
+
+  // Coarse scan: completed, non-cancelled, non-no-show visits not yet
+  // followed up, that have already started. WHERE is single-line and free of
+  // IN(...) so the test mock-db parser can exercise it; the precise 24h
+  // window is decided in JS below.
+  const rows = await dbAll(ctx,
+    'SELECT id, ts, duration, svc_id, chat_id FROM appointments WHERE tenant_id = ? AND status = ? AND cancelled = 0 AND no_show = 0 AND followup_24h_sent_at IS NULL AND ts <= ? ORDER BY ts ASC LIMIT 50',
+    ctx.tenantId, 'done', now,
+  );
+  if (!rows.length) return;
+
+  const svcDurMap = new Map((ctx.svc || []).map(s => [s.id, s.dur]));
+
+  for (const r of rows) {
+    try {
+      // Per-appointment duration override (migration 0106) wins over the
+      // service's nominal duration.
+      const durMin = r.duration ?? svcDurMap.get(r.svc_id) ?? 60;
+      const endSec = Math.floor(r.ts / 1000) + durMin * 60;
+      if (!isPostVisitFollowupDue(endSec, nowSec)) continue;
+
+      // Claim the row — only the winner of the conditional UPDATE sends.
+      const claim = await dbRun(ctx,
+        'UPDATE appointments SET followup_24h_sent_at = ? WHERE id = ? AND tenant_id = ? AND followup_24h_sent_at IS NULL',
+        nowSec, r.id, ctx.tenantId,
+      );
+      const claimed = (claim?.meta?.changes ?? claim?.changes ?? 0) > 0;
+      if (!claimed) continue;
+
+      // Email/SMS — fires any enabled post_visit_24h automation for this
+      // client (no-op if they have no consented marketing_contacts row).
+      if (hasEmailAuto) {
+        await fireAutomationForEvent(ctx, POST_VISIT_FOLLOWUP_TRIGGER, { chatId: r.chat_id });
+      }
+
+      // Telegram review ask (opt-in) — same star keyboard as phaseReviews so
+      // ratings flow into the existing `rev:` callback handler.
+      if (tgEnabled && r.chat_id != null) {
+        const lg = (await getLang(ctx, r.chat_id).catch(() => null)) || 'ru';
+        const stars = ['1', '2', '3', '4', '5'].map(n => ({
+          text: '⭐'.repeat(Number(n)),
+          callback_data: `rev:${r.id}:${n}`,
+        }));
+        await send(ctx, r.chat_id, t(lg, 'review_request'), {
+          reply_markup: { inline_keyboard: [stars] },
+        });
+      }
+    } catch (e) {
+      log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)), { action: 'post_visit_followup', aptId: r.id });
+    }
+  }
+}
+
 // ─── Phase 3: Google Calendar retry sync ────────────────────────────────
 export async function phaseGcalSync(ctx, now) {
   const MAX_SYNC_PER_CRON = 10;
@@ -984,6 +1178,54 @@ export async function phaseRetention(ctx, tenantId, _now) {
   }
 }
 
+/**
+ * Scenario C — proactive email re-ask (Telegram-only, OFF by default).
+ *
+ * When enabled (EMAIL_CAPTURE.reaskCron), each tick picks a small capped batch
+ * of THIS tenant's clients who have no email, never answered the ask, are under
+ * the prompt cap + past the cooldown, and first contacted us long enough ago
+ * (isReaskEligible) — including people who only used the bot and never booked.
+ * They get the same askEmail (which stamps the anti-nag cooldown).
+ *
+ * Telegram-only via chat_id > 0 (TG private chats are positive; web/synthetic
+ * ids are negative or session-hashed). WhatsApp/Instagram forbid messaging
+ * outside a 24h window and the web widget can't be pushed to. Refine via
+ * channel_identities before enabling in production.
+ */
+export async function phaseEmailPrompt(ctx, now) {
+  if (!ctx?.db || !ctx?.tenantId) return;
+  if (!(EMAIL_CAPTURE.enabled && EMAIL_CAPTURE.reaskCron)) return;
+  const nowS = Math.floor(now / 1000);
+  const rows = await dbAll(ctx,
+    `SELECT chat_id, email, email_opt_in, email_prompt_count, email_prompt_last_at, first_touch_at, registered_at
+       FROM users
+      WHERE tenant_id = ? AND email IS NULL AND email_opt_in IS NULL AND chat_id > 0 AND deleted_at IS NULL
+      LIMIT ?`,
+    ctx.tenantId, EMAIL_REASK_SCAN_LIMIT,
+  ).catch(() => []);
+  let sent = 0;
+  for (const r of rows) {
+    if (sent >= EMAIL_REASK_BATCH) break;
+    const user = {
+      email: r.email, emailOptIn: r.email_opt_in, emailPromptCount: r.email_prompt_count,
+      emailPromptLastAt: r.email_prompt_last_at, firstTouchAt: r.first_touch_at, registeredAt: r.registered_at,
+    };
+    if (!isReaskEligible(user, nowS)) continue;
+    const cid = Number(r.chat_id);
+    if (!Number.isFinite(cid)) continue;
+    const lg = (await getLang(ctx, cid).catch(() => null)) || 'ru';
+    try {
+      await askEmail(ctx, cid, lg);
+      sent++;
+    } catch (e) {
+      log.warn('handlers.cron', { action: 'email_prompt_send_failed', error: e?.message?.slice(0, 120) });
+    }
+  }
+  if (sent > 0) {
+    void logEvent(ctx, 'cron.email_prompt.sent', { level: 'info', tenantId: ctx.tenantId, message: `Re-asked ${sent} clients for email`, count: sent });
+  }
+}
+
 // ─── PR-A: Marketing campaign dispatch ───────────────────────────────────
 /**
  * Pick up `marketing_campaigns` that are due and fan them out via the
@@ -1124,7 +1366,7 @@ export async function phasePluginCron(ctx, nowMs, dispatchers = PLUGIN_CRON_DISP
  *   - Persists the last-run epoch on success.
  */
 /**
- * Multi-salon billing backstop (0113). Stripe webhook delivery is not
+ * Multi-salon billing backstop (0116). Stripe webhook delivery is not
  * guaranteed, so a secondary salon's billing_status can drift out of sync with
  * its parent's MAX entitlement. Once a day, re-derive each secondary's status
  * from its parent (active iff the parent is an active/trialing MAX) and repair
@@ -1187,9 +1429,15 @@ export async function handleCron(ctx) {
     // which are stored in UNIX SECONDS. Passing ms made `now > trialEndsAt`
     // always true, flipping every trialing/grace tenant to `inactive` on the
     // first cron tick (zero-length trials + grace). Convert to seconds here.
+    // (phaseBillingWarnings below keeps the ms `now` — it converts internally.)
     await checkBillingExpiry(ctx, Math.floor(now / 1000));
 
     if (!ctx?.db || !ctx?.tenantId) return;
+
+    // 24h-before billing lockout / grant-end warning bell. Sits next to
+    // checkBillingExpiry (which performs the transition itself) and is
+    // idempotent via its 6h window + deadline-day-bucketed sourceId.
+    await runPhase(ctx, 'billingWarnings', () => phaseBillingWarnings(ctx, now));
 
     // Phase 0 (always-run): IG token health check + daily webhook resubscribe
     try {
@@ -1249,13 +1497,19 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'reviews', () => phaseReviews(ctx, now));
     await runPhase(ctx, 'gcalSync', () => phaseGcalSync(ctx, now));
     await runPhase(ctx, 'postVisit', () => phasePostVisit(ctx, now));
+    // Post-visit follow-up: ~24h after the visit, fire the «После визита»
+    // marketing template (email/SMS) + an opt-in Telegram review ask.
+    await runPhase(ctx, 'postVisitFollowup', () => phasePostVisitFollowup(ctx, now));
     await runPhase(ctx, 'promos', () => phasePromos(ctx, now));
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));
     await runPhase(ctx, 'attachmentGc', () => phaseAttachmentGc(ctx, ctx.tenantId, now));
-    // Multi-salon (0113): repair any secondary-salon billing drift left by a
+    // Multi-salon (0116): repair any secondary-salon billing drift left by a
     // lost/out-of-order cascade webhook. Idempotent; windowed to 24h.
     await runPhase(ctx, 'billingReconcileSecondaries', () => phaseBillingReconcileSecondaries(ctx, now));
+    // Scenario C: proactive email re-ask (Telegram-only). No-op unless
+    // EMAIL_CAPTURE.reaskCron is enabled; gated + capped + anti-nag inside.
+    await runPhase(ctx, 'emailPrompt', () => phaseEmailPrompt(ctx, now));
     // PR-A: marketing campaign dispatch. Picks up status='scheduled' rows
     // whose scheduled_at <= now, plus rebooks any campaign stuck in
     // status='sending' for >30min (crashed mid-fan-out).

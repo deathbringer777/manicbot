@@ -29,7 +29,7 @@ export interface ClassifiableTenant {
   stripeSubscriptionId: string | null;
   isTest?: number | boolean | null;
   /**
-   * Multi-salon (0113): a secondary salon billed under a parent's MAX
+   * Multi-salon (0116): a secondary salon billed under a parent's MAX
    * subscription. Set ⇒ this is NOT an independent customer — it must never
    * count toward MRR or any customer tally (the parent already counts once).
    */
@@ -95,7 +95,7 @@ export function classifyTenant(t: ClassifiableTenant, nowSec: number): TenantCla
   // Test tenants never contribute to any business number.
   if (t.isTest) return none({ isTest: true });
 
-  // Secondary salons (multi-salon, 0113) are billed under their parent's single
+  // Secondary salons (multi-salon, 0116) are billed under their parent's single
   // MAX subscription — they are never an independent customer, so they never
   // contribute to MRR or any customer tally. The parent already counts once.
   if (t.parentTenantId) return none();

@@ -3,6 +3,14 @@
  * Supports basic SQL parsing for the queries used in ManicBot.
  */
 
+// Tables with INTEGER PRIMARY KEY AUTOINCREMENT whose generated id the Worker
+// reads back after insert (real D1 returns meta.last_row_id). The mock assigns
+// max(id)+1 on a fresh insert, but only when the INSERT didn't specify an id
+// (seeded explicit ids always win).
+const AUTOINC_TABLES = new Set([
+  'marketing_contacts', 'marketing_consent_log', 'leads', 'email_subscribers',
+]);
+
 export function createMockD1() {
   const tables = new Map();
 
@@ -367,6 +375,14 @@ export function createMockD1() {
               return { success: true, meta: { changes: 0 } };
             }
           }
+        }
+        // Simulate AUTOINCREMENT for the allowlisted integer-PK tables so the
+        // Worker can read back the generated id via meta.last_row_id.
+        if (AUTOINC_TABLES.has(parsed.table) && row.id == null) {
+          const maxId = table.reduce((mx, r) => (typeof r.id === 'number' && r.id > mx ? r.id : mx), 0);
+          row.id = maxId + 1;
+          table.push(row);
+          return { success: true, meta: { last_row_id: row.id, changes: 1 } };
         }
         table.push(row);
         return { success: true };

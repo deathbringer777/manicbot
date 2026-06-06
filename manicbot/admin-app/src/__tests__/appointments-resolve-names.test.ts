@@ -54,13 +54,14 @@ const BOOTSTRAP_SQL: string[] = [
     rem_h2 INTEGER NOT NULL DEFAULT 0, google_event_id TEXT, google_calendar_id TEXT,
     google_integration_id TEXT, sync_retries INTEGER DEFAULT 0, sync_retry_after INTEGER,
     sync_last_error TEXT, review_requested INTEGER DEFAULT 0, visit_confirmed_at INTEGER,
-    visit_confirmed_by TEXT, review_requested_at INTEGER, created_at INTEGER NOT NULL
+    visit_confirmed_by TEXT, review_requested_at INTEGER, followup_24h_sent_at INTEGER, created_at INTEGER NOT NULL
   )`,
   `CREATE TABLE users (
     tenant_id TEXT NOT NULL, chat_id INTEGER NOT NULL, name TEXT, tg_username TEXT, tg_lang TEXT,
     phone TEXT, registered_at INTEGER, tos_accepted_at INTEGER, first_source TEXT, first_campaign TEXT,
     first_medium TEXT, first_touch_at INTEGER, dob TEXT, email TEXT, ig_username TEXT, notes TEXT,
-    tags TEXT, marketing_contact_id INTEGER, is_blocked_global INTEGER NOT NULL DEFAULT 0,
+    tags TEXT, marketing_contact_id INTEGER, email_opt_in INTEGER, email_prompt_last_at INTEGER,
+    email_prompt_count INTEGER NOT NULL DEFAULT 0, is_blocked_global INTEGER NOT NULL DEFAULT 0,
     blocked_global_reason TEXT, blocked_global_at INTEGER, updated_at INTEGER, deleted_at INTEGER,
     lifetime_visits INTEGER NOT NULL DEFAULT 0, last_visit_at INTEGER, avatar_emoji TEXT,
     avatar_url TEXT, avatar_r2_key TEXT, favorite_master_id INTEGER

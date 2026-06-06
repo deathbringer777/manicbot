@@ -70,7 +70,7 @@ export async function ensureDefaultStaffGroup(
     return { threadId: existing[0].id, created: false };
   }
 
-  // For a secondary salon (multi-salon, 0113) the owner's web_users row points
+  // For a secondary salon (multi-salon, 0116) the owner's web_users row points
   // at their HOME tenant, not this salon — resolve ownership via parent_tenant_id
   // so the default group is still seeded with the owner as its owner member.
   const [tenantRow] = await db

@@ -14,6 +14,7 @@ import {
   getOrCreateCustomer, createCheckoutSession, createEmbeddedCheckoutSession, createBillingPortalSession, createOneTimePercentOffCoupon,
   retrieveSubscription, changeSubscriptionPlanImmediate, scheduleDowngradeAtPeriodEnd, releaseScheduledChange,
   pauseSubscription as stripePauseSubscription, resumeSubscription as stripeResumeSubscription, previewPlanChange as stripePreviewPlanChange,
+  listInvoices,
 } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
@@ -28,6 +29,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { env } from "~/env";
 import { buildMetaChannelHints } from "~/lib/metaChannelHints";
+import { isCompedTenant } from "~/lib/billing/trialState";
 import {
   parseMasterHours,
   isValidMasterHours,
@@ -451,6 +453,17 @@ export const salonRouter = createTRPCRouter({
         .where(eq(tenants.id, input.tenantId));
     }
 
+    // Plan-utilisation: real, active staff seats (excludes synthetic personal
+    // -master rows). Drives the "masters N / limit" usage line in the UI.
+    const [mc] = await ctx.db
+      .select({ c: sql<number>`count(*)` })
+      .from(masters)
+      .where(and(
+        eq(masters.tenantId, input.tenantId),
+        eq(masters.active, 1),
+        eq(masters.isSynthetic, 0),
+      ));
+
     return {
       plan: t.plan,
       billingStatus,
@@ -461,13 +474,51 @@ export const salonRouter = createTRPCRouter({
       nextPaymentDate: t.nextPaymentDate,
       cancelAtPeriodEnd: t.cancelAtPeriodEnd,
       stripeCustomerId: t.stripeCustomerId ?? null,
-      // In-app self-service state: whether there's a live subscription to manage,
-      // a scheduled downgrade (plan + when it takes effect), and pause window.
+      // Whether a real Stripe subscription backs the plan. The cancel flow
+      // requires one — a comped grant (customer may exist, subscription does
+      // not) must NOT show a "Cancel subscription" button. `hasSubscription`
+      // (main's self-service UI) is the same value — both kept so either UI
+      // surface can read it.
+      hasActiveSubscription: !!t.stripeSubscriptionId,
       hasSubscription: !!t.stripeSubscriptionId,
+      // Complimentary / manual grant (active plan, no subscription, no trial).
+      // Drives the "free until <date>" badge and hides the cancel button.
+      isComped: isCompedTenant({
+        billingStatus: t.billingStatus ?? null,
+        trialEndsAt: t.trialEndsAt ?? null,
+        stripeCustomerId: t.stripeCustomerId ?? null,
+        stripeSubscriptionId: t.stripeSubscriptionId ?? null,
+      }),
+      mastersCount: Number(mc?.c ?? 0),
+      // In-app self-service state (main): scheduled downgrade (plan + when it
+      // takes effect) and pause window.
       pendingPlan: t.pendingPlan ?? null,
       pendingPlanEffectiveAt: t.pendingPlanEffectiveAt ?? null,
       pauseResumesAt: t.pauseResumesAt ?? null,
     };
+  }),
+
+  /**
+   * A tenant's own recent invoices (read-only), for the inline billing history.
+   * Returns [] when there is no Stripe customer or Stripe is unconfigured —
+   * the UI simply hides the section. Never throws on Stripe errors so the
+   * Billing page always renders.
+   */
+  listInvoices: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
+    await assertTenantOwner(ctx, input.tenantId);
+    const [t] = await ctx.db
+      .select({ stripeCustomerId: tenants.stripeCustomerId })
+      .from(tenants)
+      .where(eq(tenants.id, input.tenantId))
+      .limit(1);
+    const customerId = t?.stripeCustomerId;
+    const stripeKey = env.STRIPE_SECRET_KEY;
+    if (!customerId || !stripeKey) return { data: [], hasMore: false };
+    try {
+      return await listInvoices(stripeKey, { customerId, limit: 12 });
+    } catch {
+      return { data: [], hasMore: false };
+    }
   }),
 
   /** URL вебхуков и verify token для настройки Meta (значения с сервера Pages — совпадают с Worker). */
@@ -1454,6 +1505,45 @@ export const salonRouter = createTRPCRouter({
       const value = JSON.stringify(input.enabled);
       await ctx.db.insert(tenantConfig)
         .values({ tenantId: input.tenantId, key, value })
+        .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
+      return { success: true };
+    }),
+
+  /**
+   * Read the "send a Telegram review ask 24h after the visit" opt-in flag.
+   * Stored in `tenant_config` under `post_visit_followup_tg_enabled`
+   * (default OFF). The Worker's `phasePostVisitFollowup` reads the same key
+   * via `getConfig`; the email channel is configured separately via a
+   * `post_visit_24h` marketing automation.
+   */
+  getPostVisitFollowupTg: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const rows = await ctx.db.select().from(tenantConfig)
+        .where(eq(tenantConfig.tenantId, input.tenantId));
+      const cfg = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+      const v = cfg["post_visit_followup_tg_enabled"];
+      let enabled = false;
+      if (typeof v === "boolean") enabled = v;
+      else if (typeof v === "string") {
+        const s = v.trim().toLowerCase();
+        enabled = s === "true" || s === "1";
+      }
+      return { enabled };
+    }),
+
+  /**
+   * Toggle the post-visit Telegram review ask. Stored as the JSON literal
+   * `true` / `false` so the Worker's `getConfig` parses it back to a boolean.
+   */
+  setPostVisitFollowupTg: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const value = JSON.stringify(input.enabled);
+      await ctx.db.insert(tenantConfig)
+        .values({ tenantId: input.tenantId, key: "post_visit_followup_tg_enabled", value })
         .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
       return { success: true };
     }),
@@ -2927,7 +3017,7 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.update(tenants)
         .set({ billingStatus: "paused", pauseResumesAt: resumesAt, updatedAt: now })
         .where(eq(tenants.id, input.tenantId));
-      // Multi-salon cascade (0113): freeze this owner's secondary salons
+      // Multi-salon cascade (0116): freeze this owner's secondary salons
       // synchronously so they can't be used during the webhook-delay window.
       await ctx.db.update(tenants)
         .set({ billingStatus: "inactive", updatedAt: now })
@@ -2957,7 +3047,7 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.update(tenants)
         .set({ billingStatus: "active", pauseResumesAt: null, updatedAt: now })
         .where(eq(tenants.id, input.tenantId));
-      // Multi-salon cascade (0113): restore this owner's secondary salons.
+      // Multi-salon cascade (0116): restore this owner's secondary salons.
       await ctx.db.update(tenants)
         .set({ billingStatus: "active", updatedAt: now })
         .where(eq(tenants.parentTenantId, input.tenantId));

@@ -138,4 +138,37 @@ describe('InstagramAdapter outbound host routing', () => {
     const url = String(fetchSpy.mock.calls[0][0]);
     expect(url).toContain('graph.facebook.com');
   });
+
+  // Regression: sendPhoto hardcoded the legacy /{pageId}/messages path even on
+  // instagram_direct, so a prod IGAA channel (which DOES carry a page_id) posted
+  // images to graph.instagram.com/v21.0/{pageId}/messages → Meta 400. Must mirror
+  // send()'s path selection.
+  it('IG-DIRECT: sendPhoto posts to /me/messages, not /{pageId}/messages', async () => {
+    const adapter = new InstagramAdapter(buildCtx({
+      api: 'instagram_direct',
+      igUserId: '25881183448226493',
+      pageId: '1008301152373103', // present but must NOT leak into the path
+      token: 'IGAA_x',
+    }));
+    await adapter.sendPhoto('1441501754119698', 'https://img.test/a.jpg', ''); // empty caption → single call
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).toContain('graph.instagram.com');
+    expect(url).toContain('/me/messages');
+    expect(url).not.toContain('/1008301152373103/');
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body);
+    expect(body.message.attachment.type).toBe('image');
+    expect(body.message.attachment.payload.url).toBe('https://img.test/a.jpg');
+  });
+
+  it('LEGACY: sendPhoto keeps the /{pageId}/messages path on graph.facebook.com', async () => {
+    const adapter = new InstagramAdapter(buildCtx({
+      pageId: '1008301152373103',
+      token: 'EAA_x',
+    }));
+    await adapter.sendPhoto('1441501754119698', 'https://img.test/a.jpg', '');
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).toContain('graph.facebook.com');
+    expect(url).toContain('/1008301152373103/messages');
+  });
 });

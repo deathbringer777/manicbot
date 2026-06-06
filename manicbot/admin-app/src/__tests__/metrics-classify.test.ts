@@ -197,7 +197,7 @@ describe("getTenantMetrics", () => {
   });
 });
 
-describe("classifyTenant — secondary salons (multi-salon, 0113)", () => {
+describe("classifyTenant — secondary salons (multi-salon, 0116)", () => {
   it("never counts a secondary salon (parent_tenant_id set) toward any bucket or MRR", () => {
     // A secondary shadows plan='max'/billing_status='active' but is billed under
     // its parent's subscription — it must classify as 'none' with 0 MRR so an

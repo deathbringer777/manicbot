@@ -46,12 +46,11 @@ import { WEEKDAY_KEYS, type WorkHoursState } from "~/lib/workHours";
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
 
-// The visible hour window is computed per-day from salon + per-master working
-// hours (see computeDayVisibleHourWindow). These are only the FALLBACK bounds,
-// used when no hours are known, plus the floor for how small the window shrinks.
-const DEFAULT_HOUR_START = 8; // 08:00
-const DEFAULT_HOUR_END = 22; // 22:00
-const MIN_WINDOW_HOURS = 6; // never collapse the grid to a cramped sliver
+// The grid always renders the FULL 24h day (Google-Calendar style) so night and
+// early-morning slots stay reachable by scrolling. Working hours no longer clip
+// the grid — they only pick the default scroll anchor (see preferredStartHour),
+// capped at PREFERRED_SCROLL_HOUR so the viewport opens on the working morning.
+const PREFERRED_SCROLL_HOUR = 9; // default viewport top — 09:00
 
 // Softened diagonal gray for blocked time (reservations / time-off). Lighter
 // than a solid fill so days with blocks read as "lightly blocked", not "fully
@@ -283,82 +282,6 @@ function parseRangeString(s: string): { startMin: number; endMin: number } | { c
   return null;
 }
 
-/**
- * Pick the [start, end] hour window the day grid renders.
- *
- * Policy (mirrors SalonWeekView.computeVisibleHourWindow, adapted to the
- * per-master day view):
- *   1. Base window = the salon's working hours for this weekday, UNIONed with
- *      every visible master's concrete working window (a master rostered past
- *      salon close still gets a full column).
- *   2. Never clip data: widen to cover any appointment or timed block on this
- *      day that falls outside the base. Full-day / multi-day bands are skipped —
- *      they span 00:00–24:00 and would reopen the window to the whole day.
- *   3. Snap to whole hours, clamp to [0, 24], enforce MIN_WINDOW_HOURS.
- *
- * Falls back to DEFAULT_HOUR_START..END when nothing concrete is known (no
- * salon hours, every master unknown/closed) so the broad grid still shows.
- */
-function computeDayVisibleHourWindow(
-  workHours: WorkHoursState | undefined,
-  masters: MasterRow[],
-  dayOfWeek: number, // JS Date.getDay(): 0=Sun … 6=Sat
-  apts: AptRow[],
-  blocks: DayViewBlock[] | undefined,
-  isoDate: string,
-): { start: number; end: number } {
-  let openMin = DEFAULT_HOUR_START * 60;
-  let closeMin = DEFAULT_HOUR_END * 60;
-  let known = false;
-
-  const salonDay = workHours ? workHours[WEEKDAY_KEYS[(dayOfWeek + 6) % 7]!] : null;
-  if (salonDay) {
-    const o = parseHHMMToMinutes(salonDay.open);
-    const c = parseHHMMToMinutes(salonDay.close);
-    if (c > o) {
-      openMin = o;
-      closeMin = c;
-      known = true;
-    }
-  }
-
-  for (const m of masters) {
-    const range = getMasterWorkRange(m.workHours, dayOfWeek);
-    if (range === null || "closed" in range) continue;
-    if (!known) {
-      openMin = range.startMin;
-      closeMin = range.endMin;
-      known = true;
-    } else {
-      openMin = Math.min(openMin, range.startMin);
-      closeMin = Math.max(closeMin, range.endMin);
-    }
-  }
-
-  for (const a of apts) {
-    if (a.date !== isoDate) continue;
-    const s = parseHHMMToMinutes(a.time);
-    openMin = Math.min(openMin, s);
-    closeMin = Math.max(closeMin, s + (typeof a.duration === "number" ? a.duration : 60));
-  }
-  for (const b of blocks ?? []) {
-    const isMultiDay = !!b.endDate && b.endDate !== b.date;
-    if (isMultiDay || b.durationMin >= 24 * 60) continue;
-    if (b.date !== isoDate) continue;
-    const s = parseHHMMToMinutes(b.time);
-    openMin = Math.min(openMin, s);
-    closeMin = Math.max(closeMin, s + b.durationMin);
-  }
-
-  let start = Math.max(0, Math.floor(openMin / 60));
-  let end = Math.min(24, Math.ceil(closeMin / 60));
-  if (end - start < MIN_WINDOW_HOURS) {
-    end = Math.min(24, start + MIN_WINDOW_HOURS);
-    start = Math.max(0, end - MIN_WINDOW_HOURS);
-  }
-  return { start, end };
-}
-
 export function SalonDayView({
   date,
   setDate,
@@ -393,14 +316,29 @@ export function SalonDayView({
   // the "+ Запись" button instead. Desktop (mouse/trackpad) is unchanged.
   const isTouch = useCoarsePointer();
   const isoDate = fmtIsoDate(date);
-  // Visible hour window — fitted to salon + per-master working hours, widened to
-  // cover any out-of-hours item. Computed BEFORE the drag hooks because they map
-  // a pointer's Y → time against [hourStart, hourEnd].
-  const { start: hourStart, end: hourEnd } = useMemo(
-    () => computeDayVisibleHourWindow(workHours, masters, date.getDay(), apts, blocks, isoDate),
-    [workHours, masters, date, apts, blocks, isoDate],
-  );
+  // Full 24h grid (Google-Calendar style). hourStart/hourEnd are fixed; the drag
+  // hooks + geometry below map a pointer's Y → time against [hourStart, hourEnd],
+  // so a 0..24 range simply means nothing is clipped.
+  const hourStart = 0;
+  const hourEnd = 24;
   const totalHours = hourEnd - hourStart;
+  // Default scroll anchor — earliest salon/master open for this weekday, capped
+  // at 09:00 so the viewport opens on the working morning but still reveals an
+  // earlier opening (e.g. a 07:00 cleaning shift) instead of hiding it above.
+  const preferredStartHour = useMemo(() => {
+    let openMin = PREFERRED_SCROLL_HOUR * 60;
+    const salonDay = workHours ? workHours[WEEKDAY_KEYS[(date.getDay() + 6) % 7]!] : null;
+    if (salonDay) {
+      const o = parseHHMMToMinutes(salonDay.open);
+      const c = parseHHMMToMinutes(salonDay.close);
+      if (c > o) openMin = Math.min(openMin, o);
+    }
+    for (const m of masters) {
+      const range = getMasterWorkRange(m.workHours, date.getDay());
+      if (range && !("closed" in range)) openMin = Math.min(openMin, range.startMin);
+    }
+    return Math.max(0, Math.floor(openMin / 60));
+  }, [workHours, masters, date]);
   const { ghost: moveGhost, draggingId, bindBlock } = useDragToMove({
     hourHeight: HOUR_HEIGHT,
     hourStart,
@@ -498,17 +436,25 @@ export function SalonDayView({
     return false;
   }, [apts, blocks, isoDate]);
   useEffect(() => {
-    if (!isToday || !scrollerRef.current) return;
-    if (singleColumnMode && !hasContentToday) return;
-    const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    const offset = ((minutes - hourStart * 60) / 60) * HOUR_HEIGHT;
-    if (offset < 0) return;
+    if (!scrollerRef.current) return;
+    // Today with real content → land on "now". Otherwise (other days, or an
+    // empty single-column self-view) open on the working morning so the user
+    // doesn't stare at an empty 00:00 on the full 24h grid.
+    const scrollToNow = isToday && !(singleColumnMode && !hasContentToday);
+    let targetMin: number;
+    if (scrollToNow) {
+      const now = new Date();
+      targetMin = now.getHours() * 60 + now.getMinutes();
+      if (targetMin < preferredStartHour * 60) targetMin = preferredStartHour * 60;
+    } else {
+      targetMin = preferredStartHour * 60;
+    }
+    const offset = (targetMin / 60) * HOUR_HEIGHT;
     const t = window.setTimeout(() => {
       scrollerRef.current?.scrollTo({ top: Math.max(0, offset - HOUR_HEIGHT * 1.5), behavior: "smooth" });
     }, 100);
     return () => window.clearTimeout(t);
-  }, [isToday, singleColumnMode, hasContentToday, hourStart]);
+  }, [isToday, singleColumnMode, hasContentToday, preferredStartHour, isoDate]);
 
   // Filter apts for this day, group by masterId.
   const aptsByMaster = useMemo(() => {

@@ -82,6 +82,7 @@ For the Mini App to show the same **Verify Token** that the Worker checks:
 | Where | Variable |
 |-------|----------|
 | Cloudflare Worker (secrets) | `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG`, `META_APP_SECRET` (for `X-Hub-Signature-256` signature on POST) |
+| Cloudflare Worker (secrets, optional) | `META_INSTAGRAM_APP_SECRET` — App Secret of the separate **Instagram Login** product (post-Mar-2026, `instagram_direct` channels). The Worker verifies the IG webhook signature against `META_APP_SECRET` first, then falls back to this. Only needed for IGAA-token channels. |
 | Cloudflare Pages (Mini App) | Same `META_VERIFY_TOKEN_WA`, `META_VERIFY_TOKEN_IG`, plus `WORKER_PUBLIC_URL` (public Worker URL without trailing `/`) |
 
 Verify token values on Worker and Pages must **match**.
@@ -107,6 +108,13 @@ By default, free text from Direct goes to the same AI as in Telegram. To **not**
 A message will go to AI only if the text (case-insensitive) **contains** at least one substring. Otherwise the user gets a short hint (key `ig_ai_trigger_hint` in translations). Booking scenarios and the `REG_CONFIRM` step are unaffected.
 
 If the secret is **empty** or not set — no restriction (same as before).
+
+### Token lifecycle (Instagram Login / `instagram_direct`)
+
+IGAA tokens (the **Instagram Login** product, `config.api = "instagram_direct"`) are **long-lived for 60 days** and refreshable. On connect — via OAuth or `POST /admin/ig-set-direct-token` — the Worker records `channel_configs.token_expires_at`, and a daily cron (`phaseChannelHealth`) auto-refreshes the token ~10 days before expiry against `graph.instagram.com`. No manual re-auth is needed under normal operation.
+
+- Legacy Page Access Tokens (`api = "facebook"`, EAA…) are **non-expiring**, so `token_expires_at` stays `NULL` and no refresh runs.
+- If a refresh fails (token revoked, app permissions changed), the channel surfaces `integration.needs_reauth` and the operator re-connects via the Mini App or `POST /admin/ig-token`.
 
 ## Smoke Checklist (platform + salon)
 

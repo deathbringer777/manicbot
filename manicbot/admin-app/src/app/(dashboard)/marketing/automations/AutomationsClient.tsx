@@ -24,7 +24,7 @@
 import { useState } from "react";
 import { MarketingShell } from "../MarketingShell";
 import { api } from "~/trpc/react";
-import { Bell, RefreshCw, Gift, Clock, ShoppingCart, Play, Pencil, Trash2, AlertCircle } from "lucide-react";
+import { Bell, RefreshCw, Gift, Clock, ShoppingCart, Sparkles, Play, Pencil, Trash2, AlertCircle } from "lucide-react";
 import { useMarketingScope } from "../useMarketingScope";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -42,6 +42,7 @@ const PRESETS: Array<{
   { triggerType: "birthday",          icon: Gift,         nameKey: "marketing.automation.preset.birthday.name",          descKey: "marketing.automation.preset.birthday.desc" },
   { triggerType: "booking_reminder",  icon: Clock,        nameKey: "marketing.automation.preset.booking_reminder.name",  descKey: "marketing.automation.preset.booking_reminder.desc" },
   { triggerType: "abandoned_booking", icon: ShoppingCart, nameKey: "marketing.automation.preset.abandoned_booking.name", descKey: "marketing.automation.preset.abandoned_booking.desc" },
+  { triggerType: "post_visit_24h",    icon: Sparkles,     nameKey: "marketing.automation.preset.post_visit_24h.name",    descKey: "marketing.automation.preset.post_visit_24h.desc" },
 ];
 
 export default function AutomationsClient() {

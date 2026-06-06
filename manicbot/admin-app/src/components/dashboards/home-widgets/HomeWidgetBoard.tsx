@@ -42,10 +42,15 @@ import { WidgetFrame, WIDGET_DRAG_HANDLE } from "./WidgetFrame";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
-/** Breakpoint → pixel min-width (RGL picks the largest breakpoint ≤ width). */
-const BREAKPOINTS = { lg: 1024, md: 768, sm: 640, xs: 480, xxs: 0 } as const;
-/** Breakpoint → column count. `xs/xxs` collapse to one column (touch / phone). */
-const COLS = { lg: 12, md: 8, sm: 6, xs: 1, xxs: 1 } as const;
+/**
+ * Two breakpoints only: a rich 12-column board on any tablet/desktop width
+ * (≥768px) and a single-column stack on phones. The earlier 8-/6-column middle
+ * bands REUSED the 12-col coordinates, so a widget authored at x≥6 overflowed
+ * the narrower grid and RGL reflowed it into a staggered mess. RGL picks the
+ * largest breakpoint whose px value is ≤ the measured container width.
+ */
+const BREAKPOINTS = { lg: 768, xxs: 0 } as const;
+const COLS = { lg: 12, xxs: 1 } as const;
 const ROW_HEIGHT = 56;
 const MARGIN: [number, number] = [16, 16];
 
@@ -77,6 +82,17 @@ function mergeLayout(items: HomeWidgetItem[], layout: Layout[]): HomeWidgetItem[
   });
 }
 
+/** Single-column stack (phones): every widget full width, in board order. */
+function stackLayout(items: HomeWidgetItem[]): Layout[] {
+  let y = 0;
+  return items.map((w) => {
+    const def = WIDGET_REGISTRY[w.type];
+    const placed: Layout = { i: w.i, x: 0, y, w: 1, h: w.h, minW: 1, minH: def?.minSize.h };
+    y += w.h;
+    return placed;
+  });
+}
+
 export function HomeWidgetBoard({ tenantId, lang }: { tenantId: string; lang: Lang }) {
   const { role } = useRole();
   const { prefs, setHomeWidgets, addHomeWidget, removeHomeWidget, resetHomeWidgets } =
@@ -94,14 +110,13 @@ export function HomeWidgetBoard({ tenantId, lang }: { tenantId: string; lang: La
   // Drag/resize is live only while editing AND on a precise pointer.
   const interactive = editMode && !isTouch;
 
-  // Same geometry across every breakpoint: on lg it's the authored 12-col
-  // layout; on xs/xxs (1 col) RGL stacks items in row order. RGL reads `w`
-  // against the breakpoint's `cols`, so a 1-col breakpoint clamps every widget
-  // to full width automatically.
-  const layouts: Layouts = useMemo(() => {
-    const base = toRglLayout(items);
-    return { lg: base, md: base, sm: base, xs: base, xxs: base };
-  }, [items]);
+  // lg (≥768px) renders the authored 12-col layout (respecting saved drag
+  // positions); xxs (phones) gets a clean single-column stack. No in-between
+  // band reuses the 12-col coordinates, so widgets never overflow + reflow.
+  const layouts: Layouts = useMemo(
+    () => ({ lg: toRglLayout(items), xxs: stackLayout(items) }),
+    [items],
+  );
 
   // Widget types not yet on the board, grouped for the add-widget dropdown.
   const available = useMemo(() => {

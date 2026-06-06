@@ -12,7 +12,7 @@ Plan limits are set in `src/billing/config.js` (constant `PLAN_LIMITS`).
 
 ---
 
-## Multi-salon ownership (MAX) — migration 0113
+## Multi-salon ownership (MAX) — migration 0116
 
 A **MAX-plan** account can own multiple salons (home + up to `MAX_OWNED_SALONS`,
 default 10).

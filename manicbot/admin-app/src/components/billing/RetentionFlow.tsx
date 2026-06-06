@@ -72,6 +72,8 @@ const LABELS: Record<
     successAcceptedToast: string;
     successCancelledToast: string;
     errorGeneric: string;
+    errorNoSubscription: string;
+    errorAlreadyCancelling: string;
     counter: (n: number) => string;
   }
 > = {
@@ -111,6 +113,8 @@ const LABELS: Record<
     successAcceptedToast: "Скидка применена. Спасибо, что остались!",
     successCancelledToast: "Подписка отменена",
     errorGeneric: "Что-то пошло не так. Попробуйте ещё раз.",
+    errorNoSubscription: "Активной подписки нет — отменять нечего.",
+    errorAlreadyCancelling: "Подписка уже отменяется.",
     counter: (n) => `${n}/2000`,
   },
   ua: {
@@ -149,6 +153,8 @@ const LABELS: Record<
     successAcceptedToast: "Знижку застосовано. Дякуємо, що залишилися!",
     successCancelledToast: "Підписку скасовано",
     errorGeneric: "Щось пішло не так. Спробуйте ще раз.",
+    errorNoSubscription: "Активної підписки немає — скасовувати нічого.",
+    errorAlreadyCancelling: "Підписку вже скасовано.",
     counter: (n) => `${n}/2000`,
   },
   en: {
@@ -187,6 +193,8 @@ const LABELS: Record<
     successAcceptedToast: "Discount applied. Thanks for staying!",
     successCancelledToast: "Subscription cancelled",
     errorGeneric: "Something went wrong. Please try again.",
+    errorNoSubscription: "There's no active subscription to cancel.",
+    errorAlreadyCancelling: "Subscription is already being cancelled.",
     counter: (n) => `${n}/2000`,
   },
   pl: {
@@ -225,6 +233,8 @@ const LABELS: Record<
     successAcceptedToast: "Zniżka zastosowana. Dziękujemy, że zostałeś!",
     successCancelledToast: "Subskrypcja anulowana",
     errorGeneric: "Coś poszło nie tak. Spróbuj ponownie.",
+    errorNoSubscription: "Brak aktywnej subskrypcji do anulowania.",
+    errorAlreadyCancelling: "Subskrypcja jest już anulowana.",
     counter: (n) => `${n}/2000`,
   },
 };
@@ -282,12 +292,20 @@ export function RetentionFlow({ tenantId, onClose, onCancelled, onRetained }: Pr
         setOfferType(res.offerType);
         // If user is in cooldown OR no offer applies, skip Stage 1.
         setStage(res.eligibleForOffer && res.offerType ? "offer" : "reason");
-      } catch {
+      } catch (err) {
         if (cancelled) return;
-        // The probe rejected — most likely a stale UI state ("already
-        // cancelling" / "no_active_subscription"). Close the modal; the
-        // BillingSection will reflect the actual state on next refetch.
-        toast.error(L.errorGeneric);
+        // The probe rejected. Surface the real reason instead of swallowing it
+        // into a generic toast — the cancel button is now gated on a real
+        // subscription, so reaching here at all signals a stale UI state worth
+        // naming. The BillingSection reflects the actual state on next refetch.
+        const msg = err instanceof Error ? err.message : "";
+        const friendly =
+          msg.includes("already_cancelling")
+            ? L.errorAlreadyCancelling
+            : msg.includes("no_active_subscription") || msg.includes("stripe_subscription_missing")
+              ? L.errorNoSubscription
+              : L.errorGeneric;
+        toast.error(friendly);
         onClose();
       }
     })();

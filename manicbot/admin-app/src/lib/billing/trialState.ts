@@ -45,6 +45,12 @@ export interface TenantBillingInput {
   billingStatus: string | null;
   trialEndsAt: number | null;
   stripeCustomerId: string | null;
+  /**
+   * Presence of a real Stripe subscription. Used to tell a complimentary grant
+   * (active, no subscription) apart from a real paying account. Optional so the
+   * many existing call sites that predate it default to "no subscription".
+   */
+  stripeSubscriptionId?: string | null;
 }
 
 /**
@@ -57,8 +63,30 @@ export interface TrialEvaluation {
   effectiveBillingStatus: string;
   /** True when the trial flip should be persisted (caller decides whether to fire-and-forget the UPDATE). */
   shouldPersistFlip: boolean;
-  /** Matches BillingSection.tsx:247 — "trial expired AND no Stripe customer ever". */
+  /**
+   * Whether the dashboard billing gate should fire. Despite the historical
+   * name, this is the general "billing locked" signal: true for an expired
+   * trial, a churned/cancelled paying customer, or any terminal inactive state.
+   * It is false for complimentary grants (see {@link isCompedTenant}), which
+   * stay open. Renaming the field is intentionally avoided — it is a published
+   * contract across auth → RoleContext → layout and ~10 tests.
+   */
   isTrialExpired: boolean;
+}
+
+/**
+ * A complimentary / manual grant: the plan is `active` but no Stripe
+ * subscription backs it and it is not a time-boxed trial. Matches the free
+ * "MAX for a year" grants (billing.manualActivate / SVC- grant codes) which set
+ * billing_status=active, current_period_end ≈ +1y and never create a Stripe
+ * subscription. Such accounts must never be auto-locked by the dashboard gate.
+ */
+export function isCompedTenant(input: TenantBillingInput): boolean {
+  return (
+    (input.billingStatus ?? "trialing") === "active" &&
+    !input.stripeSubscriptionId &&
+    !input.trialEndsAt
+  );
 }
 
 export function evaluateTrialState(
@@ -70,12 +98,21 @@ export function evaluateTrialState(
     declared === "trialing" && !!input.trialEndsAt && nowUnix > input.trialEndsAt;
 
   const effective = trialExpiredInDb ? "inactive" : declared;
-  const hasStripeCustomer = !!input.stripeCustomerId;
+
+  // Billing is "locked" once access has lapsed: an expired trial, a
+  // churned/cancelled paying customer, or any terminal inactive state. The
+  // previous rule (`inactive && !stripeCustomer`) left a churned paying
+  // customer's dashboard open forever — that hole is now closed. The ONLY
+  // exception is a complimentary grant, which is `active` and stays open;
+  // the isCompedTenant guard is explicit defence in depth since comps never
+  // reach the inactive/canceled branch anyway.
+  const locked =
+    (effective === "inactive" || effective === "canceled") && !isCompedTenant(input);
 
   return {
     effectiveBillingStatus: effective,
     shouldPersistFlip: trialExpiredInDb,
-    isTrialExpired: effective === "inactive" && !hasStripeCustomer,
+    isTrialExpired: locked,
   };
 }
 

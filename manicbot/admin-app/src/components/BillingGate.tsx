@@ -13,29 +13,29 @@ const L: Record<Lang, {
   note: string;
 }> = {
   ru: {
-    title: "Триал закончился",
-    description: "Чтобы продолжить пользоваться панелью, активируйте подписку. Запись клиентов через бота работает как раньше — блокируется только админ-панель.",
+    title: "Доступ к панели ограничен",
+    description: "Чтобы вернуть доступ, оформите или продлите подписку. Пока она не активна, панель и бот приостановлены — клиенты не смогут записаться.",
     primaryCta: "Активировать подписку",
     secondaryCta: "Настройки аккаунта",
     note: "Если уже оплатили — обновите страницу, статус подтянется в течение минуты.",
   },
   ua: {
-    title: "Тріал закінчився",
-    description: "Щоб продовжити користуватися панеллю, активуйте підписку. Запис клієнтів через бота працює, як і раніше — блокується тільки адмін-панель.",
+    title: "Доступ до панелі обмежено",
+    description: "Щоб повернути доступ, оформіть або продовжте підписку. Поки вона не активна, панель і бот призупинені — клієнти не зможуть записатися.",
     primaryCta: "Активувати підписку",
     secondaryCta: "Налаштування акаунту",
     note: "Якщо вже сплатили — оновіть сторінку, статус підтягнеться протягом хвилини.",
   },
   en: {
-    title: "Your trial has ended",
-    description: "Activate a subscription to keep using the dashboard. Client bookings through the bot keep working — only the admin panel is blocked.",
+    title: "Dashboard access is limited",
+    description: "Subscribe or renew to restore access. While the subscription is inactive, the dashboard and bot are paused — clients can't book.",
     primaryCta: "Activate subscription",
     secondaryCta: "Account settings",
     note: "Already paid? Refresh the page — the status will catch up within a minute.",
   },
   pl: {
-    title: "Twój okres próbny zakończył się",
-    description: "Aby kontynuować korzystanie z panelu, aktywuj subskrypcję. Rezerwacje przez bota działają jak wcześniej — blokowany jest tylko panel administracyjny.",
+    title: "Dostęp do panelu jest ograniczony",
+    description: "Wykup lub odnów subskrypcję, aby przywrócić dostęp. Gdy subskrypcja jest nieaktywna, panel i bot są wstrzymane — klienci nie mogą rezerwować.",
     primaryCta: "Aktywuj subskrypcję",
     secondaryCta: "Ustawienia konta",
     note: "Już zapłaciłeś? Odśwież stronę — status zostanie zaktualizowany w ciągu minuty.",

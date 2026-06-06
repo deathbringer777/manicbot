@@ -520,6 +520,61 @@ describe("salonRouter", () => {
     });
   });
 
+  // ── getPostVisitFollowupTg / setPostVisitFollowupTg ───────────────────────
+  describe("getPostVisitFollowupTg", () => {
+    it("defaults to false when no config row exists", async () => {
+      const dbMock = createDbMock([[]]);
+      const caller = ownerCaller(dbMock.db);
+
+      const result = await caller.getPostVisitFollowupTg({ tenantId: TENANT });
+
+      expect(result).toEqual({ enabled: false });
+    });
+
+    it("parses string 'true' as enabled", async () => {
+      const dbMock = createDbMock([[{ key: "post_visit_followup_tg_enabled", value: "true" }]]);
+      const caller = ownerCaller(dbMock.db);
+
+      const result = await caller.getPostVisitFollowupTg({ tenantId: TENANT });
+
+      expect(result.enabled).toBe(true);
+    });
+
+    it("parses string '1' as enabled", async () => {
+      const dbMock = createDbMock([[{ key: "post_visit_followup_tg_enabled", value: "1" }]]);
+      const caller = ownerCaller(dbMock.db);
+
+      const result = await caller.getPostVisitFollowupTg({ tenantId: TENANT });
+
+      expect(result.enabled).toBe(true);
+    });
+  });
+
+  describe("setPostVisitFollowupTg", () => {
+    it("upserts post_visit_followup_tg_enabled as a JSON bool", async () => {
+      const dbMock = createDbMock();
+      const caller = ownerCaller(dbMock.db);
+
+      const result = await caller.setPostVisitFollowupTg({ tenantId: TENANT, enabled: true });
+
+      expect(result).toEqual({ success: true });
+      expect(dbMock.insertCalls[0]?.values).toMatchObject({
+        tenantId: TENANT,
+        key: "post_visit_followup_tg_enabled",
+        value: "true",
+      });
+    });
+
+    it("stores 'false' when disabled", async () => {
+      const dbMock = createDbMock();
+      const caller = ownerCaller(dbMock.db);
+
+      await caller.setPostVisitFollowupTg({ tenantId: TENANT, enabled: false });
+
+      expect(dbMock.insertCalls[0]?.values.value).toBe("false");
+    });
+  });
+
   // ── markNoShow (salon variant) ────────────────────────────────────────────
   describe("markNoShow", () => {
     it("sets noShow=1, status=no_show, noShowBy, cancelReason", async () => {

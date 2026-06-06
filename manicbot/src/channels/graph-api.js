@@ -102,7 +102,7 @@ export async function graphPost(path, token, body, { maxRetries = 2, label = 'gr
  *
  * @param {string} path - Graph API path with optional querystring (e.g. "/{containerId}?fields=status_code")
  * @param {string} token - Access token
- * @param {{ maxRetries?: number, label?: string }} [opts]
+ * @param {{ maxRetries?: number, label?: string, host?: 'facebook'|'instagram' }} [opts]
  * @returns {Promise<{ ok: boolean, data?: any, status?: number, error?: string, errorCode?: number, errorType?: string, tokenDead?: boolean }>}
  */
 export async function graphGet(path, token, { maxRetries = 2, label = 'graph', host } = {}) {

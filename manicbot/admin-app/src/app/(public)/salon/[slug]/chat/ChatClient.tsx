@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, WifiOff } from "lucide-react";
+import { Loader2, WifiOff, RefreshCw } from "lucide-react";
 import { ChatHeader } from "~/components/chat/ChatHeader";
 import { MessageBubble } from "~/components/chat/MessageBubble";
 import { Composer } from "~/components/chat/Composer";
@@ -36,6 +36,12 @@ import type {
 const STORAGE_PREFIX = "mb.chat.";
 const HISTORY_CAP = 200;
 const POLL_INTERVAL_MS = 3000;
+// Session bootstrap retry policy: auto-retry /chat/init a few times with
+// exponential backoff before falling back to a manual "Retry" button, so a
+// transient network blip or a 429 doesn't dead-end the visitor on a disabled
+// composer (the embed widget has the same backoff).
+const INIT_MAX_AUTO_RETRIES = 3;
+const INIT_RETRY_BASE_MS = 1000;
 
 /** Whitespace + all zero-width / BOM code points the Worker may emit. */
 const BLANK_RE = /[\s\u200b-\u200f\u2060\ufeff]/g;
@@ -136,54 +142,12 @@ export function ChatClient({
   // re-pin to the bottom as it animates, so the composer never floats / hides.
   useVisualViewport(rootRef, scrollToBottom);
 
-  // ── Session bootstrap ────────────────────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-
-    async function init() {
-      const persisted = loadPersisted(slug);
-      if (persisted) {
-        setSessionId(persisted.sessionId);
-        setMessages(persisted.messages);
-        lastTsRef.current = persisted.lastTs;
-        setStatus("idle");
-        return;
-      }
-      setStatus("initializing");
-      try {
-        const res = await fetch("/chat/init", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slug }),
-        });
-        const data = (await res.json()) as
-          | { ok: true; sessionId: string; chatId: number; salon: ChatSalon }
-          | { ok: false; error: string };
-        if (!res.ok || !("ok" in data) || !data.ok) {
-          throw new Error("error" in data ? data.error : `HTTP ${res.status}`);
-        }
-        if (cancelled) return;
-        setSessionId(data.sessionId);
-        setSalon(data.salon);
-        // Auto-greet: fire /start to the bot but do NOT render it as a user
-        // bubble — a public web visitor never typed a slash command, so showing
-        // "/start" in the transcript is confusing. The bot's welcome + menu
-        // arrive as the first visible messages. The loading spinner covers the
-        // brief gap until they land.
-        await sendRaw({ text: "/start" }, data.sessionId);
-      } catch (e) {
-        if (cancelled) return;
-        setStatus("error");
-        setErrorMsg(e instanceof Error ? e.message : t("chat.connectionFailed", langRef.current));
-      }
-    }
-
-    void init();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  // ── Session bootstrap (with backoff retry) ───────────────────────────────
+  // refs live across renders; the runInit callback + its effect are defined
+  // after sendRaw (below) to avoid a TDZ on the sendRaw const.
+  const initMountedRef = useRef(true);
+  const initAttemptRef = useRef(0);
+  const initRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Polling for out-of-band messages ─────────────────────────────────────
   useEffect(() => {
@@ -316,6 +280,90 @@ export function ChatClient({
     void sendRaw({ text: "/start" }, sessionId);
   }, [lang, sessionId, sendRaw]);
 
+  // ── Session bootstrap callback ───────────────────────────────────────────
+  // Defined here (after sendRaw) so it can resume the chat by firing the silent
+  // /start. On failure it auto-retries with exponential backoff up to
+  // INIT_MAX_AUTO_RETRIES, then leaves a manual "Retry" affordance in the error
+  // banner. Honours a 429 Retry-After header when present.
+  const runInit = useCallback(async () => {
+    if (initRetryTimerRef.current) {
+      clearTimeout(initRetryTimerRef.current);
+      initRetryTimerRef.current = null;
+    }
+    const persisted = loadPersisted(slug);
+    if (persisted) {
+      setSessionId(persisted.sessionId);
+      setMessages(persisted.messages);
+      lastTsRef.current = persisted.lastTs;
+      setStatus("idle");
+      return;
+    }
+    setStatus("initializing");
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/chat/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { ok: true; sessionId: string; chatId: number; salon: ChatSalon }
+        | { ok: false; error: string }
+        | null;
+      if (!res.ok || !data || !("ok" in data) || !data.ok) {
+        const retryAfter = res.status === 429 ? Number(res.headers.get("retry-after")) : NaN;
+        const err: Error & { retryAfterMs?: number } = new Error(
+          data && "error" in data ? data.error : `HTTP ${res.status}`,
+        );
+        if (Number.isFinite(retryAfter)) err.retryAfterMs = retryAfter * 1000;
+        throw err;
+      }
+      if (!initMountedRef.current) return;
+      initAttemptRef.current = 0;
+      setSessionId(data.sessionId);
+      setSalon(data.salon);
+      // Auto-greet: fire /start to the bot but do NOT render it as a user
+      // bubble — a public web visitor never typed a slash command. The bot's
+      // welcome + menu arrive as the first visible messages.
+      await sendRaw({ text: "/start" }, data.sessionId);
+    } catch (e) {
+      if (!initMountedRef.current) return;
+      const attempt = initAttemptRef.current;
+      setStatus("error");
+      if (attempt < INIT_MAX_AUTO_RETRIES) {
+        initAttemptRef.current = attempt + 1;
+        const retryAfterMs = (e as { retryAfterMs?: number })?.retryAfterMs;
+        const delay = retryAfterMs ?? INIT_RETRY_BASE_MS * 2 ** attempt;
+        setErrorMsg(t("chat.reconnecting", langRef.current));
+        initRetryTimerRef.current = setTimeout(() => {
+          if (initMountedRef.current) void runInit();
+        }, delay);
+      } else {
+        setErrorMsg(e instanceof Error ? e.message : t("chat.connectionFailed", langRef.current));
+      }
+    }
+  }, [slug, sendRaw]);
+
+  // Kick off bootstrap on mount / slug change; clean up any pending retry.
+  useEffect(() => {
+    initMountedRef.current = true;
+    initAttemptRef.current = 0;
+    void runInit();
+    return () => {
+      initMountedRef.current = false;
+      if (initRetryTimerRef.current) {
+        clearTimeout(initRetryTimerRef.current);
+        initRetryTimerRef.current = null;
+      }
+    };
+  }, [runInit]);
+
+  // Manual retry from the error banner: reset the auto-retry budget and re-init.
+  const retryInit = useCallback(() => {
+    initAttemptRef.current = 0;
+    void runInit();
+  }, [runInit]);
+
   const handleSend = useCallback(
     async (text: string) => {
       if (!sessionId) return;
@@ -356,8 +404,16 @@ export function ChatClient({
 
       {status === "error" && errorMsg && (
         <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20 text-[11px] text-red-600 dark:text-red-400 flex items-center gap-2">
-          <WifiOff className="h-3 w-3" />
-          {errorMsg}
+          <WifiOff className="h-3 w-3 shrink-0" />
+          <span className="flex-1">{errorMsg}</span>
+          <button
+            type="button"
+            onClick={retryInit}
+            className="shrink-0 inline-flex items-center gap-1 rounded-md border border-red-500/30 px-2 py-0.5 font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <RefreshCw className="h-3 w-3" />
+            {t("chat.retry", lang)}
+          </button>
         </div>
       )}
 

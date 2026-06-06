@@ -1414,6 +1414,8 @@ const translations = {
   "chat.offline":           { ru: "Нет соединения",                                         ua: "Немає з'єднання",                                     en: "No connection",                                      pl: "Brak połączenia" },
   "chat.online":            { ru: "онлайн",                                                 ua: "онлайн",                                             en: "online",                                             pl: "online" },
   "chat.connectionFailed":  { ru: "Ошибка соединения",                                      ua: "Помилка з'єднання",                                  en: "Connection failed",                                  pl: "Błąd połączenia" },
+  "chat.reconnecting":      { ru: "Переподключение…",                                       ua: "Перепідключення…",                                   en: "Reconnecting…",                                      pl: "Ponowne łączenie…" },
+  "chat.retry":             { ru: "Повторить",                                              ua: "Повторити",                                          en: "Retry",                                              pl: "Ponów" },
   "chat.sendFailed":        { ru: "Не удалось отправить",                                   ua: "Не вдалося надіслати",                               en: "Send failed",                                        pl: "Nie udało się wysłać" },
 
   // ── Cookies ────────────────────────────────────────────────────────────────

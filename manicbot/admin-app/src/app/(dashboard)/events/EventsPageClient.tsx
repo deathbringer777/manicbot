@@ -65,6 +65,31 @@ function rowAccent(level: EventLevel): string {
   return "";
 }
 
+/** A single event-data value as a human string: scalars verbatim, objects /
+ *  arrays as compact inline JSON (never a multi-line raw dump at the operator). */
+function formatEventValue(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+/** Readable key/value view of an event payload — replaces the old raw
+ *  `JSON.stringify` <pre> that surfaced as "raw code" on the page. */
+function EventDataDetails({ data }: { data: Record<string, unknown> }) {
+  return (
+    <div className="px-3 pb-3">
+      <div className="space-y-1 rounded-xl border border-slate-200 dark:border-slate-800/50 bg-white dark:bg-slate-900/80 p-3 text-[11px]">
+        {Object.entries(data).map(([k, v]) => (
+          <div key={k} className="flex gap-2">
+            <span className="font-mono text-slate-500 dark:text-slate-400 shrink-0 min-w-[120px] truncate">{k}</span>
+            <span className="font-mono text-slate-700 dark:text-slate-200 break-all">{formatEventValue(v)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function EventRow({ event }: { event: AdminEvent }) {
   const [expanded, setExpanded] = useState(false);
   const hasData = event.data && Object.keys(event.data).length > 0;
@@ -96,13 +121,7 @@ function EventRow({ event }: { event: AdminEvent }) {
           </span>
         )}
       </div>
-      {expanded && event.data && (
-        <div className="px-3 pb-3">
-          <pre className="text-[10px] text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900/80 rounded-xl p-3 overflow-x-auto border border-slate-200 dark:border-slate-800/50 scrollbar-none">
-            {JSON.stringify(event.data, null, 2)}
-          </pre>
-        </div>
-      )}
+      {expanded && event.data && <EventDataDetails data={event.data} />}
     </div>
   );
 }

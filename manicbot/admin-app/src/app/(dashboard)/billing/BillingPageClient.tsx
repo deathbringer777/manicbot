@@ -543,7 +543,11 @@ export default function BillingPageClient() {
 
               {manualActivateMut.error && (
                 <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
-                  {manualActivateMut.error.message}
+                  {/* Hide raw tRPC codes (INTERNAL_SERVER_ERROR, FORBIDDEN…) behind a
+                      localized label; only show genuinely descriptive messages. */}
+                  {/^[A-Z][A-Z0-9_]+$/.test((manualActivateMut.error.message ?? "").trim())
+                    ? t("common.error", lang)
+                    : manualActivateMut.error.message}
                 </p>
               )}
 

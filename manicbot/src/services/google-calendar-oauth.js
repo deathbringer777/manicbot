@@ -890,7 +890,10 @@ export async function handleGoogleCallback(ctx, url) {
 }
 
 function redirectToReturn(returnUrl, errorCode) {
-  const fallback = '/plugin/google-calendar';
+  // The google-calendar marketplace plugin was removed (2026-06-05); the core
+  // GCal connection lives in salon settings now, so fall back there when no
+  // explicit returnUrl was carried through the OAuth session.
+  const fallback = '/settings';
   let target = returnUrl || fallback;
   try {
     const u = new URL(target, 'https://placeholder.invalid');

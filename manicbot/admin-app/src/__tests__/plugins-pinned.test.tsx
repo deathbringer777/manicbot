@@ -115,12 +115,12 @@ describe("pinned storage helpers (tenant-scoped localStorage cache)", () => {
 describe("cross-tenant isolation — localStorage", () => {
   it("pins written for tenant A are not visible from tenant B", () => {
     writePinned(["sms", "task-board"], "tenant_A");
-    writePinned(["export-hub"], "tenant_B");
+    writePinned(["inventory-lite"], "tenant_B");
 
     expect(readPinned("tenant_A")).toEqual(["sms", "task-board"]);
-    expect(readPinned("tenant_B")).toEqual(["export-hub"]);
+    expect(readPinned("tenant_B")).toEqual(["inventory-lite"]);
     expect(readPinned("tenant_B")).not.toContain("sms");
-    expect(readPinned("tenant_A")).not.toContain("export-hub");
+    expect(readPinned("tenant_A")).not.toContain("inventory-lite");
   });
 
   it("usePinnedPlugins mirrors server data to the correct profile-scoped key", async () => {
@@ -142,14 +142,14 @@ describe("cross-tenant isolation — localStorage", () => {
   it("switching tenantId reads from a different localStorage bucket", async () => {
     // Seed two buckets
     window.localStorage.setItem("manicbot_pinned_plugins_tenant_A", JSON.stringify(["sms"]));
-    window.localStorage.setItem("manicbot_pinned_plugins_tenant_B", JSON.stringify(["export-hub"]));
+    window.localStorage.setItem("manicbot_pinned_plugins_tenant_B", JSON.stringify(["inventory-lite"]));
 
     mockTenantId = "tenant_A";
     expect(readPinned(mockTenantId)).toContain("sms");
-    expect(readPinned(mockTenantId)).not.toContain("export-hub");
+    expect(readPinned(mockTenantId)).not.toContain("inventory-lite");
 
     mockTenantId = "tenant_B";
-    expect(readPinned(mockTenantId)).toContain("export-hub");
+    expect(readPinned(mockTenantId)).toContain("inventory-lite");
     expect(readPinned(mockTenantId)).not.toContain("sms");
   });
 });

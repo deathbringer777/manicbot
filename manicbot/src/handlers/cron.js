@@ -45,7 +45,6 @@ import { runCampaignSend as runMarketingCampaign } from '../services/marketing/s
 import { isReaskEligible, EMAIL_REASK_BATCH, EMAIL_REASK_SCAN_LIMIT } from '../services/marketing/contacts.js';
 import { askEmail } from '../ui/emailAsk.js';
 import { phasePlatformCampaigns } from '../services/platformCampaigns.js';
-import { remindersCron } from '../../plugins/reminders/cron.js';
 
 /**
  * Plugin cron dispatchers — runtime map of slug → handler for plugins that
@@ -62,14 +61,15 @@ import { remindersCron } from '../../plugins/reminders/cron.js';
  * TS and the worker is JS, and (b) lazy growth — when there are 3+ entries
  * we extract to plugins/cron-dispatchers.js. YAGNI for plugin #1.
  */
-const PLUGIN_CRON_DISPATCHERS = Object.freeze({
-  reminders: remindersCron,
-});
+// Currently empty: the `reminders` plugin (the first cron-backed plugin) was
+// removed 2026-06-06 as a duplicate of the core notification bell + the
+// `phaseReminders` appointment-reminder cron. The orchestrator below stays so
+// the next cron-backed plugin is a one-line add.
+const PLUGIN_CRON_DISPATCHERS = Object.freeze({});
 
 // Per-phase idempotency window (seconds). The 15-min cron tick fires every
 // 900 s; phases with windowSec > 900 will skip most ticks.
 export const PHASE_WINDOWS = Object.freeze({
-  reminders: 10 * 60,         // 10 min — must run almost every cron tick
   reviews: 24 * 60 * 60,      // 24 h
   gcalSync: 10 * 60,          // 10 min
   postVisit: 60 * 60,         // 1 h
@@ -81,7 +81,7 @@ export const PHASE_WINDOWS = Object.freeze({
   // PR-A marketing send dispatch — tight window because we want scheduled
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
   marketingDispatch: 60,
-  pluginCron: 10 * 60,        // 10 min — same cadence as reminders
+  pluginCron: 10 * 60,        // 10 min
   // Platform operator campaigns (migration 0100): tight window so scheduled /
   // recurring sends and the monthly-report/subscription-reminder automations
   // fire within ~one cron tick of becoming due. Idempotency is the delivery
@@ -1115,7 +1115,7 @@ export async function phaseMarketingDispatch(ctx, nowMs) {
  * separate global orchestrator; tenant-fan-out is correct for reminders
  * + checklists + everything currently on the roadmap.
  */
-export async function phasePluginCron(ctx, nowMs) {
+export async function phasePluginCron(ctx, nowMs, dispatchers = PLUGIN_CRON_DISPATCHERS) {
   if (!ctx?.db || !ctx?.tenantId) return;
   let installs;
   try {
@@ -1135,7 +1135,7 @@ export async function phasePluginCron(ctx, nowMs) {
     return;
   }
   for (const install of installs) {
-    const dispatcher = PLUGIN_CRON_DISPATCHERS[install.plugin_slug];
+    const dispatcher = dispatchers[install.plugin_slug];
     if (!dispatcher) continue;
     // Treat past_due / canceled paid addons as disabled at runtime even when
     // the enabled=1 flag still says yes — matches assertPluginEnabled gating
@@ -1177,7 +1177,12 @@ export async function handleCron(ctx) {
     const now = Date.now();
     const w = warsawNow();
 
-    await checkBillingExpiry(ctx, now);
+    // `now` is Date.now() MILLISECONDS — every phase below consumes it as ms.
+    // checkBillingExpiry, however, compares against trial_ends_at / grace_ends_at
+    // which are stored in UNIX SECONDS. Passing ms made `now > trialEndsAt`
+    // always true, flipping every trialing/grace tenant to `inactive` on the
+    // first cron tick (zero-length trials + grace). Convert to seconds here.
+    await checkBillingExpiry(ctx, Math.floor(now / 1000));
 
     if (!ctx?.db || !ctx?.tenantId) return;
 

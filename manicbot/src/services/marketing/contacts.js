@@ -27,7 +27,7 @@ import { log } from '../../utils/logger.js';
 import { EMAIL_REGEX, generateUnsubscribeToken } from '../../http/subscribeHttpLogic.js';
 import { nowSec } from '../../utils/time.js';
 
-/** Re-ask cadence (durable anti-nag; see migration 0109 + shouldAskEmail). */
+/** Re-ask cadence (durable anti-nag; see migration 0113 + shouldAskEmail). */
 export const EMAIL_REASK_COOLDOWN_SEC = 14 * 24 * 3600; // 14 days
 export const EMAIL_MAX_PROMPTS = 3;
 /** Proactive re-ask cron (Scenario C) tuning. */

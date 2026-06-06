@@ -306,6 +306,42 @@ describe('customer.subscription.updated', () => {
     expect(tenant.currentPeriodEnd).toBeGreaterThan(1_700_000_000);
   });
 
+  it('reflects Stripe pause_collection as billing_status=paused (sub.status stays active)', async () => {
+    const event = {
+      id: 'evt_sub_paused_1',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: SUB_ID,
+          status: 'active',
+          current_period_end: nowSec() + 30 * 86400,
+          cancel_at_period_end: false,
+          customer: CUSTOMER_ID,
+          pause_collection: { behavior: 'void' },
+          items: { data: [{ price: { id: 'price_pro' } }] },
+        },
+      },
+    };
+    const r = await fire(ctx, event);
+    expect(r).toMatchObject({ ok: true, status: 200 });
+    expect((await getTenant(ctx, TENANT_ID)).billingStatus).toBe('paused');
+  });
+
+  it('resume (pause_collection removed) returns billing_status to active', async () => {
+    const base = (id, pause) => ({
+      id, type: 'customer.subscription.updated',
+      data: { object: {
+        id: SUB_ID, status: 'active', current_period_end: nowSec() + 86400,
+        cancel_at_period_end: false, customer: CUSTOMER_ID, pause_collection: pause,
+        items: { data: [{ price: { id: 'price_pro' } }] },
+      } },
+    });
+    await fire(ctx, base('evt_pause_on', { behavior: 'void' }));
+    expect((await getTenant(ctx, TENANT_ID)).billingStatus).toBe('paused');
+    await fire(ctx, base('evt_pause_off', null));
+    expect((await getTenant(ctx, TENANT_ID)).billingStatus).toBe('active');
+  });
+
   it('updates cancelAtPeriodEnd flag correctly', async () => {
     const event = {
       id: 'evt_sub_cancel_flag',

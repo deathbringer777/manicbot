@@ -173,3 +173,30 @@ describe("tenants.deactivate / activate — adminProcedure gate", () => {
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });
+
+describe("tenants.setTestMode — flag write + gate", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("rejects tenant_owner (FORBIDDEN)", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t1") as never);
+    await expect(
+      caller.setTestMode({ id: "t1", isTest: true }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("writes is_test=1 when flagging a tenant as test", async () => {
+    const { db, updateCalls } = createDbMock();
+    const caller = callerFactory(makeAdminCtx(db) as never);
+    const res = await caller.setTestMode({ id: "t1", isTest: true });
+    expect(res).toMatchObject({ success: true, isTest: true });
+    expect(updateCalls[0]?.values.isTest).toBe(1);
+  });
+
+  it("writes is_test=0 when marking a tenant as real", async () => {
+    const { db, updateCalls } = createDbMock();
+    const caller = callerFactory(makeAdminCtx(db) as never);
+    await caller.setTestMode({ id: "t1", isTest: false });
+    expect(updateCalls[0]?.values.isTest).toBe(0);
+  });
+});

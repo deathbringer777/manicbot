@@ -41,6 +41,11 @@ function tenantRowToDoc(row) {
     nextPaymentDate: row.next_payment_date,
     billingEmail: row.billing_email,
     cancelAtPeriodEnd: row.cancel_at_period_end === 1,
+    pendingPlan: row.pending_plan ?? null,
+    pendingPriceId: row.pending_price_id ?? null,
+    pendingPlanEffectiveAt: row.pending_plan_effective_at ?? null,
+    pendingScheduleId: row.pending_schedule_id ?? null,
+    pauseResumesAt: row.pause_resumes_at ?? null,
     logo: row.logo || null,
     coverPhoto: row.cover_photo || null,
     slug: row.slug || null,
@@ -78,6 +83,11 @@ function docToTenantParams(data) {
     next_payment_date: data.nextPaymentDate || null,
     billing_email: data.billingEmail || null,
     cancel_at_period_end: data.cancelAtPeriodEnd ? 1 : 0,
+    pending_plan: data.pendingPlan ?? null,
+    pending_price_id: data.pendingPriceId ?? null,
+    pending_plan_effective_at: data.pendingPlanEffectiveAt ?? null,
+    pending_schedule_id: data.pendingScheduleId ?? null,
+    pause_resumes_at: data.pauseResumesAt ?? null,
     logo: data.logo || null,
     cover_photo: data.coverPhoto || null,
     slug: data.slug || null,
@@ -107,12 +117,13 @@ export async function putTenant(ctx, tenantId, data) {
   try {
     const p = docToTenantParams({ ...data, id: tenantId });
     await dbRun(ctx,
-      `INSERT OR REPLACE INTO tenants (id, name, active, salon, photos, about_photos, maps_url, instagram_url, plan, billing_status, subscription_status, trial_ends_at, grace_ends_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, current_period_end, next_payment_date, billing_email, cancel_at_period_end, logo, cover_photo, slug, description, lat, lng, city, public_active, chat_enabled, search_text, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO tenants (id, name, active, salon, photos, about_photos, maps_url, instagram_url, plan, billing_status, subscription_status, trial_ends_at, grace_ends_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, current_period_end, next_payment_date, billing_email, cancel_at_period_end, pending_plan, pending_price_id, pending_plan_effective_at, pending_schedule_id, pause_resumes_at, logo, cover_photo, slug, description, lat, lng, city, public_active, chat_enabled, search_text, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       p.id, p.name, p.active, p.salon, p.photos, p.about_photos, p.maps_url, p.instagram_url,
       p.plan, p.billing_status, p.subscription_status, p.trial_ends_at, p.grace_ends_at,
       p.stripe_customer_id, p.stripe_subscription_id, p.stripe_price_id,
       p.current_period_end, p.next_payment_date, p.billing_email, p.cancel_at_period_end,
+      p.pending_plan, p.pending_price_id, p.pending_plan_effective_at, p.pending_schedule_id, p.pause_resumes_at,
       p.logo, p.cover_photo, p.slug, p.description, p.lat, p.lng, p.city, p.public_active, p.chat_enabled, p.search_text,
       p.created_at, p.updated_at,
     );

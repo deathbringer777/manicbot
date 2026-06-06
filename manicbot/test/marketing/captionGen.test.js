@@ -4,6 +4,7 @@ import {
   buildSystemPrompt,
   buildUserMessage,
   extractText,
+  extractWorkersAIText,
   parseJsonOutput,
   validateOutput,
 } from '../../src/marketing/captionGen.js';
@@ -330,6 +331,28 @@ describe('marketing/captionGen — generateCaption (e2e with fetch mock)', () =>
     );
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(run).not.toHaveBeenCalled();
+  });
+
+  describe('extractWorkersAIText (response-shape normalization)', () => {
+    const S = JSON.stringify(VALID_OUTPUT);
+    it('reads { response } (llama)', () => expect(extractWorkersAIText({ response: S })).toBe(S));
+    it('reads { result: { response } }', () => expect(extractWorkersAIText({ result: { response: S } })).toBe(S));
+    it('reads OpenAI { choices:[{ message:{ content } }] }', () =>
+      expect(extractWorkersAIText({ choices: [{ message: { content: S } }] })).toBe(S));
+    it('reads gpt-oss { output:[{ content:[{ text }] }] }, skipping reasoning', () => {
+      const out = { output: [
+        { type: 'reasoning', content: [] },
+        { type: 'message', content: [{ type: 'output_text', text: S }] },
+      ] };
+      expect(extractWorkersAIText(out)).toBe(S);
+    });
+    it('reads a bare string', () => expect(extractWorkersAIText(S)).toBe(S));
+    it('returns "" on empty / reasoning-only / null', () => {
+      expect(extractWorkersAIText({})).toBe('');
+      expect(extractWorkersAIText({ response: '' })).toBe('');
+      expect(extractWorkersAIText({ output: [{ type: 'reasoning', content: [] }] })).toBe('');
+      expect(extractWorkersAIText(null)).toBe('');
+    });
   });
 
   it('throws on unknown theme', async () => {

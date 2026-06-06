@@ -32,8 +32,10 @@ const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'; // cheap, fast, sufficient fo
 const DEFAULT_MAX_TOKENS = 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
 // Cloudflare Workers AI text model used when ANTHROPIC_API_KEY is not set, so the
-// autopilot needs no external key. Matches the primary model in src/ai.js.
-const WORKERS_AI_MODEL = '@cf/openai/gpt-oss-120b';
+// autopilot needs no external key. An instruction-tuned (non-reasoning) model is
+// used on purpose: gpt-oss-120b spent the token budget on hidden reasoning and
+// returned an empty answer for this structured-JSON task (caught live 2026-06-05).
+const WORKERS_AI_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 /**
  * @param {{ ANTHROPIC_API_KEY?: string, AI?: { run: (model: string, input: object) => Promise<any> } }} env
@@ -179,7 +181,7 @@ async function generateCaptionViaWorkersAI(env, { slot, maxTokens, systemPrompt,
     throw new Error(`captionGen: Workers AI run failed: ${err?.message ?? 'unknown'}`);
   }
 
-  const text = typeof out === 'string' ? out : (out?.response ?? out?.result?.response ?? '');
+  const text = extractWorkersAIText(out);
   if (!text) {
     log.error('marketing.captionGen', new Error('empty Workers AI content'), {
       stage: 'parse',
@@ -248,6 +250,40 @@ export function extractText(anthropicResponse) {
   if (!Array.isArray(blocks)) return null;
   const textBlock = blocks.find((b) => b.type === 'text' && typeof b.text === 'string');
   return textBlock?.text ?? null;
+}
+
+/**
+ * Normalize a Workers AI text response across the shapes models emit:
+ *   { response } (llama) · { result: { response } } · { text } ·
+ *   OpenAI { choices: [{ message: { content } }] } ·
+ *   gpt-oss responses-API { output: "..." | [{ content: [{ text }] }] }.
+ * Returns '' when no text is present (e.g. a reasoning model that produced
+ * only reasoning tokens). Tolerant on purpose — the old narrow read
+ * (response/result.response only) silently returned empty for gpt-oss.
+ * @param {any} out
+ * @returns {string}
+ */
+export function extractWorkersAIText(out) {
+  if (typeof out === 'string') return out;
+  if (!out || typeof out !== 'object') return '';
+  const direct = out.response ?? out.result?.response ?? out.text;
+  if (typeof direct === 'string' && direct.trim()) return direct;
+  if (Array.isArray(out.choices)) {
+    const c = out.choices[0]?.message?.content ?? out.choices[0]?.text;
+    if (typeof c === 'string' && c.trim()) return c;
+  }
+  if (typeof out.output === 'string' && out.output.trim()) return out.output;
+  if (Array.isArray(out.output)) {
+    for (const item of out.output) {
+      if (typeof item === 'string' && item.trim()) return item;
+      const blocks = item?.content;
+      if (Array.isArray(blocks)) {
+        const txt = blocks.map((b) => (typeof b?.text === 'string' ? b.text : '')).join('').trim();
+        if (txt) return txt;
+      }
+    }
+  }
+  return '';
 }
 
 export function parseJsonOutput(text) {

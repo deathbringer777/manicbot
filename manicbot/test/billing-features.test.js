@@ -75,6 +75,36 @@ describe('canUse — feature gating', () => {
     const ctx = makeCtx({ billingStatus: 'active', plan: 'mystery_plan' });
     expect(canUse(ctx, 'ai')).toBe(false);
   });
+
+  // Billing-lifecycle PIN: active + max grants the full feature set. This is
+  // the comped-MAX shape (active, no sub, no trial) and must keep full access —
+  // the warnings/lockout work must not regress entitlement here.
+  it('active with max plan grants the full feature set', () => {
+    const ctx = makeCtx({ billingStatus: 'active', plan: 'max' });
+    expect(canUse(ctx, 'booking')).toBe(true);
+    expect(canUse(ctx, 'ai')).toBe(true);
+    expect(canUse(ctx, 'calendar')).toBe(true);
+    expect(canUse(ctx, 'support_tickets')).toBe(true);
+    expect(canUse(ctx, 'white_label')).toBe(true);
+    expect(canUse(ctx, 'whatsapp')).toBe(true);
+    expect(canUse(ctx, 'instagram')).toBe(true);
+  });
+
+  // Billing-lifecycle PIN: once graceEndsAt passes, the bot turns fully OFF —
+  // even booking is denied. This is the hard-lockout boundary the warnings
+  // phase is counting down to.
+  it('grace_period with EXPIRED graceEndsAt blocks everything (hard lockout)', () => {
+    const ctx = makeCtx({ billingStatus: 'grace_period', plan: 'pro', graceEndsAt: nowSec() - 3600 });
+    expect(canUse(ctx, 'booking')).toBe(false);
+    expect(canUse(ctx, 'ai')).toBe(false);
+  });
+
+  // Counterpart: grace_period still within its window keeps booking alive.
+  it('grace_period within window keeps booking alive', () => {
+    const ctx = makeCtx({ billingStatus: 'grace_period', plan: 'pro', graceEndsAt: nowSec() + 3600 });
+    expect(canUse(ctx, 'booking')).toBe(true);
+    expect(canUse(ctx, 'ai')).toBe(false);
+  });
 });
 
 describe('getMastersLimit', () => {

@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Target, TrendingUp, X } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { formatDate } from "~/lib/i18n";
 import { PluginRuntimeShell } from "../PluginRuntimeShell";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
@@ -173,7 +174,7 @@ export default function EarningsGoalRuntime({ installationId, slug }: PluginRunt
                   {e.note && <span className="ml-2 text-slate-500 dark:text-slate-400">{e.note}</span>}
                 </span>
                 <span className="text-[10px] text-slate-400">
-                  {new Date(e.at).toLocaleDateString()}
+                  {formatDate(new Date(e.at), lang)}
                 </span>
                 <button
                   type="button"

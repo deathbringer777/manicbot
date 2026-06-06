@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, formatDate, type Lang } from "~/lib/i18n";
 import { useMessengerSocketCtx } from "./socketContext";
 
 type ThreadKind = "staff_dm" | "staff_group" | "client_conv" | "system" | "requests";
@@ -26,7 +26,7 @@ const KIND_META: Record<ThreadKind, { icon: typeof DmIcon; tint: string }> = {
   requests: { icon: RequestIcon, tint: "bg-amber-500/15 text-amber-600" },
 };
 
-function fmtTime(ts: number | null): string {
+function fmtTime(ts: number | null, lang: Lang): string {
   if (!ts) return "";
   const ms = ts * 1000;
   const now = Date.now();
@@ -35,7 +35,7 @@ function fmtTime(ts: number | null): string {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
   const d = new Date(ms);
-  return d.toLocaleDateString();
+  return formatDate(d, lang);
 }
 
 interface Props {
@@ -211,7 +211,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
                         : t("messenger.thread.chat", lang))}
                     </p>
                     <span className="shrink-0 text-[10px] text-slate-400">
-                      {fmtTime(th.lastMessageAt)}
+                      {fmtTime(th.lastMessageAt, lang)}
                     </span>
                   </div>
                   <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">
@@ -259,7 +259,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
                   </span>
                   <span className="text-[9px] text-slate-400">
                     {threadTitleById.get(hit.threadId) ?? t("messenger.thread.chat", lang)} ·{" "}
-                    {fmtTime(hit.createdAt)}
+                    {fmtTime(hit.createdAt, lang)}
                   </span>
                 </button>
               ))

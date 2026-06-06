@@ -180,7 +180,7 @@ describe("MessageBubble integration", () => {
       photo: null,
       editMessageId: null,
     };
-    render(<MessageBubble msg={msg} salon={salon} onButtonClick={() => {}} />);
+    render(<MessageBubble msg={msg} salon={salon} lang="ru" onButtonClick={() => {}} />);
     // The strip's month chevron (icon button) proves the rich UI replaced the grid.
     expect(screen.getByLabelText("Следующий месяц")).toBeTruthy();
   });
@@ -201,7 +201,7 @@ describe("MessageBubble integration", () => {
       photos: ["https://e/a.png", "https://e/b.png"],
       editMessageId: null,
     };
-    const { container } = render(<MessageBubble msg={msg} salon={salon} onButtonClick={() => {}} />);
+    const { container } = render(<MessageBubble msg={msg} salon={salon} lang="ru" onButtonClick={() => {}} />);
     // Carousel slides present (salon.logo is null → bot avatar is a letter div, not an img).
     expect(container.querySelectorAll("img").length).toBeGreaterThanOrEqual(2);
     // cc: arrows + NOOP counter stripped...

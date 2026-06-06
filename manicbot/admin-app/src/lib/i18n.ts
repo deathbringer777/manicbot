@@ -2409,6 +2409,30 @@ export function formatRelativeTime(unixSeconds: number, lang: Lang, nowMs = Date
 }
 
 /**
+ * Absolute date in the user's locale. ru/ua/pl render "dd.mm.yyyy"; en-US
+ * renders "m/d/yyyy". Always pass `lang` — a bare `Date.toLocaleDateString()`
+ * defaults to en-US and leaked "6/4/2026" into the Russian messenger
+ * (2026-06-06 audit). Callers holding a unix timestamp pass `new Date(ts*1000)`.
+ */
+export function formatDate(date: Date, lang: Lang, opts?: Intl.DateTimeFormatOptions): string {
+  return date.toLocaleDateString(localeFor(lang), opts);
+}
+
+/**
+ * Absolute clock time in the user's locale. Forces 24-hour format for ru/ua/pl
+ * (the audit caught "12:46 AM" rendering in the Russian web chat); en keeps its
+ * locale default (12-hour). Defaults to HH:MM; override via `opts`.
+ */
+export function formatTime(date: Date, lang: Lang, opts?: Intl.DateTimeFormatOptions): string {
+  return date.toLocaleTimeString(localeFor(lang), {
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(lang === "en" ? {} : { hour12: false }),
+    ...opts,
+  });
+}
+
+/**
  * Compact variant of formatRelativeTime — used in dense notification rows
  * where the trailing "ago" / "назад" feels noisy. Same buckets, but uses
  * the short i18n keys ("{n} мин", "{n}m") instead of the long ones.

@@ -372,6 +372,7 @@ export function ChatClient({
             key={msg.id}
             msg={msg}
             salon={salon}
+            lang={lang}
             onButtonClick={handleButtonClick}
           />
         ))}

@@ -38,7 +38,7 @@ import {
   type HomeWidgetItem,
   type HomeWidgetType,
 } from "./registry";
-import { WidgetFrame, WIDGET_DRAG_HANDLE } from "./WidgetFrame";
+import { WidgetFrame } from "./WidgetFrame";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -215,12 +215,15 @@ export function HomeWidgetBoard({ tenantId, lang }: { tenantId: string; lang: La
           margin={MARGIN}
           isDraggable={interactive}
           isResizable={interactive}
-          draggableHandle={`.${WIDGET_DRAG_HANDLE}`}
           compactType="vertical"
           onLayoutChange={handleLayoutChange}
         >
           {items.map((item) => (
-            <div key={item.i} data-widget-type={item.type} className="relative">
+            <div
+              key={item.i}
+              data-widget-type={item.type}
+              className={`relative${interactive ? " cursor-grab active:cursor-grabbing" : ""}`}
+            >
               <WidgetFrame
                 item={item}
                 tenantId={tenantId}
@@ -231,7 +234,10 @@ export function HomeWidgetBoard({ tenantId, lang }: { tenantId: string; lang: La
               {editMode && (
                 <button
                   type="button"
+                  // Stop BOTH pointerdown and mousedown so react-draggable doesn't
+                  // interpret a delete-click as the start of a drag gesture.
                   onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
                     removeHomeWidget(item.i);

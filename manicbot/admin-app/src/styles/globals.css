@@ -275,3 +275,28 @@ body.driver-tour-active .overflow-hidden {
   animation: widget-wobble 0.5s ease-in-out infinite;
   transform-origin: center bottom;
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Widget board — visible resize handle in edit mode.
+   react-resizable renders a small corner nub (.react-resizable-handle-se).
+   We replace the default arrow icon with an L-shaped grip indicator so the
+   resize affordance is visually clear against the card background. */
+.home-widget-board .react-resizable-handle-se {
+  background-image: none;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+.home-widget-board .react-resizable-handle-se::after {
+  content: "";
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid rgba(156, 163, 175, 0.9);
+  border-bottom: 2px solid rgba(156, 163, 175, 0.9);
+  border-radius: 0 0 3px 0;
+}

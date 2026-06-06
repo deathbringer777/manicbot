@@ -14,9 +14,10 @@
  * only by the system_admin operator (the shell re-gates on useRole).
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Megaphone, BarChart3, CreditCard, Send, Loader2, Trash2, Pause, Play, Check,
+  Sparkles, LayoutTemplate, Plus, Pencil, Lock, X,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Switch } from "~/components/ui/Switch";
@@ -55,6 +56,71 @@ function fromChannels(list: string[]): OptionalChannels {
     telegram: list.includes("telegram"),
     email: list.includes("email"),
   };
+}
+
+// Personalization tokens available in welcome + announcement bodies; substituted
+// at delivery by platformCampaignVars / welcomeOnRegister (migration 0110).
+const TOKENS = ["{salon_name}", "{owner_name}", "{first_name}", "{plan}"] as const;
+
+/** Clickable token chips that insert at the textarea cursor (append fallback). */
+function TokenPalette({
+  targetRef,
+  value,
+  onChange,
+}: {
+  targetRef: React.RefObject<HTMLTextAreaElement | null>;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  function insert(token: string) {
+    const el = targetRef.current;
+    if (!el) {
+      onChange(value + token);
+      return;
+    }
+    const start = el.selectionStart ?? value.length;
+    const end = el.selectionEnd ?? value.length;
+    onChange(value.slice(0, start) + token + value.slice(end));
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + token.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }
+  return (
+    <div className="mt-1 flex flex-wrap gap-1" data-testid="token-palette">
+      {TOKENS.map((tk) => (
+        <button
+          key={tk}
+          type="button"
+          onClick={() => insert(tk)}
+          className="rounded-md bg-brand-500/10 px-2 py-0.5 text-[11px] font-medium text-brand-600 transition-colors hover:bg-brand-500/20 dark:text-brand-300"
+        >
+          {tk}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type ComposerPrefill = { title: string; body: string; channels: OptionalChannels };
+
+function templateCenter(bodiesJson: string | null): string {
+  try {
+    const b = JSON.parse(bodiesJson ?? "{}") as { center?: unknown };
+    return typeof b?.center === "string" ? b.center : "";
+  } catch {
+    return "";
+  }
+}
+
+function templateChannels(channelsJson: string | null): string[] {
+  try {
+    const c = JSON.parse(channelsJson ?? "[]") as unknown;
+    return Array.isArray(c) ? c.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Channel matrix: center is always-on (locked); the rest toggle freely. */
@@ -187,6 +253,66 @@ function SubscriptionReminderCard() {
   );
 }
 
+// ─── Welcome message (sys_welcome singleton) ───────────────────────────────
+
+function WelcomeMessageCard() {
+  const utils = api.useUtils();
+  const q = api.platformBroadcasts.getWelcomeSettings.useQuery();
+  const save = api.platformBroadcasts.setWelcomeSettings.useMutation({
+    onSuccess: () => {
+      setDraft(null);
+      void utils.platformBroadcasts.getWelcomeSettings.invalidate();
+    },
+  });
+  const [draft, setDraft] = useState<null | { enabled: boolean; channels: OptionalChannels; body: string }>(null);
+  const state = draft ?? (q.data ? { enabled: q.data.enabled, channels: fromChannels(q.data.channels), body: q.data.body } : null);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+
+  if (!state) return <div className={CARD}><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>;
+
+  return (
+    <div className={CARD}>
+      <div className="mb-3 flex items-start gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-fuchsia-500/10 text-fuchsia-500"><Sparkles className="h-4 w-4" /></div>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Приветствие при регистрации</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Первое сообщение в канале «ManicBot» — появляется сразу после регистрации салона и подставляется в пустые каналы существующих салонов.</p>
+        </div>
+        <Switch checked={state.enabled} tone="emerald" data-testid="welcome-enabled" onChange={(enabled) => setDraft({ ...state, enabled })} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <p className={LABEL}>Текст приветствия</p>
+          <textarea
+            ref={bodyRef}
+            value={state.body}
+            rows={8}
+            maxLength={4000}
+            className={`${INPUT} mt-1 resize-y`}
+            data-testid="welcome-body"
+            placeholder="Здравствуйте, {salon_name}! …"
+            onChange={(e) => setDraft({ ...state, body: e.target.value })}
+          />
+          <TokenPalette targetRef={bodyRef} value={state.body} onChange={(body) => setDraft({ ...state, body })} />
+          <p className="mt-1 text-[11px] text-slate-400">{state.body.length}/4000 · токены подставятся автоматически</p>
+        </div>
+        <div>
+          <p className={LABEL}>Каналы</p>
+          <div className="mt-1"><ChannelMatrix value={state.channels} onChange={(channels) => setDraft({ ...state, channels })} /></div>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-2">
+        <Button tone="brand" size="sm" disabled={save.isPending || !state.body.trim()}
+          leadingIcon={save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          onClick={() => save.mutate({ enabled: state.enabled, channels: toChannels(state.channels), body: state.body.trim() })}>
+          Сохранить
+        </Button>
+        {save.isSuccess && !draft && <span className="text-[11px] text-emerald-600">Сохранено</span>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Announcement composer ────────────────────────────────────────────────
 
 type Plan = "start" | "pro" | "max";
@@ -204,7 +330,7 @@ type ScheduleState =
   | { kind: "once"; at: string }
   | { kind: "recurring"; freq: "daily" | "weekly" | "monthly"; weekday: number; day: number; hour: number };
 
-function Composer() {
+function Composer({ prefill, onPrefillConsumed }: { prefill: ComposerPrefill | null; onPrefillConsumed: () => void }) {
   const utils = api.useUtils();
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
@@ -212,6 +338,18 @@ function Composer() {
   const [audience, setAudience] = useState<AudienceState>({ scope: "all" });
   const [schedule, setSchedule] = useState<ScheduleState>({ kind: "now" });
   const [err, setErr] = useState<string | null>(null);
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // "Use in composer" from the template library prefills title/body/channels.
+  useEffect(() => {
+    if (!prefill) return;
+    setTitle(prefill.title);
+    setMessage(prefill.body);
+    setChannels(prefill.channels);
+    setErr(null);
+    onPrefillConsumed();
+    messageRef.current?.focus();
+  }, [prefill, onPrefillConsumed]);
 
   const audienceFilter = useMemo(() => {
     if (audience.scope === "by_plan") return { scope: "by_plan" as const, plans: audience.plans };
@@ -274,8 +412,9 @@ function Composer() {
           </div>
           <div>
             <p className={LABEL}>Сообщение</p>
-            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={6} maxLength={4000} className={`${INPUT} mt-1 resize-y`} placeholder="Текст для владельцев салонов…" data-testid="composer-message" />
-            <p className="mt-1 text-[11px] text-slate-400">{message.length}/4000</p>
+            <textarea ref={messageRef} value={message} onChange={(e) => setMessage(e.target.value)} rows={6} maxLength={4000} className={`${INPUT} mt-1 resize-y`} placeholder="Текст для владельцев салонов…" data-testid="composer-message" />
+            <TokenPalette targetRef={messageRef} value={message} onChange={setMessage} />
+            <p className="mt-1 text-[11px] text-slate-400">{message.length}/4000 · токены {"{salon_name}"} и др. подставятся автоматически</p>
           </div>
           <div>
             <p className={LABEL}>Каналы</p>
@@ -440,15 +579,177 @@ function AnnouncementsList() {
   );
 }
 
-export default function BroadcastsClient() {
+// ─── Template library ──────────────────────────────────────────────────────
+
+type TemplateDraft = { id: string | null; name: string; category: string; body: string; channels: OptionalChannels };
+
+function TemplatesLibrary({ onUse }: { onUse: (p: ComposerPrefill) => void }) {
+  const utils = api.useUtils();
+  const list = api.platformBroadcasts.templateList.useQuery({});
+  const del = api.platformBroadcasts.templateDelete.useMutation({ onSuccess: () => void utils.platformBroadcasts.templateList.invalidate() });
+  const [editing, setEditing] = useState<TemplateDraft | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  const items = list.data ?? [];
+  const grouped = useMemo(() => {
+    const m = new Map<string, typeof items>();
+    for (const it of items) {
+      const c = (it.category && it.category.trim()) || "прочее";
+      if (!m.has(c)) m.set(c, []);
+      m.get(c)!.push(it);
+    }
+    return [...m.entries()];
+  }, [items]);
+
   return (
-    <SystemMarketingShell title="Рассылки" subtitle="Платформа → салоны · отчёты, объявления, напоминания">
+    <div className={CARD}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/10 text-violet-500"><LayoutTemplate className="h-4 w-4" /></div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Библиотека шаблонов</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Готовые тексты — сезонные, промо, обучающие. «В композер» подставляет шаблон в форму выше.</p>
+          </div>
+        </div>
+        <Button size="sm" variant="ghost" tone="brand" leadingIcon={<Plus className="h-3.5 w-3.5" />}
+          onClick={() => setEditing({ id: null, name: "", category: "", body: "", channels: { bell: true, telegram: false, email: false } })}>
+          Новый
+        </Button>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-400">Пока нет шаблонов.</p>
+      ) : (
+        <div className="space-y-4">
+          {grouped.map(([cat, rows]) => (
+            <div key={cat}>
+              <p className={`${LABEL} mb-1`}>{cat}</p>
+              <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                {rows.map((t) => (
+                  <li key={t.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1 truncate text-sm font-medium text-slate-900 dark:text-white">
+                        {t.name}
+                        {t.isBuiltin === 1 && <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="встроенный" />}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-400">{templateCenter(t.bodiesJson).slice(0, 90) || "—"}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button size="sm" variant="ghost" tone="brand" leadingIcon={<Send className="h-3.5 w-3.5" />}
+                        onClick={() => onUse({ title: t.name, body: templateCenter(t.bodiesJson), channels: fromChannels(templateChannels(t.channelsJson)) })}>
+                        В композер
+                      </Button>
+                      {t.isBuiltin !== 1 && (
+                        <>
+                          <Button size="sm" variant="ghost" leadingIcon={<Pencil className="h-3.5 w-3.5" />}
+                            onClick={() => setEditing({ id: t.id, name: t.name, category: t.category ?? "", body: templateCenter(t.bodiesJson), channels: fromChannels(templateChannels(t.channelsJson)) })}>
+                            Изм.
+                          </Button>
+                          <Button size="sm" variant="ghost" tone="red" leadingIcon={<Trash2 className="h-3.5 w-3.5" />}
+                            onClick={() => setConfirmId(t.id)}>
+                            Удал.
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editing && (
+        <TemplateEditorModal
+          draft={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); void utils.platformBroadcasts.templateList.invalidate(); }}
+        />
+      )}
+      <ConfirmDialog
+        open={confirmId !== null}
+        title="Удалить шаблон?"
+        description="Шаблон будет удалён безвозвратно."
+        confirmLabel="Удалить"
+        tone="danger"
+        onConfirm={() => { if (confirmId) del.mutate({ id: confirmId }); setConfirmId(null); }}
+        onCancel={() => setConfirmId(null)}
+      />
+    </div>
+  );
+}
+
+function TemplateEditorModal({ draft, onClose, onSaved }: { draft: TemplateDraft; onClose: () => void; onSaved: () => void }) {
+  const [d, setD] = useState<TemplateDraft>(draft);
+  const [err, setErr] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const create = api.platformBroadcasts.templateCreate.useMutation({ onSuccess: onSaved, onError: (e) => setErr(e.message) });
+  const update = api.platformBroadcasts.templateUpdate.useMutation({ onSuccess: onSaved, onError: (e) => setErr(e.message) });
+  const pending = create.isPending || update.isPending;
+
+  function submit() {
+    if (!d.name.trim()) { setErr("Введите название."); return; }
+    if (!d.body.trim()) { setErr("Введите текст."); return; }
+    const base = { name: d.name.trim(), category: d.category.trim() || undefined, channels: toChannels(d.channels), bodies: { center: d.body.trim() } };
+    if (d.id) update.mutate({ id: d.id, ...base });
+    else create.mutate(base);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md" onClick={onClose}>
+      <div className={`${CARD} w-full max-w-lg`} onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{d.id ? "Изменить шаблон" : "Новый шаблон"}</h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className={LABEL}>Название</p>
+              <input value={d.name} maxLength={120} className={`${INPUT} mt-1`} onChange={(e) => setD({ ...d, name: e.target.value })} placeholder="Новогоднее промо" />
+            </div>
+            <div>
+              <p className={LABEL}>Категория</p>
+              <input value={d.category} maxLength={40} className={`${INPUT} mt-1`} onChange={(e) => setD({ ...d, category: e.target.value })} placeholder="seasonal / promo / educational" />
+            </div>
+          </div>
+          <div>
+            <p className={LABEL}>Текст</p>
+            <textarea ref={bodyRef} value={d.body} rows={6} maxLength={4000} className={`${INPUT} mt-1 resize-y`} onChange={(e) => setD({ ...d, body: e.target.value })} placeholder="Здравствуйте, {salon_name}! …" />
+            <TokenPalette targetRef={bodyRef} value={d.body} onChange={(body) => setD({ ...d, body })} />
+          </div>
+          <div>
+            <p className={LABEL}>Каналы по умолчанию</p>
+            <div className="mt-1"><ChannelMatrix value={d.channels} onChange={(channels) => setD({ ...d, channels })} /></div>
+          </div>
+          {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={onClose}>Отмена</Button>
+          <Button size="sm" tone="brand" disabled={pending}
+            leadingIcon={pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            onClick={submit}>
+            Сохранить
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function BroadcastsClient() {
+  const [prefill, setPrefill] = useState<ComposerPrefill | null>(null);
+  return (
+    <SystemMarketingShell title="Рассылки" subtitle="Платформа → салоны · приветствие, отчёты, объявления, шаблоны">
       <div className="space-y-5">
+        <WelcomeMessageCard />
         <div className="grid gap-5 lg:grid-cols-2">
           <MonthlyReportCard />
           <SubscriptionReminderCard />
         </div>
-        <Composer />
+        <Composer prefill={prefill} onPrefillConsumed={() => setPrefill(null)} />
+        <TemplatesLibrary onUse={setPrefill} />
         <AnnouncementsList />
       </div>
     </SystemMarketingShell>

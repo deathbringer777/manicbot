@@ -199,6 +199,17 @@ function dueSubscriptionReminder(campaign, tenant, now) {
 }
 
 /**
+ * The welcome singleton is "due" for every tenant — the delivery ledger
+ * (once-per-owner, occurrence 'once') plus the empty-channel gate in the dispatch
+ * loop are the real guards, so the pure check just says yes. Status (active) is
+ * pre-filtered by the scan. New owners get the welcome synchronously at
+ * registration; this cron path only backfills pre-existing EMPTY channels.
+ */
+function dueWelcome() {
+  return { due: true, occurrenceKey: 'once' };
+}
+
+/**
  * Is `campaign` due for `tenant` at `now`? Returns { due, occurrenceKey }.
  * Pure — no DB, no ambient clock. `now` carries both the platform-tz wall
  * clock and the epoch seconds so once/recurring/anchor math share one input.
@@ -213,6 +224,7 @@ export function isCampaignDueForTenant(campaign, tenant, now) {
     case 'monthly_report': return dueMonthlyReport(campaign, now);
     case 'subscription_reminder': return dueSubscriptionReminder(campaign, tenant, now);
     case 'announcement': return dueAnnouncement(campaign, now);
+    case 'welcome': return dueWelcome();
     default: return NOT_DUE;
   }
 }
@@ -257,6 +269,20 @@ async function loadTenantRow(ctx) {
     'SELECT id, name, plan, billing_status, trial_ends_at, grace_ends_at, current_period_end, cancel_at_period_end, is_test FROM tenants WHERE id = ?',
     ctx.tenantId,
   ).catch(() => null);
+}
+
+/**
+ * True when the owner's ManicBot channel has no messages yet (thread missing or
+ * never bumped). Gates the welcome backfill so established owners are not
+ * late-welcomed. Single indexed lookup (platform_threads is UNIQUE on recipient).
+ */
+async function ownerChannelIsEmpty(ctx, recipientWebUserId) {
+  const row = await dbGet(
+    ctx,
+    'SELECT last_message_at FROM platform_threads WHERE recipient_web_user_id = ? LIMIT 1',
+    recipientWebUserId,
+  ).catch(() => null);
+  return !row || row.last_message_at == null;
 }
 
 async function resolveTenantRecipients(ctx) {
@@ -509,6 +535,10 @@ export async function phasePlatformCampaigns(ctx, nowMs) {
       const channels = parseChannels(c.channels_json);
       let delivered = false;
       for (const r of recipients) {
+        // Welcome backfill fills only EMPTY channels — never late-welcome an
+        // owner who already received any platform message (the delivery ledger
+        // also guards repeats; this guards established owners with no ledger row).
+        if (c.kind === 'welcome' && !(await ownerChannelIsEmpty(ctx, r.id))) continue;
         const bodies = await buildBodies(ctx, c, tenant, r, occurrenceKey);
         if (!bodies) continue;
         for (const ch of channels) {

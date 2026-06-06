@@ -36,6 +36,8 @@ import {
 
 const SYS_MONTHLY_REPORT = "sys_monthly_report";
 const SYS_SUBSCRIPTION_REMINDER = "sys_subscription_reminder";
+const SYS_WELCOME = "sys_welcome";
+const WELCOME_DEFAULT_TITLE = "Добро пожаловать в ManicBot 👋";
 const NOW_GRACE_SEC = 60; // a 'once' campaign must be at least this far in the future
 
 function now(): number {
@@ -471,6 +473,67 @@ export const platformBroadcastsRouter = createTRPCRouter({
             channelsJson: JSON.stringify(input.channels),
             recurrenceJson,
             templateId: input.templateId ?? null,
+            status: input.enabled ? "active" : "paused",
+            updatedAt: t,
+          },
+        });
+      return { ok: true };
+    }),
+
+  // ═══ Welcome message (sys_welcome singleton — fires on registration + cron backfill) ═══
+
+  getWelcomeSettings: systemAdminProcedure.query(async ({ ctx }) => {
+    const [row] = await ctx.db
+      .select()
+      .from(platformCampaigns)
+      .where(eq(platformCampaigns.id, SYS_WELCOME))
+      .limit(1);
+    const bodies = parseJsonObj(row?.bodiesJson ?? null);
+    return {
+      enabled: row?.status === "active",
+      channels: parseJsonArray(row?.channelsJson ?? null),
+      title: row?.title ?? WELCOME_DEFAULT_TITLE,
+      body: typeof bodies.center === "string" ? bodies.center : (row?.body ?? ""),
+    };
+  }),
+
+  setWelcomeSettings: systemAdminProcedure
+    .input(
+      z.object({
+        enabled: z.boolean(),
+        channels: CHANNELS,
+        title: z.string().max(200).optional(),
+        body: z.string().min(1, "body_required").max(4000),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const t = now();
+      const title = (input.title ?? "").trim() || WELCOME_DEFAULT_TITLE;
+      // Tokens ({salon_name} etc.) survive sanitizeText (stripHtml only); they
+      // are substituted at delivery by platformCampaignVars / welcomeOnRegister.
+      const body = sanitizeText(input.body, 4000);
+      const bodiesJson = JSON.stringify(sanitizeBodies({ center: input.body }));
+      await ctx.db
+        .insert(platformCampaigns)
+        .values({
+          id: SYS_WELCOME,
+          kind: "welcome",
+          title,
+          body,
+          bodiesJson,
+          channelsJson: JSON.stringify(input.channels),
+          scheduleKind: "now",
+          status: input.enabled ? "active" : "paused",
+          createdAt: t,
+          updatedAt: t,
+        })
+        .onConflictDoUpdate({
+          target: platformCampaigns.id,
+          set: {
+            title,
+            body,
+            bodiesJson,
+            channelsJson: JSON.stringify(input.channels),
             status: input.enabled ? "active" : "paused",
             updatedAt: t,
           },

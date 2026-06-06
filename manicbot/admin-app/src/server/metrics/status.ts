@@ -28,6 +28,12 @@ export interface ClassifiableTenant {
   /** Real Stripe subscription id. Absent ⇒ access was granted, not paid for. */
   stripeSubscriptionId: string | null;
   isTest?: number | boolean | null;
+  /**
+   * Multi-salon (0117): a secondary salon billed under a parent's MAX
+   * subscription. Set ⇒ this is NOT an independent customer — it must never
+   * count toward MRR or any customer tally (the parent already counts once).
+   */
+  parentTenantId?: string | null;
 }
 
 export interface TenantClassification {
@@ -88,6 +94,11 @@ export function classifyTenant(t: ClassifiableTenant, nowSec: number): TenantCla
 
   // Test tenants never contribute to any business number.
   if (t.isTest) return none({ isTest: true });
+
+  // Secondary salons (multi-salon, 0117) are billed under their parent's single
+  // MAX subscription — they are never an independent customer, so they never
+  // contribute to MRR or any customer tally. The parent already counts once.
+  if (t.parentTenantId) return none();
 
   const status = (t.billingStatus ?? "").trim();
 

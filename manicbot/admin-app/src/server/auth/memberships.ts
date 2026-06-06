@@ -40,12 +40,15 @@ export function syntheticChatIdForWebUser(webUserId: string): number {
 }
 
 /**
- * Pure: merge the home membership with authoritative master memberships,
- * deduping the home tenant (home role wins) and preserving home-first order.
+ * Pure: merge the home membership with authoritative master memberships and
+ * owned secondary salons (multi-salon, MAX plan). Order is home → master
+ * memberships → owned secondaries, deduping by tenant id (first occurrence
+ * wins, so the home role always wins for the home tenant).
  */
 export function mergeMemberships(
   home: { tenantId: string; role: string; tenantName: string | null; isPersonal: boolean } | null,
   masterRows: Array<{ tenantId: string; role: string; tenantName: string | null; isPersonal: boolean }>,
+  ownedRows: Array<{ tenantId: string; role: string; tenantName: string | null; isPersonal: boolean }> = [],
 ): Membership[] {
   const out: Membership[] = [];
   const seen = new Set<string>();
@@ -53,7 +56,7 @@ export function mergeMemberships(
     out.push({ ...home, isHome: true });
     seen.add(home.tenantId);
   }
-  for (const r of masterRows) {
+  for (const r of [...masterRows, ...ownedRows]) {
     if (seen.has(r.tenantId)) continue;
     seen.add(r.tenantId);
     out.push({ ...r, isHome: false });
@@ -129,7 +132,31 @@ export async function listMembershipsForWebUser(
     isPersonal: !!r.isPersonal,
   }));
 
-  return mergeMemberships(home, masterRows);
+  // Secondary salons this user OWNS (multi-salon, MAX plan): tenants whose
+  // billing parent is the user's HOME tenant. Bound by the unique home tenant
+  // id (NOT the synthetic chat id, which could collide across accounts), so an
+  // owner only ever sees salons they actually own. No `masters` row exists for
+  // these, which keeps the owner out of staff lists / public booking / limits.
+  let ownedRows: Array<{ tenantId: string; role: string; tenantName: string | null; isPersonal: boolean }> = [];
+  if (args.homeTenantId) {
+    const ownedRaw = await db
+      .select({
+        tenantId: tenants.id,
+        name: tenants.name,
+        displayName: tenants.displayName,
+        isPersonal: tenants.isPersonal,
+      })
+      .from(tenants)
+      .where(eq(tenants.parentTenantId, args.homeTenantId));
+    ownedRows = ownedRaw.map((r) => ({
+      tenantId: r.tenantId,
+      role: "tenant_owner",
+      tenantName: r.displayName || r.name,
+      isPersonal: !!r.isPersonal,
+    }));
+  }
+
+  return mergeMemberships(home, masterRows, ownedRows);
 }
 
 /**
@@ -153,11 +180,25 @@ export async function resolveActiveMembership(
     .where(and(eq(masters.webUserId, webUserId), eq(masters.tenantId, activeTenantId), eq(masters.active, 1)))
     .limit(1);
 
+  let activeRole: string | null = row?.role ?? null;
+  // Not a master membership? The active tenant may be a SECONDARY salon this
+  // user OWNS (multi-salon, MAX plan): its billing parent is the user's HOME
+  // tenant. Bound by the unique home tenant id (collision-free), never the
+  // synthetic chat id — so a user can only become owner of salons they own.
+  if (!activeRole && homeTenantId) {
+    const [ownedRow] = await db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(and(eq(tenants.id, activeTenantId), eq(tenants.parentTenantId, homeTenantId)))
+      .limit(1);
+    if (ownedRow) activeRole = "tenant_owner";
+  }
+
   const decision = pickActiveMembership({
     homeTenantId,
     homeRole,
     activeTenantId,
-    activeMasterRole: row?.role ?? null,
+    activeMasterRole: activeRole,
   });
 
   if (decision.needsHeal) {

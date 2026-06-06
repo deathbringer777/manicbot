@@ -97,7 +97,8 @@ export const billingRouter = createTRPCRouter({
     const allTenants = await ctx.db.select().from(tenants).orderBy(desc(tenants.createdAt));
 
     // Classify every tenant through the shared metrics module so test tenants,
-    // expired trials and grant/promo "active" tenants never inflate revenue.
+    // expired trials, grant/promo "active" tenants AND secondary salons
+    // (parent_tenant_id, via classifyTenant) never inflate revenue or counts.
     // Real MRR == active billing_status WITH a real Stripe subscription only.
     let comped = 0;
     let activeTrials = 0;
@@ -162,6 +163,7 @@ export const billingRouter = createTRPCRouter({
         name: t.name,
         plan: t.plan ?? "start",
         billingStatus: t.billingStatus ?? "inactive",
+        parentTenantId: t.parentTenantId,
         isTest: t.isTest ?? 0,
         email: t.billingEmail,
         stripeCustomerId: t.stripeCustomerId,

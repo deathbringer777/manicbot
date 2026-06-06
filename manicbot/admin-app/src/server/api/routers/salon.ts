@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { createTRPCRouter, tenantOwnerProcedure, protectedProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
+import { listMembershipsForWebUser } from "~/server/auth/memberships";
+import { canOwnMultipleSalons, MAX_OWNED_SALONS } from "~/lib/plan";
 import {
   appointments, masters, services, users, tenants, tenantConfig, localTickets, tenantRoles, bots, channelConfigs, webUsers, messageWindows, errorEvents, tenantMemberPermissions,
   masterInvitations, masterPairingCodes, serviceCategories, photoAlbums, albumPhotos, tenantActionRequests, auditLog,
@@ -247,6 +249,109 @@ export const salonRouter = createTRPCRouter({
     await assertTenantOwner(ctx, input.tenantId);
     return ctx.db.select().from(masters).where(eq(masters.tenantId, input.tenantId));
   }),
+
+  /**
+   * Create an additional salon owned by the caller (multi-salon, MAX plan only).
+   *
+   * Model: a "secondary" salon is a `tenants` row with `parent_tenant_id` = the
+   * caller's home tenant (the billing root), plus a `tenant_roles(role=
+   * 'tenant_owner')` row keyed by the owner's deterministic synthetic chat id.
+   * No `masters` row is created, so the owner never appears in the new salon's
+   * staff list / public booking / master limit. Ownership is resolved by
+   * listMembershipsForWebUser + resolveActiveMembership (already role-agnostic),
+   * so the existing salon switcher and tenant guards work unchanged.
+   *
+   * Billing: secondaries are billed under the parent's MAX subscription — they
+   * shadow plan='max'/billingStatus='active' so `canUse` works locally, are
+   * excluded from MRR by `parent_tenant_id`, and are cascade-frozen if the
+   * parent ever leaves MAX.
+   */
+  createOwnedSalon: tenantOwnerProcedure
+    .input(z.object({ name: z.string().min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      // Resolve the caller's immutable HOME tenant (the billing root). The
+      // active tenant may itself be a secondary, but secondaries are a FLAT
+      // hierarchy: every new salon's parent is the home tenant that pays.
+      const [me] = await ctx.db
+        .select({ homeTenantId: webUsers.tenantId, homeRole: webUsers.role })
+        .from(webUsers)
+        .where(eq(webUsers.id, ctx.webUser!.id))
+        .limit(1);
+      const homeTenantId = me?.homeTenantId ?? null;
+      if (!homeTenantId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "no_home_tenant" });
+      }
+
+      // Gate: the billing root must be on the MAX plan.
+      const [homeRow] = await ctx.db
+        .select({ plan: tenants.plan })
+        .from(tenants)
+        .where(eq(tenants.id, homeTenantId))
+        .limit(1);
+      if (!canOwnMultipleSalons(homeRow?.plan ?? null)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "max_plan_required" });
+      }
+
+      // Enforce the owned-salon cap (home counts as one owned salon).
+      const memberships = await listMembershipsForWebUser(ctx.db, {
+        webUserId: ctx.webUser!.id,
+        homeTenantId,
+        homeRole: me?.homeRole ?? "tenant_owner",
+      });
+      const ownedCount = memberships.filter((m) => m.role === "tenant_owner").length;
+      if (ownedCount >= MAX_OWNED_SALONS) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "owned_salon_limit_reached" });
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const rand = Array.from(crypto.getRandomValues(new Uint8Array(6)))
+        .map((b) => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36])
+        .join("");
+      const newTenantId = "t_" + rand;
+      const salonName = sanitizeText(input.name, 200);
+
+      // A secondary salon is a single `tenants` row whose billing parent is the
+      // owner's HOME tenant. Ownership is resolved by parent_tenant_id (unique
+      // per owner, collision-free) — NOT by a synthetic chat id, and with NO
+      // `masters`/`tenant_roles` row, so the owner never leaks into the new
+      // salon's staff list / public booking / master limit. See memberships.ts.
+      try {
+        await ctx.db.insert(tenants).values({
+          id: newTenantId,
+          name: salonName,
+          active: 1,
+          plan: "max",
+          billingStatus: "active",
+          parentTenantId: homeTenantId,
+          isPersonal: 0,
+          cancelAtPeriodEnd: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+      } catch (e) {
+        log.error(
+          "salon.createOwnedSalon.insert",
+          e instanceof Error ? e : new Error(String(e)),
+          { homeTenantId, newTenantId },
+        );
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Не удалось создать салон: ${msg.slice(0, 200)}` });
+      }
+
+      // Land the owner in the new salon. The session re-resolves (tenantId,
+      // role) on its next refresh, after which assertTenantOwner passes here.
+      await ctx.db.update(webUsers).set({ activeTenantId: newTenantId }).where(eq(webUsers.id, ctx.webUser!.id));
+
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser!.email ?? null,
+        action: "salon.createOwnedSalon",
+        tenantId: homeTenantId,
+        detail: `newTenantId=${newTenantId} name=${salonName}`,
+        ip: ctxIp(ctx),
+      });
+
+      return { tenantId: newTenantId, name: salonName };
+    }),
 
   getServices: tenantOwnerProcedure.input(tenantIdInput).query(async ({ ctx, input }) => {
     await assertTenantOwner(ctx, input.tenantId);
@@ -2912,6 +3017,11 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.update(tenants)
         .set({ billingStatus: "paused", pauseResumesAt: resumesAt, updatedAt: now })
         .where(eq(tenants.id, input.tenantId));
+      // Multi-salon cascade (0117): freeze this owner's secondary salons
+      // synchronously so they can't be used during the webhook-delay window.
+      await ctx.db.update(tenants)
+        .set({ billingStatus: "inactive", updatedAt: now })
+        .where(eq(tenants.parentTenantId, input.tenantId));
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null, action: "salon.pauseSubscription",
         tenantId: input.tenantId, detail: resumesAt ? `resumesAt=${resumesAt}` : "indefinite", ip: ctxIp(ctx),
@@ -2937,6 +3047,10 @@ export const salonRouter = createTRPCRouter({
       await ctx.db.update(tenants)
         .set({ billingStatus: "active", pauseResumesAt: null, updatedAt: now })
         .where(eq(tenants.id, input.tenantId));
+      // Multi-salon cascade (0117): restore this owner's secondary salons.
+      await ctx.db.update(tenants)
+        .set({ billingStatus: "active", updatedAt: now })
+        .where(eq(tenants.parentTenantId, input.tenantId));
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null, action: "salon.resumeSubscription",
         tenantId: input.tenantId, detail: "resumed", ip: ctxIp(ctx),

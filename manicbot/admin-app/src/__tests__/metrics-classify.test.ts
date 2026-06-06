@@ -196,3 +196,27 @@ describe("getTenantMetrics", () => {
     expect(m.appointmentsThisMonth).toBe(7);
   });
 });
+
+describe("classifyTenant — secondary salons (multi-salon, 0117)", () => {
+  it("never counts a secondary salon (parent_tenant_id set) toward any bucket or MRR", () => {
+    // A secondary shadows plan='max'/billing_status='active' but is billed under
+    // its parent's subscription — it must classify as 'none' with 0 MRR so an
+    // owner is never counted (or charged for) more than once.
+    const c = classifyTenant(
+      { plan: "max", billingStatus: "active", trialEndsAt: null, stripeSubscriptionId: "sub_live", isTest: 0, parentTenantId: "t_home" },
+      NOW,
+    );
+    expect(c.bucket).toBe("none");
+    expect(c.mrrPln).toBe(0);
+    expect(c.isComped).toBe(false);
+  });
+
+  it("still classifies a normal (non-secondary) paying tenant as paying", () => {
+    const c = classifyTenant(
+      { plan: "max", billingStatus: "active", trialEndsAt: null, stripeSubscriptionId: "sub_live", isTest: 0, parentTenantId: null },
+      NOW,
+    );
+    expect(c.bucket).toBe("paying");
+    expect(c.mrrPln).toBe(90);
+  });
+});

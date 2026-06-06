@@ -69,6 +69,20 @@ const translations = {
   "salon.noMasters":        { ru: "Мастеров нет", ua: "Майстрів немає", en: "No masters", pl: "Brak mistrzów" },
   "salon.noServices":       { ru: "Услуг нет",    ua: "Послуг немає",   en: "No services", pl: "Brak usług" },
 
+  // ── Masters tab: search + filters ────────────────────────────────────────
+  "masters.search.placeholder":   { ru: "Поиск мастеров…", ua: "Пошук майстрів…", en: "Search masters…", pl: "Szukaj mistrzów…" },
+  "masters.filter.status.all":     { ru: "Все",        ua: "Усі",         en: "All",         pl: "Wszyscy" },
+  "masters.filter.status.active":  { ru: "Активные",   ua: "Активні",     en: "Active",      pl: "Aktywni" },
+  "masters.filter.status.hidden":  { ru: "Скрытые",    ua: "Приховані",   en: "Hidden",      pl: "Ukryci" },
+  "masters.filter.status.vacation":{ ru: "В отпуске",  ua: "У відпустці", en: "On vacation", pl: "Na urlopie" },
+  "masters.filter.type.all":       { ru: "Все типы",   ua: "Усі типи",    en: "All types",   pl: "Wszystkie typy" },
+  "masters.filter.type.web":       { ru: "Web",        ua: "Web",         en: "Web",         pl: "Web" },
+  "masters.filter.type.telegram":  { ru: "Telegram",   ua: "Telegram",    en: "Telegram",    pl: "Telegram" },
+  "masters.sort.default":          { ru: "По умолчанию", ua: "За замовч.", en: "Default",    pl: "Domyślnie" },
+  "masters.sort.name":             { ru: "По имени",   ua: "За ім'ям",    en: "By name",     pl: "Po imieniu" },
+  "masters.noMatches":             { ru: "Ничего не найдено", ua: "Нічого не знайдено", en: "No matches", pl: "Brak wyników" },
+  "masters.noMatches.hint":        { ru: "Измените поиск или фильтры", ua: "Змініть пошук або фільтри", en: "Try a different search or filters", pl: "Zmień wyszukiwanie lub filtry" },
+
   // Service categories ("lists of services") — PR-1 of the categories+packages plan.
   "salon.services.categories.manageBtn":     { ru: "Категории", ua: "Категорії", en: "Categories", pl: "Kategorie" },
   "salon.services.categories.title":         { ru: "Категории услуг", ua: "Категорії послуг", en: "Service categories", pl: "Kategorie usług" },

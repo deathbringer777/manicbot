@@ -191,7 +191,11 @@ describe("salon.pauseSubscription / resumeSubscription", () => {
     const res = await ownerCaller(db).pauseSubscription({ tenantId: TENANT });
     expect(res).toEqual({ ok: true, resumesAt: null });
     expect(stripePauseSubscription).toHaveBeenCalledWith("sk_test_xxx", SUB_ID, null);
-    expect(updateCalls.at(-1)!.values).toMatchObject({ billingStatus: "paused", pauseResumesAt: null });
+    // [0] = the tenant's own pause; [1] = the multi-salon cascade (0117) that
+    // freezes this owner's secondary salons.
+    expect(updateCalls[0]!.values).toMatchObject({ billingStatus: "paused", pauseResumesAt: null });
+    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls[1]!.values).toMatchObject({ billingStatus: "inactive" });
   });
 
   it("pause: passes a resume timestamp when resumeInMonths given", async () => {
@@ -202,7 +206,8 @@ describe("salon.pauseSubscription / resumeSubscription", () => {
     expect(res.resumesAt).toBeTypeOf("number");
     const passedResumesAt = vi.mocked(stripePauseSubscription).mock.calls[0]![2];
     expect(passedResumesAt).toBe(res.resumesAt);
-    expect(updateCalls.at(-1)!.values.pauseResumesAt).toBe(res.resumesAt);
+    // [0] = the tenant's own pause update (carries pauseResumesAt).
+    expect(updateCalls[0]!.values.pauseResumesAt).toBe(res.resumesAt);
   });
 
   it("pause: rejects when not active", async () => {
@@ -219,7 +224,11 @@ describe("salon.pauseSubscription / resumeSubscription", () => {
     const res = await ownerCaller(db).resumeSubscription({ tenantId: TENANT });
     expect(res).toEqual({ ok: true });
     expect(stripeResumeSubscription).toHaveBeenCalledWith("sk_test_xxx", SUB_ID);
-    expect(updateCalls.at(-1)!.values).toMatchObject({ billingStatus: "active", pauseResumesAt: null });
+    // [0] = the tenant's own resume; [1] = the multi-salon cascade (0117) that
+    // restores this owner's secondary salons.
+    expect(updateCalls[0]!.values).toMatchObject({ billingStatus: "active", pauseResumesAt: null });
+    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls[1]!.values).toMatchObject({ billingStatus: "active" });
   });
 });
 

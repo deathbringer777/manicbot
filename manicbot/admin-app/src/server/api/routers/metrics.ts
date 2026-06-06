@@ -1,6 +1,6 @@
 import { createTRPCRouter, adminProcedure } from "~/server/api/trpc";
 import { tenants, appointments, webUsers } from "~/server/db/schema";
-import { sql, desc, and, eq, gte, asc } from "drizzle-orm";
+import { sql, desc, and, eq, gte, asc, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getPlatformMetrics } from "~/server/metrics/platform";
 
@@ -35,15 +35,16 @@ export const metricsRouter = createTRPCRouter({
     const now = Math.floor(Date.now() / 1000);
 
     // Platform KPIs (paying / comped / trials / MRR) come from the shared
-    // metrics module — test tenants, expired trials and grant/promo "active"
-    // tenants are already excluded there. Operational counts below are scoped
-    // to non-test tenants so the dashboard never mixes real and synthetic data.
+    // metrics module — test tenants, expired trials, grant/promo "active"
+    // tenants AND secondary salons (parent_tenant_id, via classifyTenant) are
+    // already excluded there. Operational counts below are scoped to non-test
+    // tenants; the tenant count also drops secondaries so an owner counts once.
     const [platform, tenantsCount, totalApts, todayApts] = await Promise.all([
       getPlatformMetrics(ctx.db, now),
       ctx.db
         .select({ count: sql<number>`count(*)` })
         .from(tenants)
-        .where(eq(tenants.isTest, 0)),
+        .where(and(eq(tenants.isTest, 0), isNull(tenants.parentTenantId))),
       ctx.db
         .select({ count: sql<number>`count(*)` })
         .from(appointments)

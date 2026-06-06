@@ -3,6 +3,10 @@ import { z } from "zod";
 
 const isProduction = process.env.NODE_ENV === "production";
 
+/**
+ * @param {string} name
+ * @param {number} [minLength]
+ */
 function secret(name, minLength = 32) {
   return z.string().optional().superRefine((value, ctx) => {
     if (!isProduction) return;

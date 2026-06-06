@@ -254,6 +254,7 @@ export const pluginsRouter = createTRPCRouter({
           .regex(/^[a-z][a-z0-9-]{2,40}$/, "Invalid slug shape"),
         tenantId: z.string().nullable().optional(),
         settings: z.record(z.string(), z.unknown()).optional(),
+        returnUrl: z.string().url().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

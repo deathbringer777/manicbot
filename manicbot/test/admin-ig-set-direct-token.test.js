@@ -175,7 +175,7 @@ describe('POST /admin/ig-set-direct-token', () => {
 
     const upd = env._updates.find(u => u.sql.includes('UPDATE channel_configs'));
     expect(upd).toBeTruthy();
-    // [encrypted, configJSON, updated_at, id]
+    // [encrypted, configJSON, token_expires_at, updated_at, id]
     expect(upd.params[0]).toMatch(/^v1\$enc:/);  // encrypted
     const cfg = JSON.parse(upd.params[1]);
     expect(cfg.api).toBe('instagram_direct');
@@ -183,7 +183,13 @@ describe('POST /admin/ig-set-direct-token', () => {
     expect(cfg.ig_username).toBe('manicbot_com');
     // Pre-existing config keys preserved.
     expect(cfg.page_id).toBe('1008301152373103');
-    expect(upd.params[3]).toBe(7);
+    // Bug #4 — IGAA tokens are 60d; a manual set must stamp an expiry too, or
+    // the cron refresh stays dead (isTokenExpiring needs a non-null value).
+    expect(upd.sql).toMatch(/token_expires_at\s*=\s*\?/);
+    const nowSec = Math.floor(Date.now() / 1000);
+    expect(upd.params[2]).toBeGreaterThan(nowSec + 5184000 - 180);
+    expect(upd.params[2]).toBeLessThanOrEqual(nowSec + 5184000 + 5);
+    expect(upd.params[4]).toBe(7);
   });
 
   it('also matches ig_business_id stored in config JSON when column is empty', async () => {

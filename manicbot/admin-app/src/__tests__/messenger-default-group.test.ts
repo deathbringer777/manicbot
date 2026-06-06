@@ -46,6 +46,8 @@ describe("defaultStaffGroup — ensureDefaultStaffGroup", () => {
     const { db, insertCalls } = createDbMock([
       // SELECT existing default group → none
       [],
+      // SELECT tenant (parent_tenant_id) → primary salon (no parent)
+      [{ parentTenantId: null }],
       // SELECT tenant_owner → owner row
       [{ id: "w_owner" }],
     ]);
@@ -77,6 +79,7 @@ describe("defaultStaffGroup — ensureDefaultStaffGroup", () => {
     // is omitted.
     const { db, insertCalls } = createDbMock([
       [], // no existing group
+      [{ parentTenantId: null }], // tenant lookup → primary salon
       [], // no owner found
     ]);
     const out = await ensureDefaultStaffGroup(db as never, "t_salon");
@@ -86,6 +89,24 @@ describe("defaultStaffGroup — ensureDefaultStaffGroup", () => {
       (c) => (c.values as Record<string, unknown>).role === "owner",
     );
     expect(ownerInsert).toBeUndefined();
+  });
+
+  it("resolves the owner via parent_tenant_id for a secondary salon (0117)", async () => {
+    // A secondary salon has no web_users row of its own — the owner lives on the
+    // HOME tenant. ensureDefaultStaffGroup must follow parent_tenant_id so the
+    // group is still seeded with its owner.
+    const { db, insertCalls } = createDbMock([
+      [], // no existing group
+      [{ parentTenantId: "t_home" }], // this salon is a secondary of t_home
+      [{ id: "w_owner" }], // owner found in the parent (home) tenant
+    ]);
+    const out = await ensureDefaultStaffGroup(db as never, "t_secondary");
+    expect(out.created).toBe(true);
+    const ownerInsert = insertCalls.find(
+      (c) => (c.values as Record<string, unknown>).memberRef === "w_owner",
+    );
+    expect(ownerInsert).toBeDefined();
+    expect((ownerInsert!.values as Record<string, unknown>).role).toBe("owner");
   });
 });
 
@@ -129,6 +150,8 @@ describe("defaultStaffGroup — addMasterToDefaultGroup", () => {
     const { db, insertCalls } = createDbMock([
       // SELECT default group → none → ensure triggers
       [],
+      // SELECT tenant (parent_tenant_id) → primary salon
+      [{ parentTenantId: null }],
       // SELECT tenant_owner → owner row
       [{ id: "w_owner" }],
       // SELECT master row → has webUserId

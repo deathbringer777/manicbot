@@ -12,30 +12,22 @@
  *     useful to the salon owner;
  *   - sysadmin operating the provider toggle / health-check belongs in
  *     `/system/*` alongside other platform-level dashboards.
+ *
+ * The tab list itself lives in ~/lib/nav/marketingTabs (pure + testable). The
+ * Automations tab is parked behind MARKETING_AUTOMATIONS_ENABLED — see
+ * ~/lib/featureFlags for the why and the unlock runbook.
  */
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Shell } from "~/components/layout/Shell";
-import {
-  Megaphone, Users, Mail, MessageSquare, Workflow, FileText, ArrowRight,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useLang } from "~/components/LangContext";
-import { t, type TranslationKey } from "~/lib/i18n";
+import { t } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
+import { getMarketingTabs } from "~/lib/nav/marketingTabs";
+import { MARKETING_AUTOMATIONS_ENABLED } from "~/lib/featureFlags";
 import { useMarketingScope } from "./useMarketingScope";
-
-type SubNavItem = { href: string; icon: LucideIcon; labelKey: TranslationKey };
-
-const SUB_NAV: Array<SubNavItem> = [
-  { href: "/marketing",              icon: Megaphone,     labelKey: "marketing.nav.overview" },
-  { href: "/marketing/contacts",     icon: Users,         labelKey: "marketing.nav.contacts" },
-  { href: "/marketing/campaigns",    icon: Mail,          labelKey: "marketing.nav.campaigns" },
-  { href: "/marketing/sms",          icon: MessageSquare, labelKey: "marketing.nav.sms" },
-  { href: "/marketing/automations",  icon: Workflow,      labelKey: "marketing.nav.automations" },
-  { href: "/marketing/templates",    icon: FileText,      labelKey: "marketing.nav.templates" },
-];
 
 export function MarketingShell({
   children,
@@ -56,12 +48,13 @@ export function MarketingShell({
   const scope = useMarketingScope();
   const showSysadminBanner = scope.mode === "admin";
   const resolvedTitle = title ?? tNav("Marketing", lang);
-  const resolvedSubtitle = subtitle ?? `${t("marketing.nav.contacts", lang)} · ${t("marketing.nav.campaigns", lang)} · ${t("marketing.nav.automations", lang)}`;
+  const resolvedSubtitle = subtitle ?? `${t("marketing.nav.contacts", lang)} · ${t("marketing.nav.campaigns", lang)} · ${t("marketing.nav.templates", lang)}`;
+  const tabs = getMarketingTabs(MARKETING_AUTOMATIONS_ENABLED);
 
   return (
     <Shell title={resolvedTitle} subtitle={resolvedSubtitle}>
       <div className="flex flex-wrap gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-3 mb-5 overflow-x-auto">
-        {SUB_NAV.map(({ href, icon: Icon, labelKey }) => {
+        {tabs.map(({ href, icon: Icon, labelKey }) => {
           const label = t(labelKey, lang);
           const active =
             href === "/marketing" ? pathname === "/marketing" : pathname?.startsWith(href);

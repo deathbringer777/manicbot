@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Megaphone } from "lucide-react";
+import Image from "next/image";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, formatDate, type Lang } from "~/lib/i18n";
@@ -56,9 +56,13 @@ export function PlatformOwnerView() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-600">
-          <Megaphone className="h-4 w-4" />
-        </div>
+        <Image
+          src="/manicbot-mark-ui.png"
+          alt="ManicBot"
+          width={36}
+          height={36}
+          className="h-9 w-9 rounded-full object-cover"
+        />
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
             ManicBot

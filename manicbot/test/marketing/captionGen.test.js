@@ -4,6 +4,7 @@ import {
   buildSystemPrompt,
   buildUserMessage,
   extractText,
+  extractWorkersAIText,
   parseJsonOutput,
   validateOutput,
 } from '../../src/marketing/captionGen.js';
@@ -289,13 +290,69 @@ describe('marketing/captionGen — generateCaption (e2e with fetch mock)', () =>
     expect(result.headline_pl).toBe(VALID_OUTPUT.headline_pl);
   });
 
-  it('throws when ANTHROPIC_API_KEY missing', async () => {
+  it('throws when no caption backend is available (no key, no AI binding)', async () => {
     await expect(
       generateCaption(
         {},
         { brandVoice: BRAND_VOICE_STUB, slot: { theme: 'inspiration', topic: 'X' } },
       ),
     ).rejects.toThrow(/ANTHROPIC_API_KEY/);
+  });
+
+  it('falls back to Workers AI when no ANTHROPIC_API_KEY but env.AI is bound', async () => {
+    const run = vi.fn().mockResolvedValue({ response: JSON.stringify(VALID_OUTPUT) });
+    const result = await generateCaption(
+      { AI: { run } },
+      { brandVoice: BRAND_VOICE_STUB, slot: { theme: 'product', topic: 'Topic' } },
+    );
+    expect(result).toEqual(VALID_OUTPUT);
+    expect(run).toHaveBeenCalledTimes(1);
+    const [model, input] = run.mock.calls[0];
+    expect(model).toContain('@cf/');
+    expect(input.messages[0]).toEqual({ role: 'system', content: expect.stringContaining(BRAND_VOICE_STUB) });
+    expect(input.messages[1]).toEqual({ role: 'user', content: expect.stringContaining('Topic') });
+  });
+
+  it('parses the Workers AI result.response shape', async () => {
+    const run = vi.fn().mockResolvedValue({ result: { response: JSON.stringify(VALID_OUTPUT) } });
+    const result = await generateCaption(
+      { AI: { run } },
+      { brandVoice: BRAND_VOICE_STUB, slot: { theme: 'social_proof', topic: 'X' } },
+    );
+    expect(result).toEqual(VALID_OUTPUT);
+  });
+
+  it('prefers Anthropic over Workers AI when both are configured', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(makeAnthropicResponse(VALID_OUTPUT));
+    const run = vi.fn();
+    await generateCaption(
+      { ANTHROPIC_API_KEY: 'k', AI: { run } },
+      { brandVoice: BRAND_VOICE_STUB, slot: { theme: 'inspiration', topic: 'X' }, fetchImpl },
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  describe('extractWorkersAIText (response-shape normalization)', () => {
+    const S = JSON.stringify(VALID_OUTPUT);
+    it('reads { response } (llama)', () => expect(extractWorkersAIText({ response: S })).toBe(S));
+    it('reads { result: { response } }', () => expect(extractWorkersAIText({ result: { response: S } })).toBe(S));
+    it('reads OpenAI { choices:[{ message:{ content } }] }', () =>
+      expect(extractWorkersAIText({ choices: [{ message: { content: S } }] })).toBe(S));
+    it('reads gpt-oss { output:[{ content:[{ text }] }] }, skipping reasoning', () => {
+      const out = { output: [
+        { type: 'reasoning', content: [] },
+        { type: 'message', content: [{ type: 'output_text', text: S }] },
+      ] };
+      expect(extractWorkersAIText(out)).toBe(S);
+    });
+    it('reads a bare string', () => expect(extractWorkersAIText(S)).toBe(S));
+    it('returns "" on empty / reasoning-only / null', () => {
+      expect(extractWorkersAIText({})).toBe('');
+      expect(extractWorkersAIText({ response: '' })).toBe('');
+      expect(extractWorkersAIText({ output: [{ type: 'reasoning', content: [] }] })).toBe('');
+      expect(extractWorkersAIText(null)).toBe('');
+    });
   });
 
   it('throws on unknown theme', async () => {

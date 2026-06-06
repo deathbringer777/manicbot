@@ -361,7 +361,7 @@ async function googleJsonRequest(url, opts = {}, tenantId = null) {
   trackGcalQuota(tenantId);
   const res = await fetch(url, opts);
   const text = await res.text();
-  let data = {};
+  let data;
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
@@ -740,6 +740,9 @@ export async function createWebOAuthSession(ctx, { tenantId, scope = 'tenant', m
   if (!tenantId) return { ok: false, error: 'tenantId required' };
   if (!hasOAuthConfig(ctx)) return { ok: false, error: 'google_oauth_not_configured' };
   if (!getBaseUrl(ctx)) return { ok: false, error: 'base_url_not_configured' };
+  if (returnUrl && !isAllowedWebReturnUrl(ctx, returnUrl)) {
+    return { ok: false, error: 'returnUrl_origin_not_allowed' };
+  }
   const sessionId = randomId(16);
   // P2-14 — PKCE verifier persisted alongside the OAuth session.
   const codeVerifier = generatePkceVerifier();
@@ -759,6 +762,17 @@ export async function createWebOAuthSession(ctx, { tenantId, scope = 'tenant', m
     sessionId,
     connectUrl: `${getBaseUrl(ctx)}/google/connect?session=${encodeURIComponent(sessionId)}`,
   };
+}
+
+function isAllowedWebReturnUrl(ctx, returnUrl) {
+  try {
+    const target = new URL(returnUrl);
+    const configured = ctx.ADMIN_APP_URL || ctx.AUTH_URL || ctx.APP_BASE_URL || '';
+    const allowed = configured ? new URL(configured).origin : 'https://admin.manicbot.com';
+    return target.origin === allowed;
+  } catch {
+    return false;
+  }
 }
 
 export async function handleGoogleConnectRequest(ctx, url) {
@@ -853,7 +867,7 @@ export async function handleGoogleCallback(ctx, url) {
     const primary = writable.find(c => c.primary) || writable[0];
     if (!primary) {
       await deleteOAuthSession(ctx, sessionId);
-      return redirectToReturn(session.returnUrl, 'no_writable_calendar');
+      return redirectToReturn(ctx, session.returnUrl, 'no_writable_calendar');
     }
     try {
       await finalizeWebOAuth(ctx, {
@@ -865,10 +879,10 @@ export async function handleGoogleCallback(ctx, url) {
     } catch (e) {
       log.error('services.googleCalendarOauth', e instanceof Error ? e : new Error(String(e?.message)), { action: 'web_mode_finalize' });
       await deleteOAuthSession(ctx, sessionId);
-      return redirectToReturn(session.returnUrl, 'finalize_failed');
+      return redirectToReturn(ctx, session.returnUrl, 'finalize_failed');
     }
     await deleteOAuthSession(ctx, sessionId);
-    return redirectToReturn(session.returnUrl, null);
+    return redirectToReturn(ctx, session.returnUrl, null);
   }
 
   await putOAuthSession(ctx, sessionId, {
@@ -889,19 +903,25 @@ export async function handleGoogleCallback(ctx, url) {
   });
 }
 
-function redirectToReturn(returnUrl, errorCode) {
-  const fallback = '/plugin/google-calendar';
+function redirectToReturn(ctx, returnUrl, errorCode) {
+  // GCal connection lives in salon settings now, so fall back there when no
+  // explicit returnUrl was carried through the OAuth session.
+  const fallback = '/settings';
   let target = returnUrl || fallback;
   try {
     const u = new URL(target, 'https://placeholder.invalid');
     if (errorCode) u.searchParams.set('gcal_error', errorCode);
     else u.searchParams.set('connected', '1');
     target = u.pathname + (u.search || '') + (u.hash || '');
-    // If returnUrl was absolute, restore origin
+    // If returnUrl was absolute, restore origin safely
     if (returnUrl && /^https?:\/\//i.test(returnUrl)) {
       const abs = new URL(returnUrl);
-      abs.search = u.search;
-      target = abs.toString();
+      const safeBaseOrigin = new URL(getBaseUrl(ctx)).origin;
+      const safeAdminOrigin = ctx.env && ctx.env.ADMIN_APP_URL ? new URL(ctx.env.ADMIN_APP_URL).origin : safeBaseOrigin;
+      if (abs.origin === safeBaseOrigin || abs.origin === safeAdminOrigin) {
+        abs.search = u.search;
+        target = abs.toString();
+      }
     }
   } catch {
     target = fallback + (errorCode ? `?gcal_error=${encodeURIComponent(errorCode)}` : '?connected=1');
@@ -1155,7 +1175,7 @@ export async function loadExternalBusyBlocks(ctx, date, masterId = null) {
  * Load Google Calendar events for admin panel display.
  * Returns busy blocks for the given date range, formatted for UI.
  */
-async function loadGoogleCalendarEvents(ctx, dateFrom, dateTo) {
+export async function loadGoogleCalendarEvents(ctx, dateFrom, dateTo) {
   await ensureGoogleCalendarSchema(ctx);
   if (!ctx?.db || !ctx?.tenantId) return [];
   const { warsawToUTC } = await import('../utils/date.js');

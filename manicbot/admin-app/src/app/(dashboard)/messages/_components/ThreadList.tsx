@@ -136,7 +136,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
 
         {/* Filter pills */}
         <div className="mt-2 flex flex-wrap gap-1">
-          {(["all", "requests", "staff_dm", "staff_group", "client_conv", "system"] as FilterKind[]).map(
+          {(["all", "requests", "staff_dm", "staff_group"] as FilterKind[]).map(
             (k) => (
               <button
                 key={k}
@@ -155,11 +155,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
                     ? t("messenger.filter.requests", lang)
                     : k === "staff_dm"
                       ? "DM"
-                      : k === "staff_group"
-                        ? t("messenger.filter.groups", lang)
-                        : k === "client_conv"
-                          ? t("messenger.filter.clients", lang)
-                          : t("messenger.filter.system", lang)}
+                      : t("messenger.filter.groups", lang)}
               </button>
             ),
           )}

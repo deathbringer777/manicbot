@@ -16,6 +16,7 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **Billing** — Stripe Checkout and Portal, three plans (Start / Pro / Max)
 - **Support** — client↔master tickets and platform tickets client↔support agent
 - **Notifications** — cron every 15 min, appointment reminders
+- **Email capture & re-conversion** — the bot asks chat clients for their email (after a booking, after first registration, or captures any email they volunteer); consented contacts are owned per-tenant, carry an in-chat unsubscribe, and flow into the marketing automation engine via the `contact.email_captured` trigger
 - **Calendar** — ICS file for each appointment; admin dashboard offers Calendar / Agenda / List view modes for appointments (`SalonBigCalendar` month grid + `SalonAgendaView` text-list with Today/Tomorrow/weekday grouping)
 - **Master calendar visibility** — masters control peer-to-peer schedule sharing within their tenant via `masters.calendar_visibility` (migration 0049): `private | salon_only | salon_and_peers`. Salon owner always sees regardless.
 - **Dashboard chrome** — sticky desktop top bar with theme toggle (sun/moon) and fullscreen toggle (browser Fullscreen API) for "salon OS" mode on reception-desk iPads
@@ -23,6 +24,8 @@ A single Cloudflare Worker serves an unlimited number of bots — one per salon.
 - **Management panels** — HTML admin panel for tenants, sysadmin panel for the platform
 - **CSV export** — clients and appointments
 - **Test accounts** — reproducible 8-account roster (3 salons + 3 masters with annual plans + 1 salon + 1 master with expired trials). See [SEED_TEST_DATA.md](manicbot/SEED_TEST_DATA.md); run `npm run seed:test-accounts` to populate.
+
+> **Parked features** (complete code, hidden on purpose — _not_ dead code): **Marketing → Automations** is finished and its manual "Run Now" works, but it's hidden behind the `MARKETING_AUTOMATIONS_ENABLED` flag in `manicbot/admin-app/src/lib/featureFlags.ts` until the cron trigger-engine is built. The tab is dropped from the marketing sub-nav and the route redirects to `/marketing`. Do not delete the gated code — the unlock runbook is in that flag file.
 
 ---
 

@@ -16,10 +16,10 @@ afterEach(() => {
 });
 
 describe("BillingGate", () => {
-  it("renders the trial-expired block with primary + secondary CTAs", () => {
+  it("renders the billing-locked block with primary + secondary CTAs", () => {
     renderWithLang(<BillingGate />, "ru");
     expect(screen.getByTestId("billing-gate")).toBeTruthy();
-    expect(screen.getByText("Триал закончился")).toBeTruthy();
+    expect(screen.getByText("Доступ к панели ограничен")).toBeTruthy();
     expect(screen.getByText("Активировать подписку")).toBeTruthy();
     expect(screen.getByText("Настройки аккаунта")).toBeTruthy();
   });
@@ -38,17 +38,17 @@ describe("BillingGate", () => {
 
   it("renders in English when lang=en", () => {
     renderWithLang(<BillingGate />, "en");
-    expect(screen.getByText("Your trial has ended")).toBeTruthy();
+    expect(screen.getByText("Dashboard access is limited")).toBeTruthy();
     expect(screen.getByText("Activate subscription")).toBeTruthy();
   });
 
   it("renders in Ukrainian when lang=ua", () => {
     renderWithLang(<BillingGate />, "ua");
-    expect(screen.getByText("Тріал закінчився")).toBeTruthy();
+    expect(screen.getByText("Доступ до панелі обмежено")).toBeTruthy();
   });
 
   it("renders in Polish when lang=pl", () => {
     renderWithLang(<BillingGate />, "pl");
-    expect(screen.getByText("Twój okres próbny zakończył się")).toBeTruthy();
+    expect(screen.getByText("Dostęp do panelu jest ograniczony")).toBeTruthy();
   });
 });

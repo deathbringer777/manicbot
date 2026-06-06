@@ -31,9 +31,14 @@ const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'; // cheap, fast, sufficient for captions
 const DEFAULT_MAX_TOKENS = 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
+// Cloudflare Workers AI text model used when ANTHROPIC_API_KEY is not set, so the
+// autopilot needs no external key. An instruction-tuned (non-reasoning) model is
+// used on purpose: gpt-oss-120b spent the token budget on hidden reasoning and
+// returned an empty answer for this structured-JSON task (caught live 2026-06-05).
+const WORKERS_AI_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 /**
- * @param {{ ANTHROPIC_API_KEY?: string }} env
+ * @param {{ ANTHROPIC_API_KEY?: string, AI?: { run: (model: string, input: object) => Promise<any> } }} env
  * @param {{
  *   brandVoice: string,         // BRAND_VOICE.md content (or its caption-prompt section)
  *   slot: { theme: string, topic: string, key_message?: string },
@@ -50,9 +55,6 @@ export async function generateCaption(env, {
   maxTokens = DEFAULT_MAX_TOKENS,
   fetchImpl,
 }) {
-  if (!env?.ANTHROPIC_API_KEY) {
-    throw new Error('captionGen: ANTHROPIC_API_KEY missing — set via wrangler secret put');
-  }
   if (!brandVoice || typeof brandVoice !== 'string') {
     throw new Error('captionGen: brandVoice must be non-empty string');
   }
@@ -63,11 +65,27 @@ export async function generateCaption(env, {
     throw new Error(`captionGen: unknown theme "${slot.theme}"`);
   }
 
-  const doFetch = fetchImpl ?? fetch;
-
   const systemPrompt = buildSystemPrompt(brandVoice);
   const userMessage = buildUserMessage(slot);
 
+  // Backend selection: Anthropic (when ANTHROPIC_API_KEY is set) is preferred for
+  // caption quality; otherwise fall back to Cloudflare Workers AI so the autopilot
+  // runs with no external API key (images already use Workers AI — see imageGen.js).
+  if (env?.ANTHROPIC_API_KEY) {
+    return generateCaptionViaAnthropic(env, { slot, model, maxTokens, fetchImpl, systemPrompt, userMessage });
+  }
+  if (env?.AI?.run) {
+    return generateCaptionViaWorkersAI(env, { slot, maxTokens, systemPrompt, userMessage });
+  }
+  throw new Error('captionGen: no caption backend — set ANTHROPIC_API_KEY or bind Workers AI (env.AI)');
+}
+
+/**
+ * Anthropic Messages API backend (preferred when ANTHROPIC_API_KEY is set).
+ * @returns {Promise<{ headline_pl: string, caption_pl: string, hashtags: string[], image_prompt_visual: string }>}
+ */
+async function generateCaptionViaAnthropic(env, { slot, model, maxTokens, fetchImpl, systemPrompt, userMessage }) {
+  const doFetch = fetchImpl ?? fetch;
   const body = {
     model,
     max_tokens: maxTokens,
@@ -127,12 +145,61 @@ export async function generateCaption(env, {
 
   log.info('marketing.captionGen', {
     stage: 'ok',
+    backend: 'anthropic',
     theme: slot.theme,
     headlineLen: parsed.headline_pl.length,
     captionLen: parsed.caption_pl.length,
     hashtagCount: parsed.hashtags.length,
     inputTokens: data.usage?.input_tokens ?? null,
     outputTokens: data.usage?.output_tokens ?? null,
+  });
+
+  return parsed;
+}
+
+/**
+ * Cloudflare Workers AI backend (zero external key). Same system+user prompt and
+ * the same JSON contract — the response is parsed + validated identically.
+ * @returns {Promise<{ headline_pl: string, caption_pl: string, hashtags: string[], image_prompt_visual: string }>}
+ */
+async function generateCaptionViaWorkersAI(env, { slot, maxTokens, systemPrompt, userMessage }) {
+  let out;
+  try {
+    out = await env.AI.run(WORKERS_AI_MODEL, {
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: maxTokens,
+    });
+  } catch (err) {
+    log.error('marketing.captionGen', err instanceof Error ? err : new Error(String(err)), {
+      stage: 'workers_ai.run',
+      model: WORKERS_AI_MODEL,
+      theme: slot.theme,
+    });
+    throw new Error(`captionGen: Workers AI run failed: ${err?.message ?? 'unknown'}`);
+  }
+
+  const text = extractWorkersAIText(out);
+  if (!text) {
+    log.error('marketing.captionGen', new Error('empty Workers AI content'), {
+      stage: 'parse',
+      responseShape: out && typeof out === 'object' ? Object.keys(out).join(',') : typeof out,
+    });
+    throw new Error('captionGen: Workers AI returned empty content');
+  }
+
+  const parsed = parseJsonOutput(text);
+  validateOutput(parsed);
+
+  log.info('marketing.captionGen', {
+    stage: 'ok',
+    backend: 'workers_ai',
+    theme: slot.theme,
+    headlineLen: parsed.headline_pl.length,
+    captionLen: parsed.caption_pl.length,
+    hashtagCount: parsed.hashtags.length,
   });
 
   return parsed;
@@ -183,6 +250,40 @@ export function extractText(anthropicResponse) {
   if (!Array.isArray(blocks)) return null;
   const textBlock = blocks.find((b) => b.type === 'text' && typeof b.text === 'string');
   return textBlock?.text ?? null;
+}
+
+/**
+ * Normalize a Workers AI text response across the shapes models emit:
+ *   { response } (llama) · { result: { response } } · { text } ·
+ *   OpenAI { choices: [{ message: { content } }] } ·
+ *   gpt-oss responses-API { output: "..." | [{ content: [{ text }] }] }.
+ * Returns '' when no text is present (e.g. a reasoning model that produced
+ * only reasoning tokens). Tolerant on purpose — the old narrow read
+ * (response/result.response only) silently returned empty for gpt-oss.
+ * @param {any} out
+ * @returns {string}
+ */
+export function extractWorkersAIText(out) {
+  if (typeof out === 'string') return out;
+  if (!out || typeof out !== 'object') return '';
+  const direct = out.response ?? out.result?.response ?? out.text;
+  if (typeof direct === 'string' && direct.trim()) return direct;
+  if (Array.isArray(out.choices)) {
+    const c = out.choices[0]?.message?.content ?? out.choices[0]?.text;
+    if (typeof c === 'string' && c.trim()) return c;
+  }
+  if (typeof out.output === 'string' && out.output.trim()) return out.output;
+  if (Array.isArray(out.output)) {
+    for (const item of out.output) {
+      if (typeof item === 'string' && item.trim()) return item;
+      const blocks = item?.content;
+      if (Array.isArray(blocks)) {
+        const txt = blocks.map((b) => (typeof b?.text === 'string' ? b.text : '')).join('').trim();
+        if (txt) return txt;
+      }
+    }
+  }
+  return '';
 }
 
 export function parseJsonOutput(text) {

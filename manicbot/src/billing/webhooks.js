@@ -4,7 +4,7 @@
  * stripe_customer:{customerId} → D1 stripe_customers table.
  */
 
-import { updateTenantBilling } from './storage.js';
+import { updateTenantBilling, setSecondarySalonsBillingStatus } from './storage.js';
 import { mapStripeStatusToBilling } from './stripe.js';
 import { GRACE_DURATION_MS, priceIdToPlan } from './config.js';
 import { dbGet, dbRun } from '../utils/db.js';
@@ -30,7 +30,7 @@ import { notifyTenantOwner } from '../services/userNotify.js';
 
 // #P1-5 (relax.md §5) — plan tier order is the single source of truth for
 // upgrade detection. Mirrored verbatim by `notificationEmails.PLAN_ORDER`.
-const PLAN_ORDER = ['start', 'pro', 'max']; // eslint-disable-line no-unused-vars
+const PLAN_ORDER = ['start', 'pro', 'max'];  
 
 const STRIPE_EVT_PREFIX = 'stripe:evt:';
 const EVT_TTL = 86400 * 7;
@@ -180,6 +180,13 @@ function subscriptionToBillingUpdates(sub, cfg) {
     cancelAtPeriodEnd: sub.cancel_at_period_end === true,
     updatedAt: nowSec(),
   };
+  // Stripe `pause_collection` does NOT change sub.status (it stays 'active'), so
+  // reflect a paused subscription as our own 'paused' billing_status here — both
+  // to pause service via feature-gating and so a subsequent subscription.updated
+  // doesn't reset an intentionally-paused tenant back to 'active'.
+  if (sub.pause_collection) {
+    updates.billingStatus = 'paused';
+  }
   if (planKey) updates.plan = planKey;
   return updates;
 }
@@ -342,13 +349,35 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
       let newPlanForUpgrade = null;
       if (type === 'customer.subscription.updated' && updates.plan) {
         try {
-          const current = await dbGet(ctx, 'SELECT plan FROM tenants WHERE id = ?', tenantId);
+          const current = await dbGet(ctx, 'SELECT plan, pending_plan FROM tenants WHERE id = ?', tenantId);
           oldPlanForUpgrade = current?.plan ?? null;
           newPlanForUpgrade = updates.plan;
+          // A scheduled downgrade has landed (the live plan now equals the
+          // pending target) → clear the denormalized pending-downgrade fields so
+          // the dashboard stops showing "downgrades on <date>".
+          if (current?.pending_plan && updates.plan === current.pending_plan) {
+            updates.pendingPlan = null;
+            updates.pendingPriceId = null;
+            updates.pendingPlanEffectiveAt = null;
+            updates.pendingScheduleId = null;
+          }
         } catch { /* best-effort */ }
       }
 
       await updateTenantBilling(ctx, tenantId, updates);
+
+      // Multi-salon cascade (migration 0109): secondary salons are billed under
+      // this parent's MAX subscription. Mirror the parent's effective MAX
+      // entitlement onto them — freeze when it leaves MAX (or its sub ends),
+      // restore when it returns. No-op for tenants without secondaries.
+      try {
+        const parent = await dbGet(ctx, 'SELECT plan, billing_status FROM tenants WHERE id = ?', tenantId);
+        const entitled = !!parent && parent.plan === 'max' &&
+          (parent.billing_status === 'active' || parent.billing_status === 'trialing');
+        await setSecondarySalonsBillingStatus(ctx, tenantId, entitled ? 'active' : 'inactive');
+      } catch (e) {
+        log.error('webhook.multiSalonCascade', e instanceof Error ? e : new Error(String(e)), { tenantId });
+      }
 
       if (
         type === 'customer.subscription.updated' &&
@@ -392,6 +421,17 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
             updatedAt: nowSec(),
           });
         }
+        // Multi-salon cascade (0117): mirror the parent's (possibly recovered)
+        // MAX entitlement onto its secondary salons — restore them when the card
+        // clears, keep them frozen if the parent is no longer an active MAX.
+        try {
+          const parent = await dbGet(ctx, 'SELECT plan, billing_status FROM tenants WHERE id = ?', tenantId);
+          const entitled = !!parent && parent.plan === 'max' &&
+            (parent.billing_status === 'active' || parent.billing_status === 'trialing');
+          await setSecondarySalonsBillingStatus(ctx, tenantId, entitled ? 'active' : 'inactive');
+        } catch (e) {
+          log.error('webhook.multiSalonCascade.invoicePaid', e instanceof Error ? e : new Error(String(e)), { tenantId });
+        }
         if (ctx.resendApiKey && ctx.resendFrom) {
           // fire-and-forget: don't block 200 response on email delivery
           sendInvoiceEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, invoice)
@@ -416,6 +456,14 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
           graceEndsAt: nowSec() + msToSec(GRACE_DURATION_MS),
           updatedAt: nowSec(),
         });
+        // Multi-salon cascade (0117): the parent entered grace (card declined) —
+        // freeze its secondary salons so they can't use premium features while
+        // the parent is only entitled to booking during dunning.
+        try {
+          await setSecondarySalonsBillingStatus(ctx, tenantId, 'inactive');
+        } catch (e) {
+          log.error('webhook.multiSalonCascade.paymentFailed', e instanceof Error ? e : new Error(String(e)), { tenantId });
+        }
         // #P1-5 (relax.md §5) — payment_failed notification email.
         // Fire-and-forget so a slow Resend never blocks the 200 we owe Stripe.
         if (ctx.resendApiKey && ctx.resendFrom) {

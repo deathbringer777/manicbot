@@ -30,7 +30,9 @@ export const SUBSCRIBE_RATE_LIMIT_WINDOW_MS = 60_000;
 // Tight enough to reject most garbage, lax enough to accept legit unicode
 // local parts. Matches the practical regex used by Resend / Brevo at submit
 // time — we'll defer the deep RFC-5322 check to the email provider.
-const EMAIL_REGEX = /^[^\s@]{1,64}@[^\s@.]+\.[^\s@]{2,}$/;
+// Exported so the chat email-capture module (services/marketing/contacts.js)
+// validates against the exact same practical regex the newsletter form uses.
+export const EMAIL_REGEX = /^[^\s@]{1,64}@[^\s@.]+\.[^\s@]{2,}$/;
 const MAX_EMAIL_LEN = 254;
 const ANON_ID_PATTERN = /^[0-9a-fA-F-]{8,64}$/;
 

@@ -16,6 +16,7 @@ import { Plus, X, Circle, Clock, CheckCircle2 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { PluginRuntimeShell } from "../PluginRuntimeShell";
+import { useCoarsePointer } from "~/lib/useCoarsePointer";
 import type { PluginRuntimeProps } from "../runtimePanels";
 
 export type Column = "todo" | "doing" | "done";
@@ -117,6 +118,7 @@ function sameTarget(a: DropTarget | null, col: Column, beforeId: string | null):
 
 export default function TaskBoardRuntime({ installationId, slug }: PluginRuntimeProps) {
   const { lang } = useLang();
+  const isTouch = useCoarsePointer();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [drafts, setDrafts] = useState<Record<Column, string>>({
     todo: "",
@@ -215,8 +217,8 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
   }, [commitMove, draggingId]);
 
   return (
-    <PluginRuntimeShell slug={slug} bare>
-    <div data-testid="task-board-runtime" className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <PluginRuntimeShell slug={slug} bare width="full">
+    <div data-testid="task-board-runtime" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {COLUMNS.map(({ key, icon: Icon, tint }) => {
         const col = tasks.filter((task) => task.column === key);
         return (
@@ -226,7 +228,7 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
             onDragOver={(e) => handleColDragOver(e, key)}
             onDragLeave={(e) => handleColDragLeave(e, key)}
             onDrop={(e) => handleColDrop(e, key)}
-            className={`rounded-xl border bg-slate-50/60 dark:bg-slate-900/40 p-3 flex flex-col min-h-[280px] transition-colors ${
+            className={`rounded-2xl border bg-slate-50/60 dark:bg-slate-900/40 p-4 flex flex-col min-h-[clamp(320px,55vh,640px)] transition-colors ${
               dragOverCol === key
                 ? "border-brand-500 ring-2 ring-brand-500/30 bg-brand-50/40 dark:bg-brand-500/10"
                 : "border-slate-200 dark:border-white/10"
@@ -252,15 +254,15 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
                   <article
                     data-testid="task-board-card"
                     data-task-id={task.id}
-                    draggable
+                    draggable={!isTouch}
                     onDragStart={(e) => handleDragStart(e, task.id)}
                     onDragEnd={handleDragEnd}
-                    className={`group rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-2.5 text-[13px] text-slate-700 dark:text-slate-200 flex items-start justify-between gap-2 cursor-grab active:cursor-grabbing select-none transition-opacity ${
-                      draggingId === task.id ? "opacity-40" : ""
-                    }`}
+                    className={`group rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 p-3 text-sm text-slate-700 dark:text-slate-200 flex items-start justify-between gap-2 select-none transition-opacity ${
+                      isTouch ? "" : "cursor-grab active:cursor-grabbing"
+                    } ${draggingId === task.id ? "opacity-40" : ""}`}
                   >
-                    <span className="flex-1 break-words">{task.title}</span>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="flex-1 break-words leading-snug">{task.title}</span>
+                    <div className={`flex items-center gap-1.5 transition-opacity ${isTouch ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                       {key !== "todo" && (
                         <button
                           type="button"
@@ -317,13 +319,13 @@ export default function TaskBoardRuntime({ installationId, slug }: PluginRuntime
                 onChange={(e) => setDrafts((d) => ({ ...d, [key]: e.target.value }))}
                 placeholder={PLACEHOLDERS[lang] ?? PLACEHOLDERS.ru}
                 data-testid={`task-board-input-${key}`}
-                className="flex-1 text-[12px] rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-500/40 text-slate-900 dark:text-slate-100"
+                className="flex-1 text-sm rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand-500/40 text-slate-900 dark:text-slate-100"
               />
               <button
                 type="submit"
                 data-testid={`task-board-add-${key}`}
                 aria-label={t("plugins.card.install", lang)}
-                className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-30 disabled:cursor-not-allowed"
                 disabled={!drafts[key].trim()}
               >
                 <Plus size={12} />

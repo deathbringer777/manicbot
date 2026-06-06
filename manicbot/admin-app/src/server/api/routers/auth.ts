@@ -130,6 +130,7 @@ export const authRouter = createTRPCRouter({
             trialEndsAt: tenants.trialEndsAt,
             graceEndsAt: tenants.graceEndsAt,
             stripeCustomerId: tenants.stripeCustomerId,
+            stripeSubscriptionId: tenants.stripeSubscriptionId,
           })
           .from(tenants)
           .where(eq(tenants.id, tenantId))
@@ -149,6 +150,7 @@ export const authRouter = createTRPCRouter({
               billingStatus: tenantRow.billingStatus ?? null,
               trialEndsAt: tenantRow.trialEndsAt ?? null,
               stripeCustomerId: tenantRow.stripeCustomerId ?? null,
+              stripeSubscriptionId: tenantRow.stripeSubscriptionId ?? null,
             },
             nowUnix,
           );

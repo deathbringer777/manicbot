@@ -1,4 +1,4 @@
-import { CB, STEP } from '../config.js';
+import { CB, STEP, EMAIL_CAPTURE } from '../config.js';
 import { log } from '../utils/logger.js';
 import { nowSec } from '../utils/time.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
@@ -16,7 +16,7 @@ import { tryConsumePairingCode as tryConsumeOwnerPairingCode } from '../services
 import { saveServices, loadAboutPhotos, saveAboutPhotos, loadAboutDesc, saveAboutDesc, loadInstagramUrl, saveInstagramUrl } from '../services/services.js';
 import { cancelApt, getApts, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, getTicketMaster, isTicketCloseWord, incHumanRequestCount } from '../services/tickets.js';
-import { decodeStartPayload, recordOrigin } from '../services/origins.js';
+import { decodeStartPayload, recordOrigin, lookupTrackingLink } from '../services/origins.js';
 import { logEvent } from '../utils/events.js';
 import { createTicket, appendTicketMessage } from '../support/tickets.js';
 import { setTenantRole, ROLES, getTechnicalSupportAgents, getTenantSupportAgents, addTenantSupportAgent } from '../roles/roles.js';
@@ -31,6 +31,8 @@ import { mainKb, svcKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showMyApts, showLangPick, showReviews, showAbout } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showServiceEdit, showServicesList, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showMastersList, showAdminCancelAllConfirm, showAdminSettings, showTenantSupportList } from '../ui/admin.js';
 import { startBooking, startBookingWithService, showCancelAllConfirm, enterBookingAdjustState } from '../ui/booking.js';
+import { normalizeEmail, captureChatEmail, channelOptinSource, shouldAskEmail } from '../services/marketing/contacts.js';
+import { askEmail } from '../ui/emailAsk.js';
 import { runWorkersAI, parseAIActions, executeAIAction, validateActionParams } from '../ai.js';
 import { isWantHumanMessage, isMyAppointmentsMessage, getContextAction, parseQuickBookingPhrase, hasHeavyProfanity, isConfirmAllRequestsMessage, isAdminCancelAllMessage, isBookingConfirmDeclineText, parseServiceMention } from '../patterns.js';
 // timingSafeEqual imported above from security.js
@@ -775,7 +777,13 @@ export async function onMsg(ctx, msg) {
     // defaults to 'telegram' for native TG updates. Decode failures are logged
     // via the events ring buffer but never block the flow.
     if (startPayload && ctx.tenantId) {
-      const decoded = decodeStartPayload(startPayload);
+      // A short code minted by the link generator resolves to stored attribution;
+      // otherwise fall back to decoding an inline base64url/simple token (legacy
+      // links + the public profile's web→TG CTA still mint inline tokens).
+      let decoded = /^[0-9a-f]{8}$/.test(startPayload)
+        ? await lookupTrackingLink(ctx, startPayload)
+        : null;
+      if (!decoded) decoded = decodeStartPayload(startPayload);
       if (decoded) {
         const channel = msg?._inbound?.channel || 'telegram';
         try {
@@ -1519,6 +1527,19 @@ export async function onMsg(ctx, msg) {
 
   if (st.step === STEP.REG_PHONE) return finishPhone(ctx, cid, txt, st);
 
+  // Email-ask flow: the client tapped "leave email" and we're awaiting it.
+  if (st.step === STEP.EMAIL_WAIT) {
+    const email = normalizeEmail(txt.replace(/<[^>]*>/g, '').trim());
+    if (!email) return send(ctx, cid, t(lg, 'email_invalid'));
+    await captureChatEmail(ctx, {
+      chatId: cid, email, name: rawName || null,
+      tgUsername: msg.from?.username || null, locale: lg,
+      source: channelOptinSource(ctx.channel?.type), grantConsent: true,
+    }).catch(() => {});
+    await clearState(ctx, cid);
+    return send(ctx, cid, t(lg, 'email_thanks'), { reply_markup: { remove_keyboard: true } });
+  }
+
   if (isMyAppointmentsMessage(txt)) return showMyApts(ctx, cid);
 
   if (txt && getContextAction(txt) === 'main') return showHomeByRole(ctx, cid, name);
@@ -1568,6 +1589,28 @@ export async function onMsg(ctx, msg) {
   if (!instagramAiTriggerAllows(ctx, txt)) {
     return send(ctx, cid, t(lg, 'ig_ai_trigger_hint'));
   }
+
+  // Spontaneous email capture (D): a client who drops an email into free chat
+  // is captured as a soft opt-in without being asked ("любой email = согласие").
+  // If the whole message is just the email, acknowledge and stop; if it's
+  // embedded in a question, capture quietly and let the AI still answer.
+  if (
+    EMAIL_CAPTURE.enabled && EMAIL_CAPTURE.spontaneous &&
+    txt && realRole === 'client' && (!st.step || st.step === 'idle') && !txt.startsWith('/')
+  ) {
+    const cleaned = txt.replace(/<[^>]*>/g, '').trim();
+    const m = cleaned.match(/[^\s@]{1,64}@[^\s@.]+\.[^\s@]{2,}/);
+    if (m && normalizeEmail(m[0])) {
+      const r = await captureChatEmail(ctx, {
+        chatId: cid, email: m[0], name: rawName || null,
+        tgUsername: msg.from?.username || null, locale: lg,
+        source: 'chat_volunteered', grantConsent: true,
+      }).catch(() => ({ ok: false }));
+      if (r.ok && normalizeEmail(cleaned)) return send(ctx, cid, t(lg, 'email_thanks'));
+      // embedded email → captured; fall through to the AI answer
+    }
+  }
+
   return handleAIChat(ctx, cid, txt, lg, realRole, msg.from);
 }
 
@@ -1617,4 +1660,12 @@ export async function finishPhone(ctx, cid, phone, st) {
   }
 
   await send(ctx, cid, t(lg, 'now_choose'), svcKb(ctx, lg));
+
+  // Scenario B — a brand-new client who registered OUTSIDE a booking flow gets
+  // the email ask after the service picker (never mid-booking; the booking-
+  // context branch above returns before reaching here). Gated by anti-nag.
+  if (EMAIL_CAPTURE.enabled && EMAIL_CAPTURE.postReg) {
+    const u = await getUser(ctx, cid).catch(() => null);
+    if (shouldAskEmail(u)) await askEmail(ctx, cid, lg).catch(() => {});
+  }
 }

@@ -287,7 +287,7 @@ export function ThreadView({ tenantId, threadId }: Props) {
             const isSystem = m.senderKind === "system";
             const isNote = m.isInternalNote === 1;
             const senderName =
-              m.senderKind === "web_user"
+              m.senderKind === "web_user" || m.senderKind === "master"
                 ? memberMap.get(m.senderRef) ?? t("messenger.senderStaff", lang)
                 : m.senderKind === "external_client"
                   ? t("messenger.senderClient", lang)

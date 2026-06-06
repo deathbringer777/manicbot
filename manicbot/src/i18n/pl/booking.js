@@ -12,6 +12,17 @@ export default {
   reg_done: '✅ <b>Rejestracja zakończona!</b>\n\n👤 Imię: <b>{n}</b>\n📱 Telefon: <b>{p}</b>',
   now_choose: '💅 Teraz wybierz usługę:',
 
+  // Email capture (chat → marketing)
+  email_ask: '✉️ <b>Chcesz zostać stałym klientem?</b>\n\nZostaw email i jako pierwszy otrzymuj zniżki, promocje i nowości salonu. Możesz zrezygnować w każdej chwili.',
+  email_ask_btn: '✉️ Zostaw email',
+  email_decline_btn: 'Nie teraz',
+  email_ask_prompt: '✍️ Napisz swój email w jednej wiadomości:',
+  email_invalid: '❌ To nie wygląda jak email. Spróbuj ponownie lub kliknij „Nie teraz”.',
+  email_thanks: '🎉 <b>Dziękujemy!</b>\n\nBędziemy wysyłać tylko to, co przydatne — zniżki i nowości. Możesz zrezygnować w każdej chwili z menu.',
+  email_declined: '👌 W porządku! Zawsze możesz zostawić email później.',
+  email_optout_btn: '🔕 Zrezygnuj z newslettera',
+  email_optout_done: '✅ Gotowe. Nie będziemy już wysyłać maili. Zmienisz zdanie? Po prostu zostaw email ponownie.',
+
   choose_svc: '💅 <b>Wybierz usługę:</b>',
   choose_date: '📅 Wybierz datę:',
   no_slots: '😔 Brak wolnych miejsc na <b>{d}</b>.\n\n📅 Wybierz inną datę:',

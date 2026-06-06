@@ -2,13 +2,41 @@
 
 ## Plans
 
-| Plan   | Price      | Masters | AI Chat | Support Tickets | Calendar | White Label |
-|--------|------------|---------|---------|------------------|-----------|-------------|
-| Start  | 45 zł/mo   | 1       | ✗       | ✗                | ✗         | ✗           |
-| Pro    | 60 zł/mo   | 5       | ✓       | ✓                | ✓         | ✗           |
-| MAX    | 90 zł/mo   | ∞       | ✓       | ✓                | ✓         | ✓           |
+| Plan   | Price      | Masters | AI Chat | Support Tickets | Calendar | White Label | Multi-salon |
+|--------|------------|---------|---------|------------------|-----------|-------------|-------------|
+| Start  | 45 zł/mo   | 1       | ✗       | ✗                | ✗         | ✗           | ✗           |
+| Pro    | 60 zł/mo   | 5       | ✓       | ✓                | ✓         | ✗           | ✗           |
+| MAX    | 90 zł/mo   | ∞       | ✓       | ✓                | ✓         | ✓           | ✓ (≤10)     |
 
 Plan limits are set in `src/billing/config.js` (constant `PLAN_LIMITS`).
+
+---
+
+## Multi-salon ownership (MAX) — migration 0117
+
+A **MAX-plan** account can own multiple salons (home + up to `MAX_OWNED_SALONS`,
+default 10).
+
+- A **secondary** salon is simply a `tenants` row with `parent_tenant_id` = the
+  owner's **home** tenant (the billing root). **No `masters` row and no
+  `tenant_roles` row** — so the owner never appears in the new salon's staff
+  list, public booking, or master limit. Ownership is resolved by
+  `listMembershipsForWebUser` / `resolveActiveMembership` (`memberships.ts`)
+  purely from `parent_tenant_id = <my home tenant>` — bound by the unique home
+  tenant id (collision-free), **never** a synthetic chat id. The existing salon
+  switcher and tenant guards (`assertTenantOwner`) work unchanged.
+- **Creation:** `salon.createOwnedSalon` (gated on the home plan being `max` +
+  the `MAX_OWNED_SALONS` cap). UI: the header `TenantSwitcher` "Create salon"
+  entry (visible to MAX owners) → `CreateSalonModal`.
+- **Billing:** secondaries are billed **under the parent's single MAX
+  subscription** — they shadow `plan='max'/billingStatus='active'` so `canUse`
+  works locally, are **excluded from MRR / customer counts** (`classifyTenant`
+  buckets a `parent_tenant_id`-set tenant as `none`; the platform JOIN also
+  drops them), and are **cascade-frozen/restored** when the parent's MAX
+  entitlement changes — via `setSecondarySalonsBillingStatus` fired from the
+  `customer.subscription.updated/deleted`, `invoice.payment_failed`, and
+  `invoice.paid` webhooks, plus `pause/resumeSubscription`, with a daily
+  `phaseBillingReconcileSecondaries` cron backstop for lost webhooks.
 
 ---
 
@@ -24,9 +52,10 @@ The `billing_status` field in the D1 `tenants` table:
 | `past_due`     | Stripe: overdue payment                        | Per plan (until grace)        |
 | `inactive`     | Trial expired or subscription not created      | Everything blocked            |
 | `canceled`     | Explicit subscription cancellation             | Everything blocked            |
+| `paused`       | Owner paused billing (`pause_collection`)      | Everything blocked            |
 
 Feature access check: `canUse(ctx, feature)` in `src/billing/features.js`.
-Possible feature values: `booking`, `ai`, `calendar`, `support_tickets`, `masters_add`, `white_label`, `whatsapp`, `instagram`.
+Possible feature values: `booking`, `ai`, `calendar`, `support_tickets`, `masters_add`, `white_label`, `whatsapp`, `instagram`, `multi_salon`.
 
 ---
 
@@ -120,6 +149,32 @@ Quick setup: `cd manicbot && ./scripts/setup-stripe-secrets.sh`
 
 Handler: `src/billing/webhooks.js` → `handleStripeWebhook()`.
 Billing record in D1: `src/billing/storage.js` → `updateTenantBilling()`.
+
+`customer.subscription.updated` also: maps Stripe `pause_collection` → `billing_status='paused'`
+(Stripe keeps `status='active'` while paused, so we reflect it ourselves), and clears the
+denormalized pending-downgrade fields once a scheduled downgrade's price has taken effect.
+
+---
+
+## In-app self-service (plan change + pause) — migration 0109
+
+Salon owners manage their subscription from **Settings → Billing** without the Stripe customer
+portal. tRPC procedures live on the `salon` router (`admin-app/.../routers/salon.ts`); the raw
+Stripe REST helpers live in `admin-app/.../lib/stripe.ts`.
+
+| Action | Procedure | Stripe mechanism |
+|--------|-----------|------------------|
+| **Upgrade** (pay difference now) | `salon.changePlan` (target rank > current) | `subscriptions.update` with `proration_behavior=always_invoice`, `payment_behavior=error_if_incomplete` |
+| **Downgrade** (no refund, at period end) | `salon.changePlan` (target rank < current) | a **subscription_schedule**: create `from_subscription`, append a 2nd phase at the cheaper price with `proration_behavior=none`, `end_behavior=release` |
+| **Undo a scheduled downgrade** | `salon.cancelPendingDowngrade` | release the schedule |
+| **Pause** (no billing, service paused) | `salon.pauseSubscription` | `pause_collection[behavior]=void` (+ optional `resumes_at`) → reflected as `billing_status='paused'` |
+| **Resume** | `salon.resumeSubscription` | clear `pause_collection` |
+| **Preview upgrade charge** | `salon.previewPlanChange` | upcoming-invoice preview |
+
+A pending downgrade is denormalized onto `tenants` for fast dashboard rendering (Stripe's schedule
+stays authoritative for execution): `pending_plan`, `pending_price_id`, `pending_plan_effective_at`,
+`pending_schedule_id`. Timed pause stores `pause_resumes_at`. `billing_status='paused'` is denied by
+`canUse` (only `active`/`trialing` grant features), so a paused tenant's bot and premium features stop.
 
 ---
 

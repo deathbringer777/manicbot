@@ -14,6 +14,8 @@ const FEATURE_PLAN_FIELD = {
   calendar:       'calendar',
   masters_add:    null,
   white_label:    'whiteLabel',
+  // Owning more than one salon (home + secondaries) — MAX plan only.
+  multi_salon:    'multiSalon',
   // Channel features: checked via the `channels` array in PLAN_LIMITS
   whatsapp:       '_channel_whatsapp',
   instagram:      '_channel_instagram',

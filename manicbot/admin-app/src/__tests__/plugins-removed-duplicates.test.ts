@@ -10,10 +10,15 @@ import { listManifests, getPlugin } from "@plugins/index";
  * core capabilities (booking-reminder, client-crm-lite, quick-notes) or whose
  * UI got folded back into core (ai-abuse-monitor, gdpr-center, sla-tracker,
  * escalation-playbook, kb-search, ticket-templates, keyboard-shortcuts,
- * dark-plus, portfolio-gallery). `google-calendar` was initially in the
- * dropped list but was later restored as a marketplace facade over the
- * existing core OAuth flow — it is NOT in REMOVED_DUPLICATE_SLUGS below.
- * See the `manicbot/plugins/registry.ts` header for the full rationale.
+ * dark-plus, portfolio-gallery).
+ *
+ * 2026-06-05 cull removed 7 more: google-calendar + master-telegram-pairing
+ * (facades over core Settings / pairing UI), availability-share (wrapped the
+ * existing public /salon link), shift-planner (duplicated core working hours),
+ * earnings-goal + export-hub (localStorage stubs duplicating core earnings /
+ * CSV export), and message-templates (localStorage-only template store).
+ * `google-calendar` had briefly been restored as a facade in May but was
+ * re-removed here. See the `manicbot/plugins/registry.ts` header for rationale.
  *
  * `sms-reminders` stays in this list until Phase 3 of the catalog roadmap
  * lands the real implementation; once that PR ships, remove the line.
@@ -29,9 +34,6 @@ const REMOVED_DUPLICATE_SLUGS = [
   "birthday-campaigns",   // Marketing module (0032) + phasePromos cron already handle birthday promos
   "multi-lang-bot",       // orphan — never registered, never imported
   // 2026-05-16 catalog audit — Phase 1 cleanup:
-  // NOTE: `google-calendar` was in the original cleanup list but was
-  // restored as a marketplace facade over the core OAuth flow — do NOT
-  // re-add it here.
   "booking-reminder",     // duplicated by worker `phaseReminders` cron
   "client-crm-lite",      // duplicated by core `clients.ts` router (0062)
   "quick-notes",          // subset of task-board
@@ -44,6 +46,18 @@ const REMOVED_DUPLICATE_SLUGS = [
   "keyboard-shortcuts",   // folded into `(dashboard)/layout.tsx` global hook
   "dark-plus",            // folded into `AppearanceSection` extra themes
   "portfolio-gallery",    // folded into public salon + master profile pages
+  // 2026-06-05 cull — facades / duplicates of core UI + localStorage stubs:
+  "google-calendar",        // facade over core Settings GCal OAuth (re-removed)
+  "master-telegram-pairing",// facade over core Master / Salon pairing UI
+  "availability-share",     // only emitted the existing public /salon/<id> link
+  "shift-planner",          // duplicated core working hours / MasterScheduleEditor
+  "earnings-goal",          // duplicated core master earnings; localStorage stub
+  "export-hub",             // duplicated core CSV export; dumped localStorage junk
+  "message-templates",      // localStorage-only template store (no server sync)
+  // 2026-06-06 — reminders removed: duplicates the system-level notification
+  // bell + the core phaseReminders appointment cron; its calendar-chip UI was
+  // never wired. Worker phasePluginCron stays (now with zero dispatchers).
+  "reminders",
 ] as const;
 
 describe("removed duplicate plugins stay removed", () => {

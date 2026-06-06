@@ -158,6 +158,28 @@ export async function onCb(ctx, cb) {
     return showHomeByRole(ctx, cid, name);
   }
 
+  // ── Email capture: client tapped a button on the "leave your email" ask ──
+  if (d === CB.EMAIL_YES) {
+    const lg = (await getLang(ctx, cid)) || 'ru';
+    const st = await getState(ctx, cid);
+    st.step = STEP.EMAIL_WAIT;
+    await setState(ctx, cid, st);
+    return send(ctx, cid, t(lg, 'email_ask_prompt'));
+  }
+  if (d === CB.EMAIL_NO) {
+    // Soft decline: the prompt was already stamped at ask time (cooldown +
+    // count). Leave email_opt_in NULL so a later scenario can re-ask within the
+    // cap; the hard "never" path is the in-chat unsubscribe (CB.EMAIL_OPTOUT).
+    const lg = (await getLang(ctx, cid)) || 'ru';
+    return send(ctx, cid, t(lg, 'email_declined'));
+  }
+  if (d === CB.EMAIL_OPTOUT) {
+    const lg = (await getLang(ctx, cid)) || 'ru';
+    const { setChatEmailOptOut } = await import('../services/marketing/contacts.js');
+    await setChatEmailOptOut(ctx, cid, { source: 'chat_settings' }).catch(() => {});
+    return send(ctx, cid, t(lg, 'email_optout_done'));
+  }
+
   // Sprint 3 §8: post-visit confirmation callbacks (master clicks Yes/No-show).
   if (d.startsWith('visit_ok:') || d.startsWith('visit_noshow:')) {
     const aptId = d.split(':', 2)[1];
@@ -195,24 +217,30 @@ export async function onCb(ctx, cb) {
        isOk ? 'booking.completed' : 'booking.no_show',
        JSON.stringify({ appointmentId: aptId, confirmedBy: 'master' }), now).catch(() => {});
 
-    // On success, ask the client to leave a review (best-effort)
+    // On success, ask the client to leave a review (best-effort, event-based).
+    // Gated on the tenant's review settings: prompt only when reviews are
+    // enabled AND timing is "immediate" (the default). When timing is
+    // "delayed", phaseReviews (cron) sends the prompt later instead; marking the
+    // appointment review_requested here makes that cron skip it (no double-ask).
+    // The buttons MUST use the `rev:` callback prefix — that's the only handler
+    // (`d.startsWith('rev:')` below). The old `rate:` prefix had NO handler, so
+    // this immediate prompt was silently dead. Mirror the cron prompt exactly.
     if (isOk && apt.chat_id > 0) {
-      const { markReviewRequested: mrr } = await import('../services/reviews.js');
-      await mrr(ctx, aptId).catch(() => {});
-      await send(ctx, apt.chat_id,
-        'Надеемся, вам понравилось! Поставьте оценку от 1 до 5:',
-        {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '⭐1', callback_data: `rate:${aptId}:1` },
-              { text: '⭐2', callback_data: `rate:${aptId}:2` },
-              { text: '⭐3', callback_data: `rate:${aptId}:3` },
-              { text: '⭐4', callback_data: `rate:${aptId}:4` },
-              { text: '⭐5', callback_data: `rate:${aptId}:5` },
-            ]],
-          },
-        },
-      ).catch(() => {});
+      const { getConfig } = await import('../services/services.js');
+      const reviewsEnabled = await getConfig(ctx, 'reviews_enabled');
+      const promptTiming = await getConfig(ctx, 'reviews_prompt_timing');
+      if (reviewsEnabled && promptTiming !== 'delayed') {
+        const { markReviewRequested: mrr } = await import('../services/reviews.js');
+        await mrr(ctx, aptId).catch(() => {});
+        const clg = (await getLang(ctx, apt.chat_id)) || 'ru';
+        const stars = ['1', '2', '3', '4', '5'].map((n) => ({
+          text: '⭐'.repeat(Number(n)),
+          callback_data: `rev:${aptId}:${n}`,
+        }));
+        await send(ctx, apt.chat_id, t(clg, 'review_request'), {
+          reply_markup: { inline_keyboard: [stars] },
+        }).catch(() => {});
+      }
     }
     // Stamp-card increment on a confirmed visit (Sprint 4).
     // #N-02 — failures here MUST NOT block the rest of the callback flow

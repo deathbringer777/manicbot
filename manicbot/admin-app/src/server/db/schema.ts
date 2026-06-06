@@ -21,6 +21,13 @@ export const tenants = sqliteTable("tenants", {
   nextPaymentDate: integer("next_payment_date"),
   billingEmail: text("billing_email"),
   cancelAtPeriodEnd: integer("cancel_at_period_end").notNull().default(0),
+  // Scheduled downgrade (no refund; applies at period end via Stripe schedule) +
+  // optional timed-pause resume. See migration 0109.
+  pendingPlan: text("pending_plan"),
+  pendingPriceId: text("pending_price_id"),
+  pendingPlanEffectiveAt: integer("pending_plan_effective_at"),
+  pendingScheduleId: text("pending_schedule_id"),
+  pauseResumesAt: integer("pause_resumes_at"),
   slug: text("slug"),
   description: text("description"),
   lat: real("lat"),
@@ -40,6 +47,9 @@ export const tenants = sqliteTable("tenants", {
   isPersonal: integer("is_personal").notNull().default(0),
   industry: text("industry").notNull().default("beauty"),
   isTest: integer("is_test").notNull().default(0),
+  // 0117 — multi-salon ownership: home tenant id this secondary salon is billed
+  // under (MAX plan). NULL = a normal, independently-billed tenant.
+  parentTenantId: text("parent_tenant_id"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -75,6 +85,10 @@ export const users = sqliteTable("users", {
   notes: text("notes"),
   tags: text("tags"),
   marketingContactId: integer("marketing_contact_id"),
+  // 0114: chat email-capture opt-in / anti-nag state (NULL=unasked, 1=in, 0=out).
+  emailOptIn: integer("email_opt_in"),
+  emailPromptLastAt: integer("email_prompt_last_at"),
+  emailPromptCount: integer("email_prompt_count").notNull().default(0),
   isBlockedGlobal: integer("is_blocked_global").notNull().default(0),
   blockedGlobalReason: text("blocked_global_reason"),
   blockedGlobalAt: integer("blocked_global_at"),
@@ -134,11 +148,26 @@ export const userOrigins = sqliteTable("user_origins", {
   rawPayload: text("raw_payload"),
   capturedAt: integer("captured_at").notNull(),
   isFirstTouch: integer("is_first_touch").notNull().default(0),
+  webUserId: text("web_user_id"),
 }, (t) => [
   index("idx_uo_tenant_chat").on(t.tenantId, t.chatId),
   index("idx_uo_tenant_source").on(t.tenantId, t.source, t.capturedAt),
   index("idx_uo_tenant_campaign").on(t.tenantId, t.campaign, t.capturedAt),
   index("idx_uo_tenant_first").on(t.tenantId, t.isFirstTouch, t.capturedAt),
+]);
+
+export const trackingLinks = sqliteTable("tracking_links", {
+  shortCode: text("short_code").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  source: text("source").notNull(),
+  medium: text("medium"),
+  campaign: text("campaign"),
+  content: text("content"),
+  payloadHash: text("payload_hash").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_tl_tenant_hash").on(t.tenantId, t.payloadHash),
+  index("idx_tl_tenant_code").on(t.tenantId, t.shortCode),
 ]);
 
 export const masters = sqliteTable("masters", {
@@ -288,6 +317,9 @@ export const appointments = sqliteTable("appointments", {
   visitConfirmedAt: integer("visit_confirmed_at"),
   visitConfirmedBy: text("visit_confirmed_by"),
   reviewRequestedAt: integer("review_requested_at"),
+  /** Post-visit follow-up (24h sweep) idempotency marker; epoch seconds,
+   *  null = not yet sent. See phasePostVisitFollowup + migration 0112. */
+  followup24hSentAt: integer("followup_24h_sent_at"),
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_apt_tenant_date").on(t.tenantId, t.date),
@@ -1565,44 +1597,6 @@ export const referralEvents = sqliteTable("referral_events", {
   createdAt: integer("created_at").notNull(),
 }, (t) => [
   index("idx_ref_events_referral").on(t.referralId, t.createdAt),
-]);
-
-// ─── Reminders plugin (migration 0070) ──────────────────────────────────
-// Definitions live here; expansion + delivery happen worker-side
-// (plugins/reminders/cron.js + src/services/userNotify.js). Recurrence
-// is stored as JSON validated by zod at the tRPC boundary; channelsJson
-// is a subset of ['inapp', 'telegram'].
-export const pluginReminders = sqliteTable("plugin_reminders", {
-  id: text("id").primaryKey(),
-  tenantId: text("tenant_id").notNull(),
-  createdByWebUserId: text("created_by_web_user_id").notNull(),
-  targetMasterId: integer("target_master_id"),
-  kind: text("kind").notNull().default("reminder"),
-  title: text("title").notNull(),
-  note: text("note"),
-  startsOn: text("starts_on").notNull(),
-  time: text("time").notNull(),
-  recurrenceJson: text("recurrence_json").notNull(),
-  channelsJson: text("channels_json").notNull().default('["inapp"]'),
-  archivedAt: integer("archived_at"),
-  createdAt: integer("created_at").notNull(),
-  updatedAt: integer("updated_at").notNull(),
-}, (t) => [
-  index("idx_reminders_tenant_active").on(t.tenantId, t.startsOn),
-  index("idx_reminders_target").on(t.tenantId, t.targetMasterId, t.startsOn),
-]);
-
-// Idempotent fire log. The UNIQUE (reminder_id, fires_at_epoch) is the
-// contract — INSERT OR IGNORE in the cron handler short-circuits dupes.
-export const pluginReminderFires = sqliteTable("plugin_reminder_fires", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  reminderId: text("reminder_id").notNull().references(() => pluginReminders.id, { onDelete: "cascade" }),
-  firesAtEpoch: integer("fires_at_epoch").notNull(),
-  firedAtEpoch: integer("fired_at_epoch"),
-  deliveryState: text("delivery_state").notNull().default("pending"),
-  deliveryError: text("delivery_error"),
-}, (t) => [
-  uniqueIndex("uq_reminder_fires_occurrence").on(t.reminderId, t.firesAtEpoch),
 ]);
 
 // ─── User notifications (migration 0070) ────────────────────────────────

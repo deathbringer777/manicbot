@@ -20,10 +20,13 @@ export const BILLING_STATUS = {
   INACTIVE: 'inactive',
 };
 
+// Cap on salons a single MAX-plan account may own (home + secondaries).
+export const MAX_OWNED_SALONS = 10;
+
 export const PLAN_LIMITS = {
-  start:  { masters: 1,        ai: false, support: false, calendar: false, whiteLabel: false, channels: ['telegram'],                             wa_templates_monthly: 0    },
-  pro:    { masters: 5,        ai: true,  support: true,  calendar: true,  whiteLabel: false, channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 500  },
-  max:    { masters: Infinity, ai: true,  support: true,  calendar: true,  whiteLabel: true,  channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 5000 },
+  start:  { masters: 1,        ai: false, support: false, calendar: false, whiteLabel: false, channels: ['telegram'],                             wa_templates_monthly: 0,    multiSalon: false, maxOwnedSalons: 1               },
+  pro:    { masters: 5,        ai: true,  support: true,  calendar: true,  whiteLabel: false, channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 500,  multiSalon: false, maxOwnedSalons: 1               },
+  max:    { masters: Infinity, ai: true,  support: true,  calendar: true,  whiteLabel: true,  channels: ['telegram', 'whatsapp', 'instagram'],    wa_templates_monthly: 5000, multiSalon: true,  maxOwnedSalons: MAX_OWNED_SALONS },
 };
 
 export const TRIAL_DURATION_MS = 14 * 24 * 3600 * 1000;  // 14 дней

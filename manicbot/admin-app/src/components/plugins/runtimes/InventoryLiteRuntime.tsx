@@ -30,6 +30,17 @@ interface InventorySettings {
 const MAX_ITEMS = 80;
 const DEFAULT_UNIT = "шт";
 
+// Quick-fill suggestions for the name field (datalist) — common salon
+// consumables. Free text is still allowed; this just speeds up data entry so
+// the owner doesn't retype "Гель-лак" every time.
+const NAME_PRESETS = [
+  "Гель-лак (цветной)", "База", "База каучуковая", "Топ", "Топ без липкого слоя",
+  "Праймер", "Бонд", "Дегидратор", "Обезжириватель", "Жидкость для снятия",
+  "Пилка", "Баф", "Апельсиновые палочки", "Салфетки безворсовые", "Фрезы",
+  "Кисти", "Стразы / декор", "Фольга", "Слайдеры", "Масло для кутикулы",
+  "Крем для рук", "Перчатки", "Маска одноразовая",
+];
+
 function freshId(): string {
   return `inv_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -113,8 +124,11 @@ export default function InventoryLiteRuntime({ installationId, slug }: PluginRun
     : items;
 
   return (
-    <PluginRuntimeShell slug={slug} flash={flash}>
+    <PluginRuntimeShell slug={slug} flash={flash} width="wide">
       <div className="space-y-4">
+        <datalist id="inventory-name-presets">
+          {NAME_PRESETS.map((n) => <option key={n} value={n} />)}
+        </datalist>
         <section className="rounded-2xl bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2 mb-3">
             <Boxes className="w-4 h-4 text-orange-500 shrink-0" />
@@ -174,7 +188,7 @@ export default function InventoryLiteRuntime({ installationId, slug }: PluginRun
                   key={it.id}
                   data-testid="inventory-row"
                   data-low={isLow ? "true" : "false"}
-                  className={`flex items-center gap-1.5 p-2 rounded-lg border transition-colors ${
+                  className={`flex flex-wrap items-center gap-1.5 p-2.5 rounded-lg border transition-colors ${
                     isLow
                       ? "border-orange-300 bg-orange-50 dark:border-orange-700/40 dark:bg-orange-900/10"
                       : "border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-white/[0.02]"
@@ -187,7 +201,8 @@ export default function InventoryLiteRuntime({ installationId, slug }: PluginRun
                     placeholder="Название (например, Гель розовый)"
                     maxLength={80}
                     data-testid="inventory-name"
-                    className="flex-1 min-w-0 px-2 py-1 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    list="inventory-name-presets"
+                    className="w-full sm:flex-1 sm:w-auto min-w-0 px-2.5 py-1.5 text-sm rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                   />
                   <input
                     type="number"

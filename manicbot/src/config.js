@@ -28,6 +28,9 @@ export const CB = {
   LANG_SET:  'sl:',
   REG_YES:   'rg:y',
   REG_CHANGE:'rg:c',
+  EMAIL_YES:    'eml:y',    // "leave my email" → enters STEP.EMAIL_WAIT
+  EMAIL_NO:     'eml:n',    // "not now" — soft decline (cooldown, opt-in stays NULL)
+  EMAIL_OPTOUT: 'eml:out',  // in-chat unsubscribe from the settings menu
   SERVICE:   'sv:',
   CAL_MONTH: 'cm:',
   DATE:      'dt:',
@@ -169,10 +172,24 @@ export const CB = {
   ADMINBOT_CONFIRM_MKT_TICK:    'ab:ok:mt',
 };
 
+/**
+ * Chat email-capture feature flags (staged rollout). Static config — flip a
+ * value and redeploy to stage a scenario. spontaneous/postBooking/postReg ship
+ * ON; the proactive Telegram re-ask cron ships OFF until it's smoke-tested.
+ */
+export const EMAIL_CAPTURE = {
+  enabled: true,
+  spontaneous: true,
+  postBooking: true,
+  postReg: true,
+  reaskCron: false,
+};
+
 export const STEP = {
   REG_CONFIRM:         'rc',
   REG_NAME:            'rn',
   REG_PHONE:           'rp',
+  EMAIL_WAIT:          'email_wait',   // awaiting the client's typed email
   DATE:                'date',
   TIME:                'time',
   CONFIRM:             'conf',

@@ -18,7 +18,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, eq, desc, lt, sql, inArray, gt, isNull, ne, like } from "drizzle-orm";
+import { and, or, eq, desc, lt, sql, inArray, gt, isNull, isNotNull, ne, like } from "drizzle-orm";
 import {
   createTRPCRouter,
   protectedProcedure,
@@ -158,13 +158,20 @@ export const messengerRouter = createTRPCRouter({
       if (input.kind) {
         conditions.push(eq(threads.kind, input.kind));
       } else {
-        // Default view hides raw client conversations — the inbox is the
-        // "Заявки" requests board + staff chats. Web client_conv threads are
-        // no longer created (the web mirror is disabled), but legacy rows still
-        // exist, so exclude client_conv unless explicitly requested via the
-        // "Клиенты" filter pill.
+        // Default "Все" view hides raw client_conv. Note: client_conv is a
+        // God-Mode (system_admin) cross-tenant surface — the worker only adds the
+        // external_client as a member, so a tenant owner is never a member and
+        // the membership filter below already excludes them. Per-salon client
+        // inbound reaches the owner as booking-request cards (kind='requests')
+        // + the Telegram mirror to masters; surfacing raw client_conv per-owner
+        // would require adding staff as thread members (separate change).
         conditions.push(ne(threads.kind, "client_conv"));
       }
+      // Hide staff DMs that have no messages yet — a DM appears in the list only
+      // once a real conversation exists (Telegram-style). This buries abandoned/
+      // placeholder DM threads (e.g. opened from "New chat" but never written in).
+      // Other kinds are unaffected.
+      conditions.push(or(ne(threads.kind, "staff_dm"), isNotNull(threads.lastMessageAt))!);
       if (input.cursor !== undefined) {
         conditions.push(lt(threads.lastMessageAt, input.cursor));
       }
@@ -280,8 +287,55 @@ export const messengerRouter = createTRPCRouter({
         }
       }
 
+      // Resolve staff_dm display titles to the COUNTERPART's name (Telegram-style)
+      // for DMs without an explicit title. This is per-viewer and cannot be stored
+      // on the thread, because each participant must see the OTHER person's name.
+      // Constant extra queries (1 membership + ≤2 name lookups), never per-thread.
+      const dmTitleByThread = new Map<string, string>();
+      const dmThreadIds = rows.filter((r) => r.kind === "staff_dm" && !r.title).map((r) => r.id);
+      if (dmThreadIds.length) {
+        const dmMembers = await ctx.db
+          .select({
+            threadId: threadMembers.threadId,
+            memberKind: threadMembers.memberKind,
+            memberRef: threadMembers.memberRef,
+          })
+          .from(threadMembers)
+          .where(and(inArray(threadMembers.threadId, dmThreadIds), ne(threadMembers.memberRef, webUserId)));
+
+        const dmWebUserIds = [...new Set(dmMembers.filter((m) => m.memberKind === "web_user").map((m) => m.memberRef))];
+        const dmMasterRefs = [...new Set(dmMembers.filter((m) => m.memberKind === "master").map((m) => m.memberRef))];
+
+        const nameByWebUser = new Map<string, string>();
+        if (dmWebUserIds.length) {
+          const wu = await ctx.db
+            .select({ id: webUsers.id, name: webUsers.name, email: webUsers.email })
+            .from(webUsers)
+            .where(inArray(webUsers.id, dmWebUserIds));
+          for (const u of wu) nameByWebUser.set(u.id, u.name ?? u.email ?? u.id);
+        }
+        const nameByMaster = new Map<string, string>();
+        if (dmMasterRefs.length) {
+          // master memberRef is String(chatId); masters.chatId is INTEGER, tenant-scoped.
+          const chatIds = dmMasterRefs.map((r) => Number(r)).filter((n) => Number.isFinite(n));
+          if (chatIds.length) {
+            const ms = await ctx.db
+              .select({ chatId: masters.chatId, name: masters.name })
+              .from(masters)
+              .where(and(eq(masters.tenantId, input.tenantId), inArray(masters.chatId, chatIds)));
+            for (const m of ms) nameByMaster.set(String(m.chatId), m.name ?? String(m.chatId));
+          }
+        }
+        for (const m of dmMembers) {
+          if (dmTitleByThread.has(m.threadId)) continue; // first counterpart wins
+          const name = m.memberKind === "web_user" ? nameByWebUser.get(m.memberRef) : nameByMaster.get(m.memberRef);
+          if (name) dmTitleByThread.set(m.threadId, name);
+        }
+      }
+
       const items = rows.map((r) => ({
         ...r,
+        title: r.kind === "staff_dm" && !r.title ? dmTitleByThread.get(r.id) ?? r.title : r.title,
         unreadCount: unreadByThread.get(r.id) ?? 0,
       }));
 
@@ -382,6 +436,24 @@ export const messengerRouter = createTRPCRouter({
         }
       }
 
+      // Telegram-only master members carry their chat_id as memberRef — resolve
+      // it to the master's name so the member list (and master-authored messages)
+      // show "Анна", not the raw chat id. Tenant-scoped.
+      const masterRefs = members
+        .filter((m) => m.memberKind === "master")
+        .map((m) => m.memberRef);
+      const masterNameMap = new Map<string, string>();
+      if (masterRefs.length) {
+        const chatIds = masterRefs.map((r) => Number(r)).filter((n) => Number.isFinite(n));
+        if (chatIds.length) {
+          const ms = await ctx.db
+            .select({ chatId: masters.chatId, name: masters.name })
+            .from(masters)
+            .where(and(eq(masters.tenantId, input.tenantId), inArray(masters.chatId, chatIds)));
+          for (const m of ms) masterNameMap.set(String(m.chatId), m.name ?? String(m.chatId));
+        }
+      }
+
       return {
         thread,
         // Soft-deleted rows keep their place (tombstone) but never leak content.
@@ -393,7 +465,11 @@ export const messengerRouter = createTRPCRouter({
         members: members.map((m) => ({
           ...m,
           displayName:
-            m.memberKind === "web_user" ? nameMap.get(m.memberRef) ?? m.memberRef : m.memberRef,
+            m.memberKind === "web_user"
+              ? nameMap.get(m.memberRef) ?? m.memberRef
+              : m.memberKind === "master"
+                ? masterNameMap.get(m.memberRef) ?? m.memberRef
+                : m.memberRef,
         })),
       };
     }),

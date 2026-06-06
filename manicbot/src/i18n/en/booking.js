@@ -12,6 +12,17 @@ export default {
   reg_done: '✅ <b>Registration complete!</b>\n\n👤 Name: <b>{n}</b>\n📱 Phone: <b>{p}</b>',
   now_choose: '💅 Now choose a service:',
 
+  // Email capture (chat → marketing)
+  email_ask: '✉️ <b>Want to become a regular?</b>\n\nLeave your email and be the first to get discounts, offers and salon news. Unsubscribe anytime.',
+  email_ask_btn: '✉️ Leave email',
+  email_decline_btn: 'Not now',
+  email_ask_prompt: '✍️ Send me your email in one message:',
+  email_invalid: '❌ That doesn’t look like an email. Try again or tap “Not now”.',
+  email_thanks: '🎉 <b>Thank you!</b>\n\nWe’ll only send the good stuff — discounts and news. Unsubscribe anytime from the menu.',
+  email_declined: '👌 No problem! You can always leave your email later.',
+  email_optout_btn: '🔕 Unsubscribe from emails',
+  email_optout_done: '✅ Done. We won’t email you anymore. Changed your mind? Just leave your email again.',
+
   choose_svc: '💅 <b>Choose a service:</b>',
   choose_date: '📅 Choose a date:',
   no_slots: '😔 No available slots on <b>{d}</b>.\n\n📅 Choose another date:',

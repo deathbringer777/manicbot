@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
-  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, FolderOpen, Users,
+  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, FolderOpen, Users, Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "~/trpc/react";
@@ -23,6 +23,7 @@ import { SalonStorefrontBody } from "~/components/salon/SalonStorefrontBody";
 import { SalonPublishBody } from "~/components/salon/SalonPublishBody";
 import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
 import { AutoSuggestFavoriteSettings } from "~/components/salon/AutoSuggestFavoriteSettings";
+import { PostVisitFollowupSettings } from "~/components/salon/PostVisitFollowupSettings";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 
 /**
@@ -98,7 +99,9 @@ export function MySalonSection() {
     );
   }
 
-  if (profile.isError) {
+  // Guard null/undefined explicitly (previously masked by an `as any` cast that
+  // let undefined flow into child components typed as non-optional SalonProfile).
+  if (profile.isError || !profile.data) {
     return (
       <div className="glass-card rounded-2xl p-6 text-center">
         <p className="text-red-400">{t("common.errorLoading", lang)}</p>
@@ -106,9 +109,9 @@ export function MySalonSection() {
     );
   }
 
-  const data = profile.data as any;
+  const data = profile.data;
   const isPublic = !!data?.publicActive;
-  const slug = data?.slug as string | null;
+  const slug = data?.slug ?? null;
 
   return (
     <div className="space-y-3">
@@ -268,6 +271,15 @@ export function MySalonSection() {
               defaultOpen
             >
               <AutoSuggestFavoriteSettings tenantId={effectiveTenantId} bare />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={Sparkles}
+              iconClass="text-violet-400"
+              title={t("salon.postVisitFollowup.title", lang)}
+              desc={t("salon.postVisitFollowup.desc", lang)}
+            >
+              <PostVisitFollowupSettings tenantId={effectiveTenantId} bare />
             </CollapsibleSection>
           </>
         )}

@@ -10,6 +10,7 @@ import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { env } from "~/env";
 import { appointments, bots, googleBusyBlocks, googleIntegrations, masters } from "~/server/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { assertAdminAppReturnUrl } from "~/server/security/returnUrl";
 
 export const googleCalendarRouter = createTRPCRouter({
   /**
@@ -141,6 +142,7 @@ export const googleCalendarRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      assertAdminAppReturnUrl(input.returnUrl);
       await assertTenantOwner(ctx, input.tenantId);
       const workerUrl = (env.WORKER_PUBLIC_URL ?? "").replace(/\/$/, "");
       const adminKey = env.ADMIN_KEY ?? "";

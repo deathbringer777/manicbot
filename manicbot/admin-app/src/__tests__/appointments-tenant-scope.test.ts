@@ -57,6 +57,7 @@ const BOOTSTRAP_SQL = `CREATE TABLE appointments (
   visit_confirmed_at INTEGER,
   visit_confirmed_by TEXT,
   review_requested_at INTEGER,
+  followup_24h_sent_at INTEGER,
   created_at INTEGER NOT NULL
 )`;
 

@@ -276,10 +276,10 @@ export const HELP_ARTICLES: HelpArticle[] = [
       pl: "Status subskrypcji i limity.",
     },
     bodies: {
-      ru: "Вкладка «Биллинг» в кабинете салона показывает текущий план и статус (trial, active, grace, expired). Оплата проходит через Stripe. При проблемах с картой включается короткий grace-период; после него ограничиваются функции для персонала, клиенты по-прежнему могут записываться.",
-      ua: "У «Білінгу» видно план і статус. Оплата через Stripe. Grace-період при збої картки.",
-      en: "The Billing tab shows your plan and status (trialing, active, grace, expired). Payments use Stripe. On card failure a short grace period applies; then staff features may be limited while clients can still book.",
-      pl: "Zakładka rozliczeń pokazuje plan i status. Płatności Stripe. Po błędzie karty jest krótki grace, potem mogą zostać ograniczone funkcje personelu.",
+      ru: "Вкладка «Биллинг» показывает план, статус (trial, active, grace, expired) и дату продления; для ручных грантов — «Бесплатный доступ до …». Оплата через Stripe; там же история платежей и карта. При сбое карты включается grace (бот ещё принимает записи), за сутки до отключения — предупреждение; если не оплатить, доступ ограничивается (панель и бот приостанавливаются).",
+      ua: "У «Білінгу» видно план, статус і дату продовження. Оплата через Stripe. Grace при збої картки, далі попередження і обмеження доступу, якщо не оплатити.",
+      en: "The Billing tab shows your plan, status (trialing, active, grace, expired) and renewal date; manual grants show \"Free access until …\". Payments, invoices and card live in Stripe. A card failure starts a grace window (the bot still books), a warning lands 24h before cut-off, and unpaid accounts get restricted (dashboard and bot pause).",
+      pl: "Zakładka rozliczeń pokazuje plan, status i datę odnowienia. Płatności Stripe. Błąd karty uruchamia grace, dobę przed odcięciem ostrzeżenie, a brak płatności ogranicza dostęp (panel i bot wstrzymane).",
     },
   },
   {
@@ -574,10 +574,10 @@ export const HELP_ARTICLES: HelpArticle[] = [
       pl: "Co jest wyłączane przy błędzie płatności.",
     },
     bodies: {
-      ru: "При ошибке карты Stripe включается короткий grace: персонал ещё может работать в кабинете. После grace часть функций (ИИ, календарь Google, расширенные панели) может быть ограничена — клиентская запись обычно остаётся. Обновите способ оплаты во вкладке «Биллинг» как можно раньше.",
-      ua: "Після збою картки є короткий grace, далі можуть обмежити функції для персоналу, а запис клієнтів часто лишається.",
-      en: "After a failed charge you get a short grace window. Later, staff-only features like AI or Google sync may pause while clients can often still book. Update your card in Billing promptly.",
-      pl: "Po błędzie płatności jest krótki grace, potem mogą paść funkcje personelu, a klienci często dalej mogą rezerwować. Zaktualizuj kartę w rozliczeniach.",
+      ru: "При ошибке карты включается grace-период (~7 дней): бот продолжает принимать записи, но часть функций для персонала (ИИ, Google-календарь, расширенные панели) ограничивается. За сутки до отключения приходит предупреждение в центр уведомлений. Если оплата так и не пройдёт, доступ ограничивается: панель и бот приостанавливаются — клиенты не смогут записаться, пока вы не продлите подписку. Обновите карту во вкладке «Биллинг» заранее.",
+      ua: "Після збою картки вмикається grace (~7 днів): бот ще приймає записи, але частину функцій для персоналу (ШІ, Google-календар, розширені панелі) обмежено. За добу до відключення приходить попередження в центр сповіщень. Якщо оплату не отримано, доступ обмежується: панель і бот призупиняються — клієнти не зможуть записатися, доки ви не продовжите підписку.",
+      en: "A failed charge starts a grace period (~7 days): the bot keeps taking bookings, but staff features (AI, Google Calendar, advanced panels) are limited. 24 hours before cut-off you get a warning in the notification center. If payment still fails, access is restricted: the dashboard and bot pause — clients can't book until you renew. Update your card in Billing early.",
+      pl: "Błąd karty uruchamia grace (~7 dni): bot nadal przyjmuje rezerwacje, ale funkcje personelu (AI, Google Calendar, zaawansowane panele) są ograniczone. Na dobę przed odcięciem dostajesz ostrzeżenie w centrum powiadomień. Jeśli płatność dalej się nie powiedzie, dostęp jest ograniczony: panel i bot wstrzymane — klienci nie mogą rezerwować, dopóki nie odnowisz.",
     },
   },
   {

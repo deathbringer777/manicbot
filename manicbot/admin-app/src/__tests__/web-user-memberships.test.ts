@@ -102,3 +102,55 @@ describe("pickActiveMembership", () => {
     });
   });
 });
+
+describe("mergeMemberships — owned secondary salons (multi-salon)", () => {
+  const home = { tenantId: "t_home", role: "tenant_owner", tenantName: "Мой салон", isPersonal: false };
+  const owned = (id: string, name: string) => ({ tenantId: id, role: "tenant_owner", tenantName: name, isPersonal: false });
+
+  it("appends owned salons after home, flagged isHome:false with the owner role", () => {
+    const out = mergeMemberships(home, [], [owned("t_two", "Second")]);
+    expect(out.map((m) => m.tenantId)).toEqual(["t_home", "t_two"]);
+    const two = out.find((m) => m.tenantId === "t_two")!;
+    expect(two.role).toBe("tenant_owner");
+    expect(two.isHome).toBe(false);
+  });
+
+  it("dedupes an owned salon that equals home (home wins, stays first)", () => {
+    const out = mergeMemberships(home, [], [owned("t_home", "Мой салон")]);
+    expect(out.map((m) => m.tenantId)).toEqual(["t_home"]);
+    expect(out[0]!.isHome).toBe(true);
+  });
+
+  it("merges home + master + owned, deduping by tenant (first occurrence wins)", () => {
+    const out = mergeMemberships(
+      home,
+      [{ tenantId: "t_master", role: "master", tenantName: "Where I work", isPersonal: false }],
+      [owned("t_owned", "My second salon"), owned("t_master", "dupe")],
+    );
+    expect(out.map((m) => m.tenantId)).toEqual(["t_home", "t_master", "t_owned"]);
+    // t_master keeps its master role (added before the owned dupe).
+    expect(out.find((m) => m.tenantId === "t_master")!.role).toBe("master");
+  });
+
+  it("supports an owner-only-of-secondaries user with no home tenant", () => {
+    const out = mergeMemberships(null, [], [owned("t_two", "Second")]);
+    expect(out).toEqual([
+      { tenantId: "t_two", role: "tenant_owner", tenantName: "Second", isPersonal: false, isHome: false },
+    ]);
+  });
+
+  it("is backward-compatible when ownedRows is omitted", () => {
+    expect(mergeMemberships(home, [])).toEqual([{ ...home, isHome: true }]);
+  });
+});
+
+describe("pickActiveMembership — active OWNED secondary salon", () => {
+  const base = { homeTenantId: "t_home", homeRole: "tenant_owner" };
+  it("resolves tenant_owner for an active owned secondary salon", () => {
+    expect(pickActiveMembership({ ...base, activeTenantId: "t_two", activeMasterRole: "tenant_owner" })).toEqual({
+      tenantId: "t_two",
+      role: "tenant_owner",
+      needsHeal: false,
+    });
+  });
+});

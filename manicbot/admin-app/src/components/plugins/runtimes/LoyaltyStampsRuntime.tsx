@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Star, Save, Gift } from "lucide-react";
+import { Star, Save, Gift, Search } from "lucide-react";
 import { api } from "~/trpc/react";
 import { PluginRuntimeShell } from "~/components/plugins/PluginRuntimeShell";
 import { useRole } from "~/components/RoleContext";
@@ -144,8 +144,17 @@ export default function LoyaltyStampsRuntime({ installationId, slug }: PluginRun
     },
   );
 
+  const [clientQuery, setClientQuery] = useState("");
+  const cq = clientQuery.trim().toLowerCase();
+  // Default view hides zero-visit clients (salons accumulate many test / blank
+  // contacts that bury the real ones) — the search box surfaces anyone on demand.
+  const filteredRows = rows.filter(({ row, visits }) => {
+    const name = `${row.name ?? ""} ${row.phone ?? ""} ${row.tgUsername ?? ""}`.toLowerCase();
+    return cq ? name.includes(cq) : visits > 0;
+  });
+
   return (
-    <PluginRuntimeShell slug={slug} flash={flash}>
+    <PluginRuntimeShell slug={slug} flash={flash} width="wide">
       <div className="space-y-4">
         {/* ── Settings ── */}
         <section className="rounded-2xl bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800">
@@ -213,23 +222,42 @@ export default function LoyaltyStampsRuntime({ installationId, slug }: PluginRun
 
         {/* ── Client list ── */}
         <section className="rounded-2xl bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-3">
             <Gift className="w-4 h-4 text-yellow-500 shrink-0" />
-            Клиенты по штампам (топ-50)
-          </h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex-1">
+              Клиенты по штампам
+            </h3>
+            <span className="text-[10px] text-slate-400 tabular-nums shrink-0" data-testid="loyalty-client-count">
+              {filteredRows.length}
+            </span>
+          </div>
+
+          <div className="relative mb-3">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={clientQuery}
+              onChange={(e) => setClientQuery(e.target.value)}
+              placeholder="Поиск клиента"
+              data-testid="loyalty-client-search"
+              className="w-full pl-7 pr-2 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+            />
+          </div>
 
           {clientsQ.isLoading && (
             <p className="text-sm text-slate-500" data-testid="loyalty-loading">Загружаем…</p>
           )}
 
-          {!clientsQ.isLoading && rows.length === 0 && (
+          {!clientsQ.isLoading && filteredRows.length === 0 && (
             <p className="text-sm text-slate-500" data-testid="loyalty-empty">
-              Пока нет клиентов с визитами. Карта начнёт заполняться, как только клиенты придут на услуги.
+              {cq
+                ? "Никого не нашли по запросу."
+                : "Пока нет клиентов с визитами. Карта начнёт заполняться, как только клиенты придут на услуги."}
             </p>
           )}
 
-          <div className="space-y-1.5" data-testid="loyalty-client-list">
-            {rows.map(({ row, visits, cycles, current }) => {
+          <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1" data-testid="loyalty-client-list">
+            {filteredRows.map(({ row, visits, cycles, current }) => {
               const tags = row.tags
                 ? row.tags.split(",").map((t: string) => t.trim()).filter(Boolean).slice(0, 3)
                 : [];

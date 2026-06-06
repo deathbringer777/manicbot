@@ -309,6 +309,7 @@ jobs:
           BOT_ENCRYPTION_KEY: ci-placeholder-not-used-at-runtime
           UPLOAD_TOKEN_SECRET: ci-placeholder-not-used-at-runtime
           WS_TOKEN_SECRET: ci-placeholder-not-used-at-runtime
+          ADMIN_KEY: ci-placeholder-not-used-at-runtime
 
       # Cloudflare's pages-deploy API rejected our last squash-merge with
       # "Invalid commit message, it must be a valid UTF-8 string

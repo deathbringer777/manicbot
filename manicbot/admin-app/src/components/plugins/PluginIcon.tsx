@@ -14,7 +14,7 @@ import {
   Wallet, UserRound, UserCog, ArrowLeftRight, Timer, Receipt,
   Activity, Compass, BookOpen, Tag, KeySquare, ShoppingBag, Link2,
   Sun, Moon, Brain, Megaphone, Trophy, Share2, Coffee, Hash,
-  TrendingUp, AlertTriangle, Lock, CheckCircle2, type LucideIcon,
+  TrendingUp, AlertTriangle, Lock, CheckCircle2, Boxes, MessageCircleHeart, type LucideIcon,
 } from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -26,7 +26,7 @@ const ICONS: Record<string, LucideIcon> = {
   Wallet, UserRound, UserCog, ArrowLeftRight, Timer, Receipt,
   Activity, Compass, BookOpen, Tag, KeySquare, ShoppingBag, Link2,
   Sun, Moon, Brain, Megaphone, Trophy, Share2, Coffee, Hash,
-  TrendingUp, AlertTriangle, Lock, CheckCircle2,
+  TrendingUp, AlertTriangle, Lock, CheckCircle2, Boxes, MessageCircleHeart,
 };
 
 export function PluginIcon({

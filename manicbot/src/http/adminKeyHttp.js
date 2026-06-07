@@ -1710,9 +1710,14 @@ export async function tryAdminKeyRoutes(request, env, url) {
     }
   }
 
-  // Read-only status dashboard. Returns counts by status + recent rows.
+  // Full tenant directory (id, name, salon, billing email, plan, billing status)
+  // for the ThinkPad nightly sync. The response is customer PII, so it is gated
+  // by the master ADMIN_KEY only — NOT the low-priv NOTIFY_TOKEN, which is sprayed
+  // to cloud routines and the ThinkPad and must stay notify-only (see the
+  // isNotifyAuthValid docstring above). Every successful pull is audit-logged so a
+  // bulk export can never happen silently.
   if (request.method === 'GET' && url.pathname === '/admin/tenants-export') {
-    if (!isNotifyAuthValid(env, request)) return forbidden();
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return new Response('DB not bound', { status: 500 });
     try {
       const { dbAll } = await import('../utils/db.js');
@@ -1723,6 +1728,10 @@ export async function tryAdminKeyRoutes(request, env, url) {
          FROM tenants
          ORDER BY created_at DESC`,
       );
+      void audit(ec, 'admin.tenants_export', {
+        detail: { count: rows.length },
+        ip: request.headers.get('cf-connecting-ip') || undefined,
+      });
       return Response.json(rows.map(r => ({
         id: r.id,
         name: r.name ?? '',

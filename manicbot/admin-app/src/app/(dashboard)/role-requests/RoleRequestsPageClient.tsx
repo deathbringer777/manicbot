@@ -77,15 +77,15 @@ export default function RoleRequestsPageClient() {
   const [adminNote, setAdminNote] = useState("");
 
   const utils = api.useUtils();
-  const { data: requests, isLoading } = (api as any).roleChangeRequests.listRequests.useQuery({ status: filter });
-  const { data: pendingCount } = (api as any).roleChangeRequests.pendingCount.useQuery();
+  const { data: requests, isLoading } = api.roleChangeRequests.listRequests.useQuery({ status: filter });
+  const { data: pendingCount } = api.roleChangeRequests.pendingCount.useQuery();
 
-  const reviewMut = (api as any).roleChangeRequests.reviewRequest.useMutation({
+  const reviewMut = api.roleChangeRequests.reviewRequest.useMutation({
     onSuccess: () => {
       setReviewingId(null);
       setAdminNote("");
-      (utils as any).roleChangeRequests.listRequests.invalidate();
-      (utils as any).roleChangeRequests.pendingCount.invalidate();
+      utils.roleChangeRequests.listRequests.invalidate();
+      utils.roleChangeRequests.pendingCount.invalidate();
     },
   }) as { mutate: (args: { requestId: string; decision: string; adminNote?: string }) => void; isPending: boolean };
 

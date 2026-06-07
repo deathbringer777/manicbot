@@ -167,7 +167,7 @@ export default function SystemEventsClient() {
               {(listQuery.data?.rows ?? []).map((row) => (
                 <tr key={row.id} className="border-t border-slate-100 align-top hover:bg-slate-50/50 dark:border-slate-800 dark:hover:bg-slate-950/50">
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500">
-                    {new Date(row.createdAt * 1000).toLocaleString()}
+                    {new Date(row.createdAt * 1000).toLocaleString("ru-RU")}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-900 dark:text-slate-100">{row.event}</td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-500">{row.tenantId ?? "—"}</td>

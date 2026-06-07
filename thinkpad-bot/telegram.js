@@ -107,6 +107,8 @@ const MENU_COMMANDS = [
   { command: "status", description: "📊 Система: CPU, память, диск, PM2" },
   { command: "ps", description: "🔄 Процессы PM2" },
   { command: "screenshot", description: "📸 Скриншот экрана" },
+  { command: "play", description: "🎵 Музыка / радио" },
+  { command: "np", description: "🎶 Что сейчас играет" },
   { command: "cron", description: "🕐 Запланированные задачи" },
   { command: "disk", description: "💾 Диски" },
   { command: "leads", description: "📋 Прогресс по лидам" },

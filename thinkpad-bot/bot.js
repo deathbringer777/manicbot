@@ -5,6 +5,7 @@ const tools = require("./tools.js");
 const { COMMANDS } = require("./commands.js");
 const cmdRegistry = require("./commands/index.js");
 const callbacks = require("./callbacks.js");
+const intents = require("./intents.js");
 
 let offset = 0;
 let pollRunning = true;
@@ -104,6 +105,18 @@ async function poll() {
 
         const handled = await routeCommand(chatId, cmd, arg);
         if (handled) continue;
+
+        // Fast intent shortcuts (screenshot, music, volume) — instant, 0 tokens,
+        // and they keep working when Groq is rate-limited.
+        try {
+          const intentOut = await intents.tryIntent(text);
+          if (intentOut) {
+            await tg.sendReply(chatId, intentOut);
+            continue;
+          }
+        } catch (e) {
+          console.error("[intent error]", e.message);
+        }
 
         // Free text → LLM
         const stopTyping = tg.keepTyping(chatId);

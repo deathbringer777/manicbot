@@ -31,11 +31,15 @@ if (!key) {
   process.exit(1);
 }
 
-const url = `${baseUrl}/admin/migrate?key=${encodeURIComponent(key)}`;
+const url = `${baseUrl}/admin/migrate`;
 
 (async () => {
   try {
-    const res = await fetch(url);
+    // Send the key in the Authorization header, never the URL. A ?key= query
+    // param leaks the secret into shell history, CF request logs, and Referer —
+    // and the Worker only reads the Bearer header anyway (the ?key= fallback was
+    // removed), so the old query-param form was both insecure and non-functional.
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
     const text = await res.text();
     if (!res.ok) {
       console.error('Migration failed:', res.status, text);

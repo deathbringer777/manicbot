@@ -6,6 +6,7 @@ node_modules/
 .DS_Store
 .cursor/
 .idea/
+.vscode/
 
 # Root-level generated/temp files
 make_logo.py

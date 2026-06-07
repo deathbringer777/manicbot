@@ -9,6 +9,7 @@ const screenshot = require("./tools/screenshot.js");
 const windowManager = require("./tools/window.js");
 const clipboard = require("./tools/clipboard.js");
 const llm = require("./llm.js");
+const kb = require("./keyboards.js");
 const { sh } = require("./tools/helpers.js");
 
 const { esc, b, code, kv, bar, block } = render;
@@ -37,7 +38,10 @@ async function renderStatus() {
     lines.push("", `🔄 <b>PM2</b> (${online}/${list.length} online)`);
     lines.push(block(list.map(pm2Line).join("\n"), { maxLines: 14 }));
   }
-  return { text: lines.join("\n") };
+  return {
+    text: lines.join("\n"),
+    keyboard: kb.screenKb("status", [[["🔄 Процессы", "nav:ps"], ["💾 Диск", "nav:disk"]]]),
+  };
 }
 
 // ── /ps ───────────────────────────────────────────────────────────────────────
@@ -47,6 +51,7 @@ async function renderPs() {
   const online = list.filter((p) => p.pm2_env.status === "online").length;
   return {
     text: `🔄 <b>PM2</b> (${online}/${list.length} online)\n${block(list.map(pm2Line).join("\n"), { maxLines: 20 })}`,
+    keyboard: kb.procRows(list),
   };
 }
 
@@ -54,12 +59,12 @@ async function renderPs() {
 async function renderDisk() {
   const raw = await sh("LANG=C df -h 2>/dev/null");
   const rows = raw.split("\n").filter((l) => /^\s*\/dev\/(sd|nvme|vd|mmcblk)/.test(l));
-  if (!rows.length) return { text: block(raw, { title: "💾 Диски" }) };
+  if (!rows.length) return { text: block(raw, { title: "💾 Диски" }), keyboard: kb.screenKb("disk") };
   const table = rows.map((l) => {
     const p = l.trim().split(/\s+/);
     return `${p[5]}\n  ${p[2]} / ${p[1]}  занято ${p[4]}  свободно ${p[3]}`;
   });
-  return { text: `💾 <b>Диски</b>\n${block(table.join("\n"), { maxLines: 24 })}` };
+  return { text: `💾 <b>Диски</b>\n${block(table.join("\n"), { maxLines: 24 })}`, keyboard: kb.screenKb("disk") };
 }
 
 // ── /cron (merges old /crons + /crontab) ──────────────────────────────────────
@@ -94,7 +99,7 @@ async function renderCron() {
       lines.push(`• <b>${esc(name)}</b> — ${esc(humanizeCron(c.schedule))}\n  ${code(c.command)}`);
     }
   }
-  return { text: lines.join("\n") };
+  return { text: lines.join("\n"), keyboard: kb.screenKb("cron") };
 }
 
 // ── /leads ────────────────────────────────────────────────────────────────────
@@ -164,7 +169,7 @@ function renderGroq() {
   lines.push(kv("вызовов", session.calls));
   lines.push(kv("токенов", session.totalTokens.toLocaleString()));
   if (session.calls) lines.push(kv("в среднем", Math.round(session.totalTokens / session.calls)));
-  return { text: lines.join("\n") };
+  return { text: lines.join("\n"), keyboard: kb.screenKb("groq") };
 }
 
 // ── /screenshot ───────────────────────────────────────────────────────────────
@@ -234,8 +239,9 @@ function renderStart() {
       `👋 <b>ThinkPad ops-бот на связи.</b>`,
       "",
       `Я управляю компьютером: скриншоты, музыка, процессы, файлы, shell.`,
-      `Скажи словами — <i>«сделай скриншот»</i>, <i>«включи lofi»</i>, <i>«что с диском»</i> — или жми /help.`,
+      `Скажи словами — <i>«сделай скриншот»</i>, <i>«включи lofi»</i>, <i>«что с диском»</i> — или жми кнопки.`,
     ].join("\n"),
+    keyboard: kb.mainMenu(),
   };
 }
 

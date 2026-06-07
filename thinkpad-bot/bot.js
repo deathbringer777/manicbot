@@ -4,6 +4,7 @@ const llm = require("./llm.js");
 const tools = require("./tools.js");
 const { COMMANDS } = require("./commands.js");
 const cmdRegistry = require("./commands/index.js");
+const callbacks = require("./callbacks.js");
 
 let offset = 0;
 let pollRunning = true;
@@ -83,6 +84,14 @@ async function poll() {
 
       for (const update of result) {
         offset = update.update_id + 1;
+
+        // Inline-keyboard taps.
+        if (update.callback_query) {
+          const cq = update.callback_query;
+          if (tg.isAllowedUser(cq.from?.id)) await callbacks.handle(cq);
+          continue;
+        }
+
         const msg = update.message;
         if (!msg?.text) continue;
         if (!tg.isAllowedUser(msg.from.id)) continue;

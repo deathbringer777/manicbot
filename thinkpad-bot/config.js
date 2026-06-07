@@ -15,6 +15,8 @@ const config = {
   TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN,
   GROQ_KEY: process.env.GROQ_KEY,
   GROQ_MODEL: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+  GROQ_FAST_MODEL: process.env.GROQ_FAST_MODEL || "llama-3.1-8b-instant",
+  WHISPER_MODEL: process.env.WHISPER_MODEL || "whisper-large-v3-turbo",
   ALLOWED_USER_ID,
   CHAT_ID: (() => {
     const raw = process.env.CHAT_ID || process.env.ALLOWED_USER_ID;

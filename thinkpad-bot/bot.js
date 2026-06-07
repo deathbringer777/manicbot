@@ -6,6 +6,8 @@ const { COMMANDS } = require("./commands.js");
 const cmdRegistry = require("./commands/index.js");
 const callbacks = require("./callbacks.js");
 const intents = require("./intents.js");
+const stt = require("./stt.js");
+const render = require("./render.js");
 
 let offset = 0;
 let pollRunning = true;
@@ -63,6 +65,53 @@ async function routeCommand(chatId, cmd, arg) {
   return true;
 }
 
+// Shared text pipeline: slash command → fast intent → LLM. Used by both typed
+// messages and transcribed voice notes.
+async function handleText(chatId, text) {
+  const [cmdRaw, ...argParts] = text.split(/\s+/);
+  const cmd = cmdRaw.toLowerCase().split("@")[0];
+  const arg = argParts.join(" ");
+
+  if (await routeCommand(chatId, cmd, arg)) return;
+
+  // Fast intents (screenshot, music, volume): instant, 0 tokens, survive rate limits.
+  try {
+    const intentOut = await intents.tryIntent(text);
+    if (intentOut) { await tg.sendReply(chatId, intentOut); return; }
+  } catch (e) {
+    console.error("[intent error]", e.message);
+  }
+
+  // Free text → LLM (fire-and-forget so a long tool loop doesn't block polling).
+  const stopTyping = tg.keepTyping(chatId);
+  llm.ask(chatId, text)
+    .then((reply) => { stopTyping(); return tg.sendLongMessage(chatId, reply); })
+    .catch(async (e) => {
+      stopTyping();
+      console.error("[llm error]", e.message);
+      await tg.sendMessage(chatId, `❌ Ошибка: ${e.message}`);
+    });
+}
+
+// Voice / audio note → Whisper transcript → text pipeline.
+async function handleVoice(chatId, media) {
+  const stopTyping = tg.keepTyping(chatId);
+  try {
+    const r = await stt.transcribe(media.file_id);
+    stopTyping();
+    if (!r.ok || !r.text) {
+      await tg.sendMessage(chatId, `🎤 Не разобрал голос: ${r.error || "пусто"}`);
+      return;
+    }
+    await tg.sendReply(chatId, { text: `🎤 <i>${render.esc(r.text)}</i>` });
+    await handleText(chatId, r.text.trim());
+  } catch (e) {
+    stopTyping();
+    console.error("[voice error]", e.message);
+    await tg.sendMessage(chatId, `❌ Голос: ${e.message}`);
+  }
+}
+
 // ── Poll loop ─────────────────────────────────────────────────────────────────
 async function poll() {
   cmdRegistry.loadBuiltin();
@@ -94,42 +143,18 @@ async function poll() {
         }
 
         const msg = update.message;
-        if (!msg?.text) continue;
-        if (!tg.isAllowedUser(msg.from.id)) continue;
-
+        if (!msg) continue;
+        if (!tg.isAllowedUser(msg.from?.id)) continue;
         const chatId = msg.chat.id;
-        const text = msg.text.trim();
-        const [cmdRaw, ...argParts] = text.split(/\s+/);
-        const cmd = cmdRaw.toLowerCase().split("@")[0];
-        const arg = argParts.join(" ");
 
-        const handled = await routeCommand(chatId, cmd, arg);
-        if (handled) continue;
-
-        // Fast intent shortcuts (screenshot, music, volume) — instant, 0 tokens,
-        // and they keep working when Groq is rate-limited.
-        try {
-          const intentOut = await intents.tryIntent(text);
-          if (intentOut) {
-            await tg.sendReply(chatId, intentOut);
-            continue;
-          }
-        } catch (e) {
-          console.error("[intent error]", e.message);
+        // Voice / audio note → Whisper → same pipeline as typed text.
+        if (msg.voice || msg.audio) {
+          await handleVoice(chatId, msg.voice || msg.audio);
+          continue;
         }
 
-        // Free text → LLM
-        const stopTyping = tg.keepTyping(chatId);
-        llm.ask(chatId, text)
-          .then(reply => {
-            stopTyping();
-            return tg.sendLongMessage(chatId, reply);
-          })
-          .catch(async e => {
-            stopTyping();
-            console.error("[llm error]", e.message);
-            await tg.sendMessage(chatId, `❌ Ошибка: ${e.message}`);
-          });
+        if (!msg.text) continue;
+        await handleText(chatId, msg.text.trim());
       }
     } catch (e) {
       console.error("[poll error]", e.message);

@@ -1,0 +1,9 @@
+# Copy this file to `.deploy.local` (gitignored) and fill in real values.
+# Keeping the host/path here — out of deploy.sh — keeps infra details off the
+# public repo while letting deploy.sh stay committed.
+
+# SSH target for the ThinkPad (user@host; a Tailscale IP works well).
+DEPLOY_HOST=user@your-server-host
+
+# Absolute-from-home path to the bot on the server (no trailing slash).
+DEPLOY_PATH=automation/tg-bot

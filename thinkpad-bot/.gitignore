@@ -1,0 +1,19 @@
+# Secrets — NEVER commit (this is a PUBLIC repo)
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Runtime state & generated data (recreated by the bot at runtime)
+crons.json
+todo.json
+context/crons.md
+context/machine.md
+test/tmp/
+*.log
+logs/
+
+# Deploy target (host / path) — local only, keeps infra details off the public repo
+.deploy.local

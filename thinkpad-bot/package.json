@@ -1,0 +1,18 @@
+{
+  "name": "tg-bot",
+  "version": "5.0.0",
+  "private": true,
+  "description": "ThinkPad ops-bot — Telegram AI assistant with computer control",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js",
+    "test": "node --test --test-concurrency=1 test/**/*.test.js",
+    "test:watch": "node --test --watch test/**/*.test.js",
+    "test:coverage": "node --experimental-test-coverage --test test/**/*.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {}
+}

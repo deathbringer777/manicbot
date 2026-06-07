@@ -62,3 +62,19 @@ docs/pre-launch-blockers-report.md
 /.claude/scheduled_tasks.lock
 /CLAUDE_CODE_MULTI_AGENT_AUDIT_PROMPT.md
 /PROJECT_OVERVIEW_RU.md
+
+# 2026-06-06 — ThinkPad automation scripts (local source of truth, deployed via rsync).
+# Contains cron scripts, agents, and .env.example — never committed.
+_automation/
+
+# 2026-06-07 — ThinkPad remote-ops scripts that get dropped in the repo ROOT
+# (LOCAL-ONLY, never commit — the public repo would leak them).
+#   bot_remote.js       — Telegram→shell ops bot; hardcoded TELEGRAM_TOKEN + GROQ_KEY
+#   ecosystem_remote.js — PM2 config snapshot for the ThinkPad
+#   machine_remote.md   — host/data layout notes
+#   run_all_crons.sh    — PM2 restart helper
+# Canonical source of truth lives in _automation/. Secrets belong in env, not in code.
+/bot_remote.js
+/ecosystem_remote.js
+/machine_remote.md
+/run_all_crons.sh

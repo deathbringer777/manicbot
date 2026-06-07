@@ -29,14 +29,23 @@ const config = {
   BOT_DIR: __dirname,
   CONTEXT_DIR: __dirname + "/context",
   CRONS_FILE: __dirname + "/crons.json",
-  ENV: {
-    ...process.env,
-    DISPLAY: ":0",
-    DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS || "unix:path=/run/user/1000/bus",
-    HOME: process.env.HOME || "/home/kirill",
-    XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR || "/run/user/1000",
-    WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY || "wayland-0",
-  },
+  // Graphical-session env injected into every child process so GUI tools
+  // (ydotool, wtype, gdbus, rhythmbox-client) reach the live Wayland session.
+  // Verified on the target box: GNOME 50 / Wayland, uid 1000, WAYLAND_DISPLAY=wayland-0.
+  ENV: (() => {
+    const xdgRuntime = process.env.XDG_RUNTIME_DIR || "/run/user/1000";
+    return {
+      ...process.env,
+      DISPLAY: process.env.DISPLAY || ":0",
+      DBUS_SESSION_BUS_ADDRESS:
+        process.env.DBUS_SESSION_BUS_ADDRESS || `unix:path=${xdgRuntime}/bus`,
+      HOME: process.env.HOME || "/home/kirill",
+      XDG_RUNTIME_DIR: xdgRuntime,
+      WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY || "wayland-0",
+      // ydotool talks to ydotoold over this socket; without it input silently no-ops.
+      YDOTOOL_SOCKET: process.env.YDOTOOL_SOCKET || `${xdgRuntime}/.ydotool_socket`,
+    };
+  })(),
 };
 
 module.exports = config;

@@ -1,62 +1,85 @@
 const { sh, timestamp, fs } = require("./helpers.js");
 
+// Screenshots go through the MbShot GNOME Shell extension (see
+// gnome-extension/). On GNOME Wayland no external tool can capture the screen
+// (grim lacks wlr-screencopy on Mutter, Shell.Screenshot D-Bus is AccessDenied,
+// the portal is interactive), so we call the extension's private session-bus
+// service, which uses the Shell's own screenshot API.
+const DEST = "org.local.MbShot";
+const OBJ = "/org/local/MbShot";
+
+function gdbusCall(method, args = "") {
+  return `gdbus call --session --dest ${DEST} --object-path ${OBJ} --method ${DEST}.${method}${args ? " " + args : ""}`;
+}
+
+function backendUnavailable(out) {
+  // sh() returns "Ошибка (exit N): ..." on non-zero exit; a missing service
+  // shows up as ServiceUnknown / "not provided by any .service".
+  return (
+    out.startsWith("Ошибка") ||
+    /ServiceUnknown|not provided by any|UnknownMethod|Error\b/i.test(out)
+  );
+}
+
+const BACKEND_HINT =
+  "📸 Скриншот-бэкенд ещё не активен.\n\n" +
+  "На GNOME Wayland для скриншотов нужен Shell-расширение mbshot. Оно установлено, " +
+  "но GNOME подхватывает новые расширения только после перезахода в сессию.\n\n" +
+  "➡️ Выйди и зайди в систему на ThinkPad (или перезагрузи его) — после этого скриншоты заработают.";
+
+async function isBackendReady() {
+  const out = await sh(gdbusCall("Ping"), 6000);
+  return out.includes("mbshot-ok");
+}
+
+function gdbusReturnedTrue(out) {
+  return /\(\s*true\b/.test(out);
+}
+
 async function captureFullScreen(outputPath) {
   const path = outputPath || `/tmp/screenshot_${timestamp()}.png`;
-  const out = await sh(`grim "${path}"`);
-  if (out.startsWith("Ошибка")) return { ok: false, error: out };
-  if (!fs.existsSync(path)) return { ok: false, error: "screenshot file not created" };
-  const size = fs.statSync(path).size;
-  return { ok: true, path, size };
+  const out = await sh(gdbusCall("Capture", `true "${path}"`), 25000);
+  if (!gdbusReturnedTrue(out)) {
+    if (backendUnavailable(out) && !(await isBackendReady())) {
+      return { ok: false, error: BACKEND_HINT };
+    }
+    return { ok: false, error: `Не удалось сделать скриншот: ${out}` };
+  }
+  if (!fs.existsSync(path)) return { ok: false, error: BACKEND_HINT };
+  return { ok: true, path, size: fs.statSync(path).size };
 }
 
 async function captureArea(x, y, width, height, outputPath) {
-  if (x != null && y != null && width != null && height != null) {
-    const path = outputPath || `/tmp/screenshot_${timestamp()}.png`;
-    const out = await sh(`grim -g "${x},${y} ${width}x${height}" "${path}"`);
-    if (out.startsWith("Ошибка")) return { ok: false, error: out };
-    if (!fs.existsSync(path)) return { ok: false, error: "screenshot file not created" };
-    const size = fs.statSync(path).size;
-    return { ok: true, path, size };
-  }
-  const path = outputPath || `/tmp/screenshot_${timestamp()}.png`;
-  const out = await sh(`grim -g "$(slurp)" "${path}"`);
-  if (out.startsWith("Ошибка")) return { ok: false, error: out };
-  if (!fs.existsSync(path)) return { ok: false, error: "screenshot file not created" };
-  const size = fs.statSync(path).size;
-  return { ok: true, path, size };
-}
-
-async function captureWindow(outputPath) {
-  const geo = await sh("xdotool getactivewindow getwindowgeometry --shell 2>/dev/null");
-  if (geo.startsWith("Ошибка")) {
+  if (x == null || y == null || width == null || height == null) {
+    // Interactive region picking (slurp) isn't available on GNOME Wayland —
+    // fall back to the full screen.
     return captureFullScreen(outputPath);
   }
-  const mX = geo.match(/X=(\d+)/);
-  const mY = geo.match(/Y=(\d+)/);
-  const mW = geo.match(/WIDTH=(\d+)/);
-  const mH = geo.match(/HEIGHT=(\d+)/);
-  if (mX && mY && mW && mH) {
-    return captureArea(
-      parseInt(mX[1]), parseInt(mY[1]),
-      parseInt(mW[1]), parseInt(mH[1]),
-      outputPath
-    );
+  const path = outputPath || `/tmp/screenshot_${timestamp()}.png`;
+  const out = await sh(
+    gdbusCall("CaptureArea", `${x} ${y} ${width} ${height} "${path}"`),
+    25000,
+  );
+  if (!gdbusReturnedTrue(out)) {
+    if (backendUnavailable(out) && !(await isBackendReady())) {
+      return { ok: false, error: BACKEND_HINT };
+    }
+    // Area capture may be unsupported on this Shell version — fall back to full.
+    return captureFullScreen(outputPath);
   }
+  if (!fs.existsSync(path)) return { ok: false, error: BACKEND_HINT };
+  return { ok: true, path, size: fs.statSync(path).size };
+}
+
+// Whole active window: GNOME Wayland gives no reliable per-window geometry to an
+// external process, so this is just the full screen.
+async function captureWindow(outputPath) {
   return captureFullScreen(outputPath);
 }
 
+// No external display-geometry query on GNOME Wayland; return a safe default.
 async function getScreenSize() {
-  const out = await sh("xdotool getdisplaygeometry 2>/dev/null");
-  if (!out.startsWith("Ошибка")) {
-    const m = out.match(/(\d+)\s+(\d+)/);
-    if (m) return { ok: true, width: parseInt(m[1]), height: parseInt(m[2]) };
-  }
-  const geo = await sh("xdpyinfo 2>/dev/null | grep dimensions || echo 'not found'");
-  if (!geo.includes("not found")) {
-    const m = geo.match(/(\d+)x(\d+)/);
-    if (m) return { ok: true, width: parseInt(m[1]), height: parseInt(m[2]) };
-  }
-  return { ok: true, width: 1920, height: 1080, note: "detected fallback" };
+  return { ok: true, width: 1920, height: 1080, note: "default (no Wayland geometry query)" };
 }
 
 module.exports = {
@@ -64,4 +87,6 @@ module.exports = {
   captureArea,
   captureWindow,
   getScreenSize,
+  isBackendReady,
+  BACKEND_HINT,
 };

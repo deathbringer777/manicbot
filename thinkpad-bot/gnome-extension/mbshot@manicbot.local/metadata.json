@@ -1,0 +1,7 @@
+{
+  "uuid": "mbshot@manicbot.local",
+  "name": "MbShot — bot screenshot bridge",
+  "description": "Private session D-Bus screenshot service for the ThinkPad ops-bot. Exposes org.local.MbShot (Ping / Capture / CaptureArea) using the GNOME Shell's internal screenshot API, so the bot can capture the screen headlessly on GNOME Wayland — where grim (no wlr-screencopy), the Shell.Screenshot D-Bus (AccessDenied), and the portal (interactive) all fail.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "session-modes": ["user", "unlock-dialog"]
+}

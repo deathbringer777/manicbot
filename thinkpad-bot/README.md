@@ -15,8 +15,10 @@ transcribes voice notes, and more.
   via `fetch`. Managed by **PM2** (`ecosystem.config.js`).
 - **Brain:** Groq Chat Completions (`llama-3.3-70b-versatile`) with a tool-calling
   loop (`llm.js` + `tools.js`).
-- **Computer control (Wayland-first):** `grim`/`slurp` (screenshot), `ydotool`
-  (mouse/keys, needs `ydotoold`), `wtype` (typing), `wl-clipboard` (clipboard).
+- **Computer control (GNOME Wayland):** `ydotool` (mouse/keys, needs `ydotoold`),
+  `wtype` (typing). Screenshots go through the bundled GNOME Shell extension
+  (`gnome-extension/`) — on Mutter no external screenshot tool works (grim lacks
+  wlr-screencopy, the Shell D-Bus is AccessDenied, the portal is interactive).
 - **Deps:** only `dotenv`. Tests run on the built-in `node --test`.
 
 ## Layout
@@ -47,10 +49,13 @@ deploy.sh           Backup → rsync → pm2 restart (reads .deploy.local)
 3. (Optional) create `context/machine.md` to give the LLM context about the box
    (hardware, directory layout, useful commands). Kept local — see Security.
 4. `pm2 start ecosystem.config.js` (or `pm2 restart tg-bot`).
+5. Screenshots (GNOME Wayland): run `gnome-extension/install.sh`, then log out and
+   back in once so GNOME loads the `mbshot` extension. Verify with the `Ping` call
+   the installer prints.
 
 For computer control to work, the bot process must inherit the graphical
-session env (`WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`)
-and `ydotoold` must be running with access to `/dev/uinput`.
+session env (`WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`,
+`YDOTOOL_SOCKET`) and `ydotoold` must be running with access to `/dev/uinput`.
 
 ## Deploy (from a dev machine)
 

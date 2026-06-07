@@ -72,7 +72,7 @@ function pct(num: number, denom: number): string {
 
 function fmtDate(ts: number | null | undefined): string {
   if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleString();
+  return new Date(ts * 1000).toLocaleString("ru-RU");
 }
 
 function statusBadge(status: string): { label: string; cls: string } {

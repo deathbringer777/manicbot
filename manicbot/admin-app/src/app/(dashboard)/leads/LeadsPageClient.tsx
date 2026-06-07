@@ -47,25 +47,25 @@ export default function LeadsPageClient() {
   const [filter, setFilter] = useState<StatusFilter>("new");
   const [deleteConfirm, setDeleteConfirm] = useState<{ active: boolean; leadId: number | null }>({ active: false, leadId: null });
   const utils = api.useUtils();
-  const listQ = (api as any).leads.list.useQuery({ status: filter, limit: 100, offset: 0 });
-  const countsQ = (api as any).leads.counts.useQuery();
+  const listQ = api.leads.list.useQuery({ status: filter, limit: 100, offset: 0 });
+  const countsQ = api.leads.counts.useQuery();
 
   const TABS = getTabs(lang);
 
-  const updateMut = (api as any).leads.updateStatus.useMutation({
+  const updateMut = api.leads.updateStatus.useMutation({
     onSuccess: () => {
-      (utils as any).leads.list.invalidate();
-      (utils as any).leads.counts.invalidate();
+      utils.leads.list.invalidate();
+      utils.leads.counts.invalidate();
     },
   });
-  const removeMut = (api as any).leads.remove.useMutation({
+  const removeMut = api.leads.remove.useMutation({
     onSuccess: () => {
-      (utils as any).leads.list.invalidate();
-      (utils as any).leads.counts.invalidate();
+      utils.leads.list.invalidate();
+      utils.leads.counts.invalidate();
     },
   });
 
-  const rows = ((listQ.data as any)?.items ?? []) as Array<{
+  const rows = (listQ.data?.items ?? []) as Array<{
     id: number;
     name: string;
     email: string;

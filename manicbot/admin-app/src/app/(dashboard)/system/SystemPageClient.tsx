@@ -9,7 +9,7 @@ import {
   CreditCard, Mail, Bot, MessageSquare, Send, Loader2,
 } from "lucide-react";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, localeFor } from "~/lib/i18n";
 
 type TestResendResult =
   | { ok: true; configured: true; sentTo: string }
@@ -345,7 +345,7 @@ export default function SystemPageClient() {
                     return (
                       <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02]">
                         <td className="px-4 py-2 text-slate-600 dark:text-slate-300 font-mono">
-                          {row.createdAt ? new Date(row.createdAt * 1000).toLocaleString() : "—"}
+                          {row.createdAt ? new Date(row.createdAt * 1000).toLocaleString(localeFor(lang)) : "—"}
                         </td>
                         <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{row.actor ?? "—"}</td>
                         <td className="px-4 py-2">

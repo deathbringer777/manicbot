@@ -1,11 +1,16 @@
 const { describe, it, before, after, mock } = require("node:test");
 const assert = require("node:assert");
-const path = require("node:path");
+const { setTestEnv, clearToolCache } = require("./helpers/mock.js");
 
+// Commands now return { text } (HTML) or { photo } objects, not raw strings.
 describe("commands.js", () => {
   let commands;
 
   before(() => {
+    // Env MUST be set before requiring modules that load config.js.
+    setTestEnv();
+    clearToolCache();
+
     const helpers = require("../tools/helpers.js");
     const mouse = require("../tools/mouse.js");
     const windowManager = require("../tools/window.js");
@@ -15,129 +20,103 @@ describe("commands.js", () => {
     mock.method(helpers, "sh", async (cmd) => {
       if (cmd.includes("pm2 jlist")) {
         return JSON.stringify([
-          { name: "tg-bot", pid: 1234, pm2_env: { status: "online", restart_time: 0 }, monit: { memory: 50000000, cpu: 2 } },
-          { name: "health-check", pid: 5678, pm2_env: { status: "online", restart_time: 1 }, monit: { memory: 30000000, cpu: 1 } },
+          { name: "tg-bot", pid: 1, pm2_env: { status: "online", restart_time: 0 }, monit: { memory: 50000000, cpu: 2 } },
+          { name: "health-check", pid: 2, pm2_env: { status: "stopped", restart_time: 1 }, monit: {} },
         ]);
       }
-      if (cmd.includes("LANG=C free -m")) {
-        return "Mem: 8192 2048 4096 0 2048 6144";
-      }
-      if (cmd.includes("LANG=C df -h /")) {
-        return "/dev/sda1 100G 30G 70G 30% /";
-      }
-      if (cmd.includes("/proc/loadavg")) {
-        return "0.5 0.3 0.2 1/500 1234";
-      }
-      if (cmd.includes("uptime -p")) {
-        return "up 2 hours";
-      }
-      if (cmd.includes("thermal_zone0")) {
-        return "55000";
-      }
-      if (cmd.includes("crontab -l")) {
-        return "0 */6 * * * /home/user/script.sh";
-      }
-      if (cmd.includes("LANG=C df -h")) {
-        return "/dev/sda1 100G 30G 70G 30% /";
-      }
+      if (cmd.includes("LANG=C free -m")) return "Mem: 8192 2048 4096 0 2048 6144";
+      if (cmd.includes("LANG=C df -h /")) return "/dev/sda1 100G 30G 70G 30% /";
+      if (cmd.includes("/proc/loadavg")) return "0.5 0.3 0.2 1/500 1234";
+      if (cmd.includes("uptime -p")) return "up 2 hours";
+      if (cmd.includes("thermal_zone0")) return "55000";
+      if (cmd.includes("crontab -l")) return "0 */6 * * * /home/user/script.sh";
+      if (cmd.includes("LANG=C df -h")) return "/dev/sda1 100G 30G 70G 30% /";
       return "(нет вывода)";
     });
-
     mock.method(mouse, "getMousePosition", async () => ({ ok: true, x: 800, y: 600 }));
-    mock.method(mouse, "mouseMoveAbsolute", async () => ({ ok: true }));
-    mock.method(mouse, "mouseClick", async () => ({ ok: true }));
-
     mock.method(windowManager, "listWindows", async () => ({
       ok: true,
-      windows: [
-        { id: "0x1234", desktop: "0", pid: "0", title: "Firefox" },
-        { id: "0x5678", desktop: "0", pid: "0", title: "Terminal" },
-      ],
+      windows: [{ id: "1", title: "Firefox" }, { id: "2", title: "Terminal" }],
     }));
-
     mock.method(screenshot, "captureFullScreen", async () => ({ ok: true, path: "/tmp/test.png", size: 50000 }));
+    mock.method(clipboard, "read", async () => ({ ok: true, text: "буфер" }));
 
-    mock.method(clipboard, "read", async () => ({ ok: true, text: "test clipboard" }));
-
-    process.env.TELEGRAM_TOKEN = "test:token";
-    process.env.GROQ_KEY = "test:key";
-    process.env.ALLOWED_USER_ID = "12345";
-    process.env.CHAT_ID = "12345";
-    process.env.GROQ_MODEL = "test-model";
-    delete require.cache[path.resolve(__dirname, "../config.js")];
-    delete require.cache[path.resolve(__dirname, "../commands.js")];
     commands = require("../commands.js");
   });
 
   after(() => mock.reset());
 
-  it("/status должен вернуть статус системы", async () => {
-    const result = await commands.COMMANDS["/status"]();
-    assert.ok(result.includes("Память"));
-    assert.ok(result.includes("PM2"));
-    assert.ok(result.includes("tg-bot"));
+  it("/status → {text} с памятью, PM2 и именем процесса", async () => {
+    const out = await commands.COMMANDS["/status"]();
+    assert.ok(out.text.includes("Память"));
+    assert.ok(out.text.includes("PM2"));
+    assert.ok(out.text.includes("tg-bot"));
   });
 
-  it("/ps должен вернуть список PM2 процессов", async () => {
-    const result = await commands.COMMANDS["/ps"]();
-    assert.ok(result.includes("tg-bot"));
-    assert.ok(result.includes("health-check"));
+  it("/ps → {text} со списком процессов", async () => {
+    const out = await commands.COMMANDS["/ps"]();
+    assert.ok(out.text.includes("tg-bot"));
+    assert.ok(out.text.includes("health-check"));
   });
 
-  it("/help должен вернуть список команд", async () => {
-    const result = await commands.COMMANDS["/help"]();
-    assert.ok(result.includes("/status"));
-    assert.ok(result.includes("/screenshot"));
+  it("/cron → {text} с человекочитаемым расписанием", async () => {
+    const out = await commands.COMMANDS["/cron"]();
+    assert.ok(out.text.includes("каждые 6 ч"), "expected humanized schedule");
   });
 
-  it("/start должен вернуть приветствие", async () => {
-    const result = await commands.COMMANDS["/start"]();
-    assert.ok(result.includes("ThinkPad"));
+  it("/help → {text} со ссылками на команды", async () => {
+    const out = await commands.COMMANDS["/help"]();
+    assert.ok(out.text.includes("/status"));
+    assert.ok(out.text.includes("/screenshot"));
   });
 
-  it("/screenshot должен сделать скриншот и вернуть путь", async () => {
-    const result = await commands.COMMANDS["/screenshot"]();
-    assert.ok(result);
+  it("/start → {text} с приветствием", async () => {
+    const out = await commands.COMMANDS["/start"]();
+    assert.ok(out.text.includes("ThinkPad"));
   });
 
-  it("/mouse должен вернуть позицию курсора", async () => {
-    const result = await commands.COMMANDS["/mouse"]();
-    assert.ok(result.includes("800"));
-    assert.ok(result.includes("600"));
+  it("/screenshot → {photo}", async () => {
+    const out = await commands.COMMANDS["/screenshot"]();
+    assert.strictEqual(out.photo, "/tmp/test.png");
   });
 
-  it("/windows должен вернуть список окон", async () => {
-    const result = await commands.COMMANDS["/windows"]();
-    assert.ok(result.includes("Firefox") || result.includes("окон"));
+  it("/mouse → {text} с координатами", async () => {
+    const out = await commands.COMMANDS["/mouse"]();
+    assert.ok(out.text.includes("800") && out.text.includes("600"));
   });
 
-  it("/clipboard должен прочитать буфер обмена", async () => {
-    const result = await commands.COMMANDS["/clipboard"]();
-    assert.ok(result);
+  it("/windows → {text} со списком окон", async () => {
+    const out = await commands.COMMANDS["/windows"]();
+    assert.ok(out.text.includes("Firefox") || out.text.includes("Окна"));
   });
 
-  it("/reset должен очистить историю", () => {
-    const result = commands.COMMANDS["/reset"]("test");
-    assert.ok(result.includes("очищен"));
+  it("/clipboard → {text}", async () => {
+    const out = await commands.COMMANDS["/clipboard"]();
+    assert.ok(out.text.includes("буфер"));
   });
 
-  it("/disk должен показать диски", async () => {
-    const result = await commands.COMMANDS["/disk"]();
-    assert.ok(result);
+  it("/reset → {text} 'очищена'", () => {
+    const out = commands.COMMANDS["/reset"]("test");
+    assert.ok(out.text.includes("очищена"));
   });
 
-  it("/groq должен показать статистику Groq API", async () => {
-    const result = await commands.COMMANDS["/groq"]();
-    assert.ok(result);
+  it("/disk → {text}", async () => {
+    const out = await commands.COMMANDS["/disk"]();
+    assert.ok(out.text.includes("Диски"));
   });
 
-  it("/crons должен показать cron задачи", async () => {
-    const result = await commands.COMMANDS["/crons"]();
-    assert.ok(result);
+  it("/groq → {text}", async () => {
+    const out = await commands.COMMANDS["/groq"]();
+    assert.ok(out.text.includes("Groq"));
   });
 
-  it("/health должен показать health check", async () => {
-    const result = await commands.COMMANDS["/health"]();
-    assert.ok(result);
+  it("/leads → {text} с прогресс-баром", async () => {
+    const out = await commands.COMMANDS["/leads"]();
+    assert.ok(out.text.includes("Лиды"));
+  });
+
+  it("/health → {text}", async () => {
+    const out = await commands.COMMANDS["/health"]();
+    assert.ok(out.text.includes("Health"));
   });
 });

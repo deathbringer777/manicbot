@@ -44,42 +44,21 @@ process.on("unhandledRejection", (err) => {
 
 // ── Command router ────────────────────────────────────────────────────────────
 async function routeCommand(chatId, cmd, arg) {
-  const handler = cmdRegistry.get(cmd);
-  if (handler) {
-    const stopTyping = tg.keepTyping(chatId);
-    try {
-      const out = await handler.handler(chatId, arg);
-      stopTyping();
-      await tg.sendLongMessage(chatId, out);
-    } catch (e) {
-      stopTyping();
-      console.error("[cmd error]", e.message);
-      await tg.sendMessage(chatId, `❌ Ошибка: ${e.message}`);
-    }
-    return true;
-  }
+  const dyn = cmdRegistry.get(cmd);
+  const fn = dyn ? (c, a) => dyn.handler(c, a) : COMMANDS[cmd];
+  if (!fn) return false;
 
-  // Static commands with potential photo response
-  if (COMMANDS[cmd]) {
-    const stopTyping = tg.keepTyping(chatId);
-    try {
-      const out = await COMMANDS[cmd](chatId);
-      stopTyping();
-      if (typeof out === "object" && out.type === "photo") {
-        await tg.sendPhoto(chatId, out.path, out.caption);
-      } else if (out) {
-        await tg.sendLongMessage(chatId, out);
-      }
-    } catch (e) {
-      stopTyping();
-      const errMsg = `❌ ${e.message}`;
-      console.error("[cmd error]", e.message);
-      await tg.sendMessage(chatId, errMsg);
-    }
-    return true;
+  const stopTyping = tg.keepTyping(chatId);
+  try {
+    const out = await fn(chatId, arg);
+    stopTyping();
+    await tg.sendReply(chatId, out);
+  } catch (e) {
+    stopTyping();
+    console.error("[cmd error]", e.message);
+    await tg.sendMessage(chatId, `❌ Ошибка: ${e.message}`);
   }
-
-  return false;
+  return true;
 }
 
 // ── Poll loop ─────────────────────────────────────────────────────────────────

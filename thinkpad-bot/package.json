@@ -7,9 +7,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node bot.js",
-    "test": "node --test --test-concurrency=1 test/**/*.test.js",
-    "test:watch": "node --test --watch test/**/*.test.js",
-    "test:coverage": "node --experimental-test-coverage --test test/**/*.test.js"
+    "test": "node --test --test-concurrency=1",
+    "test:watch": "node --test --watch --test-concurrency=1",
+    "test:coverage": "node --experimental-test-coverage --test --test-concurrency=1"
   },
   "dependencies": {
     "dotenv": "^16.4.7"

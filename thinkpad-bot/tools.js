@@ -58,6 +58,9 @@ const BASE_PROMPT = `Ты личный AI-ассистент и оператор
 - Печатать текст и нажимать клавиши (keyboard_type, keyboard_hotkey)
 - Работать с буфером обмена (clipboard)
 - Управлять окнами (window_manage - список, фокус, свернуть, закрыть)
+- Включать музыку/радио (music_control: ambient, lofi, jazz, electronic, news)
+- Запускать приложения (open_app: браузер, файлы, терминал, и др.)
+- Менять громкость (set_volume) и яркость экрана (set_brightness)
 - Управлять PM2 процессами (pm2_control)
 - Читать/писать файлы (read_file, write_file)
 - Выполнять SQLite запросы (sqlite_query)
@@ -394,6 +397,59 @@ const TOOLS_DEFINITIONS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "music_control",
+      description: "Музыка/радио на компьютере. action: play (с query — жанр: ambient, lofi, jazz, electronic, news, focus, или 'radio'), stop, next, status.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["play", "stop", "next", "status"] },
+          query: { type: "string", description: "жанр/станция для play" },
+        },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "open_app",
+      description: "Запускает приложение на компьютере. name: google-chrome, rhythmbox, nautilus, code, или по-русски (браузер, файлы, терминал).",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string" } },
+        required: ["name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "set_volume",
+      description: "Системная громкость: percent (0-100) ИЛИ direction up/down.",
+      parameters: {
+        type: "object",
+        properties: {
+          percent: { type: "number" },
+          direction: { type: "string", enum: ["up", "down"] },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "set_brightness",
+      description: "Яркость экрана, percent 1-100.",
+      parameters: {
+        type: "object",
+        properties: { percent: { type: "number" } },
+        required: ["percent"],
+      },
+    },
+  },
 ];
 
 // ── Tool runner ───────────────────────────────────────────────────────────────
@@ -639,6 +695,48 @@ async function runTool(name, args) {
         return `✅ Удалена: ${args.name}`;
       }
       return "Неизвестное действие";
+    }
+
+    // ── Music ──
+    case "music_control": {
+      const music = require("./tools/music.js");
+      if (args.action === "play") { const r = await music.playQuery(args.query || "radio"); return `🎵 Играю: ${r.title}`; }
+      if (args.action === "stop") { await music.stop(); return "⏹ Музыка остановлена"; }
+      if (args.action === "next") { const r = await music.next(); return `⏭ ${r.title}`; }
+      const np = await music.nowPlaying();
+      return np.playing ? `🎶 ${np.title}` : "⏹ ничего не играет";
+    }
+
+    // ── Launch app ──
+    case "open_app": {
+      const ALIASES = {
+        "браузер": "google-chrome", "хром": "google-chrome", "chrome": "google-chrome",
+        "файлы": "org.gnome.Nautilus", "проводник": "org.gnome.Nautilus", "nautilus": "org.gnome.Nautilus",
+        "терминал": "org.gnome.Terminal", "terminal": "org.gnome.Terminal",
+        "музыка": "org.gnome.Rhythmbox3", "rhythmbox": "org.gnome.Rhythmbox3",
+        "код": "code", "vscode": "code",
+      };
+      const raw = String(args.name || "").toLowerCase().trim();
+      const id = (ALIASES[raw] || raw).replace(/[^a-zA-Z0-9._@+-]/g, "");
+      if (!id) return "❌ укажи имя приложения";
+      await sh(`gtk-launch ${id} >/dev/null 2>&1 || setsid -f ${id} >/dev/null 2>&1 || true`, 8000);
+      return `🚀 Запускаю ${id}`;
+    }
+
+    // ── Volume ──
+    case "set_volume": {
+      if (args.direction === "up") { await sh("wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 && wpctl set-volume @DEFAULT_AUDIO_SINK@ 10%+", 4000); return "🔊 громче"; }
+      if (args.direction === "down") { await sh("wpctl set-volume @DEFAULT_AUDIO_SINK@ 10%-", 4000); return "🔉 тише"; }
+      const pct = Math.max(0, Math.min(100, parseInt(args.percent, 10) || 0));
+      await sh(`wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 && wpctl set-volume @DEFAULT_AUDIO_SINK@ ${pct / 100}`, 4000);
+      return `🔊 громкость ${pct}%`;
+    }
+
+    // ── Brightness ──
+    case "set_brightness": {
+      const p = Math.max(1, Math.min(100, parseInt(args.percent, 10) || 50));
+      await sh(`brightnessctl set ${p}% >/dev/null 2>&1 || true`, 4000);
+      return `☀️ яркость ${p}%`;
     }
 
     default:

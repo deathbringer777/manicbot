@@ -1,5 +1,8 @@
-require("dotenv").config();
+require("dotenv").config({ quiet: true });
 
+// GROQ_KEY stays required: voice notes are transcribed by Groq Whisper
+// (Claude has no speech-to-text). All TEXT generation goes through the
+// claude CLI on the Max subscription — see llm.js.
 const required = ["TELEGRAM_TOKEN", "GROQ_KEY", "ALLOWED_USER_ID"];
 for (const key of required) {
   if (!process.env[key]) throw new Error(`${key} is required in .env`);
@@ -14,8 +17,6 @@ const ALLOWED_USER_ID = (() => {
 const config = {
   TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN,
   GROQ_KEY: process.env.GROQ_KEY,
-  GROQ_MODEL: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-  GROQ_FAST_MODEL: process.env.GROQ_FAST_MODEL || "llama-3.1-8b-instant",
   WHISPER_MODEL: process.env.WHISPER_MODEL || "whisper-large-v3-turbo",
   ALLOWED_USER_ID,
   CHAT_ID: (() => {
@@ -24,17 +25,14 @@ const config = {
     return isNaN(n) ? ALLOWED_USER_ID : n;
   })(),
   POLL_TIMEOUT: 30,
-  MAX_TOKENS: 4096,
-  TEMPERATURE: 0.2,
-  GROQ_BASE_URL: "https://api.groq.com/openai/v1/chat/completions",
-  OPENCODE_KEY: process.env.OPENCODE_KEY,
-  OPENCODE_MODEL: process.env.OPENCODE_MODEL || "big-pickle",
-  OPENCODE_BASE_URL: "https://opencode.ai/zen/v1/chat/completions",
-  OPENCODE_MAX_TOKENS: 32000,
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-  ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
-  ANTHROPIC_BASE_URL: "https://api.anthropic.com/v1/messages",
-  ANTHROPIC_MAX_TOKENS: 8192,
+
+  // Claude Code CLI (Max subscription; OAuth creds live in ~/.claude)
+  CLAUDE_BIN: process.env.CLAUDE_BIN || "claude",
+  CLAUDE_MODEL: process.env.CLAUDE_MODEL || "sonnet",
+  CLAUDE_EFFORT: process.env.CLAUDE_EFFORT || "medium",
+  CLAUDE_TIMEOUT_MS: parseInt(process.env.CLAUDE_TIMEOUT_MS || "300000", 10),
+  CLAUDE_SESSIONS_FILE: process.env.CLAUDE_SESSIONS_FILE || "/tmp/tg-bot-claude-sessions.json",
+
   TG_API_BASE: `https://api.telegram.org/bot${process.env.TELEGRAM_TOKEN}`,
   BOT_DIR: __dirname,
   CONTEXT_DIR: __dirname + "/context",

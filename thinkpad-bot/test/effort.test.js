@@ -1,130 +1,57 @@
-// TDD: tests for /effort command and per-session effort in llm.js
-// Tests run BEFORE implementation; they drive the design of setEffort/getEffort/askOnce.
+// /effort — per-chat reasoning-depth control mapped to the claude CLI --effort flag.
 
-const { describe, it, before, afterEach, mock } = require("node:test");
+const { describe, it, before } = require("node:test");
 const assert = require("node:assert");
 const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
 
-let llmModule;
-let effortModule;
+let effortCmd;
+let llm;
 
 before(() => {
   process.env.TELEGRAM_TOKEN = "test:token";
   process.env.GROQ_KEY = "test-groq-key";
   process.env.ALLOWED_USER_ID = "12345";
   process.env.CHAT_ID = "12345";
-  process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
-  process.env.ANTHROPIC_MODEL = "claude-sonnet-4-6";
+  process.env.CLAUDE_MODEL = "sonnet";
+  process.env.CLAUDE_EFFORT = "medium";
+  process.env.CLAUDE_SESSIONS_FILE = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "effort-test-")), "sessions.json",
+  );
   delete require.cache[path.resolve(__dirname, "../config.js")];
   delete require.cache[path.resolve(__dirname, "../llm.js")];
-  llmModule = require("../llm.js");
-});
-
-afterEach(() => {
-  mock.restoreAll();
-});
-
-describe("llm.js — per-session effort", () => {
-  it("getEffort returns medium by default for any chatId", () => {
-    assert.strictEqual(llmModule.getEffort(999), "medium");
-    assert.strictEqual(llmModule.getEffort("abc"), "medium");
-  });
-
-  it("setEffort stores effort for a chatId", () => {
-    llmModule.setEffort(100, "high");
-    assert.strictEqual(llmModule.getEffort(100), "high");
-  });
-
-  it("setEffort low stores correctly", () => {
-    llmModule.setEffort(101, "low");
-    assert.strictEqual(llmModule.getEffort(101), "low");
-  });
-
-  it("setEffort invalid level throws", () => {
-    assert.throws(() => llmModule.setEffort(102, "ultra"), /invalid effort/i);
-  });
-
-  it("different chatIds have independent effort", () => {
-    llmModule.setEffort(200, "low");
-    llmModule.setEffort(201, "high");
-    assert.strictEqual(llmModule.getEffort(200), "low");
-    assert.strictEqual(llmModule.getEffort(201), "high");
-  });
-});
-
-describe("llm.js — askOnce", () => {
-  it("askOnce is exported", () => {
-    assert.strictEqual(typeof llmModule.askOnce, "function");
-  });
-
-  it("askOnce calls Anthropic with no stored history", async () => {
-    const calls = [];
-    const originalFetch = global.fetch;
-    global.fetch = async (url, opts) => {
-      calls.push({ url, body: JSON.parse(opts.body) });
-      return {
-        status: 200,
-        headers: { get: () => null },
-        json: async () => ({
-          id: "msg_test",
-          content: [{ type: "text", text: "Paris" }],
-          stop_reason: "end_turn",
-          usage: { input_tokens: 10, output_tokens: 5 },
-        }),
-      };
-    };
-    const result = await llmModule.askOnce("Capital of France?");
-    global.fetch = originalFetch;
-    assert.ok(result.includes("Paris"), );
-    // Should have made exactly 1 fetch call
-    assert.strictEqual(calls.length, 1);
-    // Should not have tools
-    assert.ok(!calls[0].body.tools, "askOnce should not use tools");
-  });
-
-  it("askOnce throws on API error", async () => {
-    const originalFetch = global.fetch;
-    global.fetch = async () => ({
-      status: 400,
-      headers: { get: () => null },
-      json: async () => ({ error: { type: "invalid_request", message: "bad input" } }),
-    });
-    await assert.rejects(
-      () => llmModule.askOnce("test"),
-      /bad input/
-    );
-    global.fetch = originalFetch;
-  });
+  delete require.cache[path.resolve(__dirname, "../commands/effort.js")];
+  llm = require("../llm.js");
+  effortCmd = require("../commands/effort.js");
 });
 
 describe("/effort command", () => {
-  it("effort.js module can be required", () => {
-    delete require.cache[path.resolve(__dirname, "../commands/effort.js")];
-    const effortCmd = require("../commands/effort.js");
-    assert.ok(effortCmd.commands["/effort"], "/effort command must be exported");
+  it("default effort is medium", () => {
+    assert.strictEqual(llm.getEffort(999), "medium");
   });
 
-  it("/effort without arg returns current level", async () => {
-    delete require.cache[path.resolve(__dirname, "../commands/effort.js")];
-    const effortCmd = require("../commands/effort.js");
-    // fresh chatId with default effort
-    const result = await effortCmd.commands["/effort"].handler(9999, "");
-    assert.ok(typeof result === "string", "Should return a string");
-    assert.ok(result.includes("medium"), );
+  it("setEffort validates levels", () => {
+    llm.setEffort(999, "high");
+    assert.strictEqual(llm.getEffort(999), "high");
+    assert.throws(() => llm.setEffort(999, "turbo"), /Invalid effort/);
   });
 
-  it("/effort high sets effort", async () => {
-    delete require.cache[path.resolve(__dirname, "../commands/effort.js")];
-    const effortCmd = require("../commands/effort.js");
-    const result = await effortCmd.commands["/effort"].handler(9998, "high");
-    assert.ok(result.includes("high"), );
+  it("/effort with no arg shows the current level and options", async () => {
+    const out = await effortCmd.commands["/effort"].handler(777, "");
+    assert.ok(out.includes("medium"));
+    assert.ok(out.includes("/effort low"));
   });
 
-  it("/effort invalid returns error", async () => {
-    delete require.cache[path.resolve(__dirname, "../commands/effort.js")];
-    const effortCmd = require("../commands/effort.js");
-    const result = await effortCmd.commands["/effort"].handler(9997, "ultra");
-    assert.ok(result.toLowerCase().includes("low") || result.toLowerCase().includes("medium") || result.toLowerCase().includes("invalid"),
-      );
+  it("/effort high sets the level for the chat", async () => {
+    const out = await effortCmd.commands["/effort"].handler(777, "high");
+    assert.ok(out.includes("high"));
+    assert.strictEqual(llm.getEffort(777), "high");
+  });
+
+  it("/effort with an invalid level explains the options", async () => {
+    const out = await effortCmd.commands["/effort"].handler(777, "max");
+    assert.ok(out.includes("low"));
+    assert.strictEqual(llm.getEffort(777), "high", "level unchanged on invalid input");
   });
 });

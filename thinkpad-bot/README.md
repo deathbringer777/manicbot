@@ -43,7 +43,7 @@ deploy.sh           Backup → rsync → pm2 restart (reads .deploy.local)
 2. Create `.env` (see `.env.example`):
    - `TELEGRAM_TOKEN` — bot token from @BotFather
    - `GROQ_KEY` — Groq API key (`gsk_…`)
-   - `GROQ_MODEL` — optional, defaults to `llama-3.3-70b-versatile`
+   - `GROQ_KEY` — Groq Whisper for voice notes; text LLM is the `claude` CLI on the Max subscription (no API key)
    - `ALLOWED_USER_ID` — the single Telegram user id allowed to use the bot
    - `CHAT_ID` — optional, defaults to `ALLOWED_USER_ID`
 3. (Optional) create `context/machine.md` to give the LLM context about the box

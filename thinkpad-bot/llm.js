@@ -1,383 +1,177 @@
+// llm.js v6 — Claude Code CLI adapter.
+//
+// Every text-LLM request goes through `claude -p` (headless print mode) so it
+// bills the owner's Max SUBSCRIPTION via the CLI's OAuth credentials — never
+// the metered Anthropic API (the adapter strips ANTHROPIC_API_KEY from the
+// child env). There are intentionally NO fallback models: when Claude is
+// unavailable the bot reports the error honestly instead of silently
+// degrading to a weaker LLM. Voice transcription stays on Groq Whisper
+// (stt.js) — Claude does not do speech-to-text.
+//
+// Conversation continuity: claude CLI sessions, one per Telegram chat,
+// resumed with --resume <session_id> and persisted across bot restarts.
+// Claude's own agentic tools (Bash, Read, ...) replace the old homegrown
+// tool-call loop; access is gated upstream by ALLOWED_USER_ID — this bot
+// talks to exactly one human, its owner, on the owner's own machine.
+
+const fs = require("fs");
+const { execFile } = require("child_process");
 const config = require("./config.js");
 const tools = require("./tools.js");
 
-const histories = new Map();
-const sessionEffort = new Map(); // per-chat effort level for callAnthropic
+// Test seam: tests replace deps.execFile with a fake.
+const deps = { execFile };
 
-const groqStats = {
-  lastUpdated: null,
-  model: config.GROQ_MODEL,
-  rl: {},
-  session: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+const sessions = new Map();      // chatId → claude session uuid
+const sessionEffort = new Map(); // chatId → low|medium|high
+
+const stats = {
+  model: config.CLAUDE_MODEL,
   startedAt: new Date().toISOString(),
+  lastUpdated: null,
+  session: { calls: 0, errors: 0, totalDurationMs: 0, totalCostUsd: 0 },
 };
 
-const opencodeStats = {
-  lastUpdated: null,
-  model: config.OPENCODE_MODEL,
-  session: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-  startedAt: new Date().toISOString(),
-};
+// ── Session persistence (survives bot restarts; /tmp is fine — it's context, not data) ──
 
-const anthropicStats = {
-  lastUpdated: null,
-  model: config.ANTHROPIC_MODEL,
-  session: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-  startedAt: new Date().toISOString(),
-};
-
-async function callGroq(messages, useTools = true, model = config.GROQ_MODEL) {
-  const body = {
-    model,
-    messages,
-    max_tokens: config.MAX_TOKENS,
-    temperature: config.TEMPERATURE,
-  };
-  if (useTools) {
-    body.tools = tools.TOOLS_DEFINITIONS;
-    body.tool_choice = "auto";
-  }
-
-  const r = await fetch(config.GROQ_BASE_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.GROQ_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  groqStats.lastUpdated = new Date().toISOString();
-  groqStats.rl = {
-    reqLimit:        r.headers.get("x-ratelimit-limit-requests"),
-    reqRemaining:    r.headers.get("x-ratelimit-remaining-requests"),
-    reqReset:        r.headers.get("x-ratelimit-reset-requests"),
-    tokLimit:        r.headers.get("x-ratelimit-limit-tokens"),
-    tokRemaining:    r.headers.get("x-ratelimit-remaining-tokens"),
-    tokReset:        r.headers.get("x-ratelimit-reset-tokens"),
-    tokDayLimit:     r.headers.get("x-ratelimit-limit-tokens-per-day"),
-    tokDayRemaining: r.headers.get("x-ratelimit-remaining-tokens-per-day"),
-    tokDayReset:     r.headers.get("x-ratelimit-reset-tokens-per-day"),
-  };
-
-  const data = await r.json();
-
-  if (data.usage) {
-    groqStats.session.calls++;
-    groqStats.session.promptTokens     += data.usage.prompt_tokens     || 0;
-    groqStats.session.completionTokens += data.usage.completion_tokens || 0;
-    groqStats.session.totalTokens      += data.usage.total_tokens      || 0;
-  }
-
-  return data;
+function loadSessions() {
+  try {
+    const data = JSON.parse(fs.readFileSync(config.CLAUDE_SESSIONS_FILE, "utf8"));
+    for (const [k, v] of Object.entries(data)) sessions.set(Number(k) || k, v);
+  } catch { /* first start */ }
 }
 
-async function callOpenCode(messages, useTools = true) {
-  const model = config.OPENCODE_MODEL;
-
-  // DeepSeek won't accept reasoning_content or tool_calls from other
-  // providers (Groq). Strip them and drop tool-only assistant messages.
-  const cleanMessages = messages.filter((m) => {
-    if (m.role === "tool") return false;
-    if (m.role === "assistant" && !m.content && m.tool_calls) return false;
-    return true;
-  }).map((m) => {
-    const clean = { ...m };
-    delete clean.reasoning_content;
-    delete clean.tool_calls;
-    return clean;
-  });
-
-  const body = {
-    model,
-    messages: cleanMessages,
-    max_tokens: config.OPENCODE_MAX_TOKENS,
-    temperature: config.TEMPERATURE,
-  };
-  if (useTools) {
-    body.tools = tools.TOOLS_DEFINITIONS;
-    body.tool_choice = "auto";
-  }
-
-  const r = await fetch(config.OPENCODE_BASE_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.OPENCODE_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  opencodeStats.lastUpdated = new Date().toISOString();
-
-  const data = await r.json();
-
-  if (data.usage) {
-    opencodeStats.session.calls++;
-    opencodeStats.session.promptTokens     += data.usage.prompt_tokens     || 0;
-    opencodeStats.session.completionTokens += data.usage.completion_tokens || 0;
-    opencodeStats.session.totalTokens      += data.usage.total_tokens      || 0;
-  }
-
-  return data;
+function saveSessions() {
+  try {
+    fs.writeFileSync(config.CLAUDE_SESSIONS_FILE, JSON.stringify(Object.fromEntries(sessions)));
+  } catch { /* non-fatal */ }
 }
 
-// ── Anthropic Claude ───────────────────────────────────────────────────────────
-// Converts between OpenAI-style tools & messages and Anthropic's format.
+loadSessions();
 
-function openaiToolsToAnthropic(openaiTools) {
-  if (!openaiTools || !Array.isArray(openaiTools)) return undefined;
-  return openaiTools.map(t => ({
-    name: t.function.name,
-    description: t.function.description,
-    input_schema: t.function.parameters,
-  }));
+// ── System prompt ─────────────────────────────────────────────────────────────
+
+const CLI_RULES = `You are the ThinkPad ops assistant, talking to your owner through his private Telegram bot.
+
+- Reply in Russian unless explicitly asked otherwise. Be concise — replies are read on a phone.
+- PLAIN TEXT ONLY: no Markdown (#, *, \`\`\`), no HTML tags. Short paragraphs and simple lists with «—».
+- You run on the owner's Ubuntu ThinkPad (GNOME Wayland) with full shell access. Cheat sheet:
+  pm2 ls / pm2 logs <name> --lines 30 --nostream / pm2 restart <name> — the cron fleet;
+  ~/manicbot-backend — ManicBot sidecar crons (README.md explains them);
+  mbshot /tmp/shot.png — screenshot; ydotool — GUI input (YDOTOOL_SOCKET is set).
+- NEVER pm2 restart/stop/delete "tg-bot" — that kills the process you are running inside. Tell the owner to use the bot's /ps screen instead.
+- Refuse destructive operations (rm -rf outside /tmp, reboot, mkfs, dd, ufw changes) — explain and suggest a manual path.
+- When asked to check or diagnose something, actually run the commands and report real findings, not guesses.`;
+
+function systemPrompt() {
+  const ctx = tools.getContextText();
+  return ctx ? `${CLI_RULES}\n\n## Machine context\n${ctx}` : CLI_RULES;
 }
 
-function convertMessagesForAnthropic(openaiMessages) {
-  let systemText = "";
-  const msgs = [];
+// ── CLI plumbing ──────────────────────────────────────────────────────────────
 
-  for (const msg of openaiMessages) {
-    if (msg.role === "system") {
-      systemText += (systemText ? "\n" : "") + msg.content;
-      continue;
-    }
+function cleanEnv() {
+  const env = { ...process.env };
+  delete env.ANTHROPIC_API_KEY; // subscription only — never bill the metered API
+  return env;
+}
 
-    if (msg.role === "user") {
-      if (typeof msg.content === "string") {
-        // Check if there are tool results cached — Anthropic needs tool_result
-        // content blocks, not plain text, for the prior tool_use round.
-        msgs.push({ role: "user", content: msg.content });
-      } else {
-        msgs.push({ role: "user", content: msg.content });
+function buildArgs(text, { resume = null, effort = null, system = null } = {}) {
+  const args = [
+    "-p", text,
+    "--model", config.CLAUDE_MODEL,
+    "--effort", effort || config.CLAUDE_EFFORT,
+    "--output-format", "json",
+    "--dangerously-skip-permissions",
+    "--append-system-prompt", system || systemPrompt(),
+  ];
+  if (resume) args.push("--resume", resume);
+  return args;
+}
+
+function runClaude(args) {
+  return new Promise((resolve, reject) => {
+    deps.execFile(config.CLAUDE_BIN, args, {
+      env: cleanEnv(),
+      cwd: process.env.HOME || config.BOT_DIR,
+      timeout: config.CLAUDE_TIMEOUT_MS,
+      maxBuffer: 32 * 1024 * 1024,
+      killSignal: "SIGKILL",
+    }, (err, stdout, stderr) => {
+      if (err) {
+        const detail = String(stderr || "").trim().slice(-400) || err.message;
+        return reject(new Error(`claude CLI: ${detail}`));
       }
-      continue;
-    }
-
-    if (msg.role === "assistant") {
-      const content = [];
-      if (msg.content) content.push({ type: "text", text: msg.content });
-      if (msg.tool_calls) {
-        for (const tc of msg.tool_calls) {
-          let input = {};
-          try { input = JSON.parse(tc.function.arguments); } catch {}
-          content.push({ type: "tool_use", id: tc.id, name: tc.function.name, input });
-        }
+      let envelope;
+      try {
+        envelope = JSON.parse(stdout);
+      } catch {
+        return reject(new Error(`claude вернул не-JSON ответ: ${String(stdout).slice(0, 200)}`));
       }
-      // Anthropic requires at least one content block
-      if (content.length === 0) content.push({ type: "text", text: "." });
-      msgs.push({ role: "assistant", content });
-      continue;
-    }
-
-    if (msg.role === "tool") {
-      msgs.push({
-        role: "user",
-        content: [{ type: "tool_result", tool_use_id: msg.tool_call_id, content: msg.content || "" }],
-      });
-      continue;
-    }
-
-    // fallback: pass through
-    msgs.push(msg);
-  }
-
-  return { system: systemText || undefined, messages: msgs };
-}
-
-function fromAnthropicResponse(anthropicResponse) {
-  const textBlocks = (anthropicResponse.content || []).filter(c => c.type === "text");
-  const toolBlocks = (anthropicResponse.content || []).filter(c => c.type === "tool_use");
-
-  let finishReason = "stop";
-  if (anthropicResponse.stop_reason === "tool_use") finishReason = "tool_calls";
-  else if (anthropicResponse.stop_reason === "max_tokens") finishReason = "length";
-  else if (anthropicResponse.stop_reason === "end_turn") finishReason = "stop";
-
-  const message = {
-    role: "assistant",
-    content: textBlocks.map(t => t.text).join("") || null,
-  };
-  if (toolBlocks.length > 0) {
-    message.tool_calls = toolBlocks.map(t => ({
-      id: t.id,
-      type: "function",
-      function: { name: t.name, arguments: JSON.stringify(t.input) },
-    }));
-  }
-
-  return {
-    choices: [{ finish_reason: finishReason, message }],
-    usage: {
-      input_tokens: anthropicResponse.usage?.input_tokens || 0,
-      output_tokens: anthropicResponse.usage?.output_tokens || 0,
-    },
-  };
-}
-
-async function callAnthropic(messages, useTools = true, effort = "medium") {
-  const { system, messages: anthropicMessages } = convertMessagesForAnthropic(messages);
-
-  const body = {
-    model: config.ANTHROPIC_MODEL,
-    max_tokens: config.ANTHROPIC_MAX_TOKENS,
-    output_config: { effort: effort || "medium" },
-    messages: anthropicMessages,
-  };
-  if (system) body.system = system;
-  if (useTools) {
-    body.tools = openaiToolsToAnthropic(tools.TOOLS_DEFINITIONS);
-    body.tool_choice = { type: "auto" };
-  }
-
-  const r = await fetch(config.ANTHROPIC_BASE_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": config.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+      if (envelope.is_error) {
+        return reject(new Error(envelope.result || envelope.subtype || "unknown claude error"));
+      }
+      resolve(envelope);
+    });
   });
-
-  anthropicStats.lastUpdated = new Date().toISOString();
-
-  if (r.status === 429) {
-    const bodyText = await r.text();
-    let errMsg = "rate_limit_exceeded";
-    try { const e = JSON.parse(bodyText); errMsg = e.error?.message || errMsg; } catch {}
-    return { error: { code: "rate_limit_exceeded", message: errMsg } };
-  }
-
-  const data = await r.json();
-
-  if (data.error) {
-    return { error: { code: data.error.type || "api_error", message: data.error.message || JSON.stringify(data.error) } };
-  }
-
-  if (data.usage) {
-    anthropicStats.session.calls++;
-    anthropicStats.session.promptTokens     += data.usage.input_tokens  || 0;
-    anthropicStats.session.completionTokens += data.usage.output_tokens || 0;
-    anthropicStats.session.totalTokens      += (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0);
-  }
-
-  return fromAnthropicResponse(data);
 }
 
-const MAX_TOOL_ITERATIONS = 12;
-const MAX_TOOL_RESULT = 1500; // cap each tool result fed back to the model
-
-function isRateLimited(data) {
-  return !!data.error && (
-    data.error.code === "rate_limit_exceeded" ||
-    /rate.?limit/i.test(data.error.message || "")
-  );
+function recordSuccess(envelope, startedAt) {
+  stats.session.calls++;
+  stats.session.totalDurationMs += envelope.duration_ms || (Date.now() - startedAt);
+  stats.session.totalCostUsd += envelope.total_cost_usd || 0;
+  stats.lastUpdated = new Date().toISOString();
 }
 
-function rateLimitReset(data) {
-  const m = (data.error?.message || "").match(/try again in ([\dhms.]+)/i);
-  if (m) return m[1];
-  return groqStats.rl.tokDayReset || groqStats.rl.tokReset || "несколько минут";
+function isDeadSessionError(err) {
+  return /no conversation|session/i.test(err.message || "");
 }
+
+// ── Public API (shape preserved from v5 for bot.js/commands) ──────────────────
 
 async function ask(chatId, userText) {
-  if (!histories.has(chatId)) histories.set(chatId, []);
-  const history = histories.get(chatId);
-  history.push({ role: "user", content: userText });
-  if (history.length > 16) history.splice(0, history.length - 16);
+  const effort = getEffort(chatId);
+  const resume = sessions.get(chatId) || null;
+  const startedAt = Date.now();
 
-  const sysMsg = { role: "system", content: tools.getSystemPrompt() };
-  let model = config.GROQ_MODEL;
-  let triedFast = false;
-  let triedGroq = false;
-  let triedOpenCode = false;
-  let currentProvider = config.ANTHROPIC_API_KEY ? "anthropic" : "groq"; // anthropic → groq → opencode
-  let iterations = 0;
-
-  async function callCurrent(messages, useTools) {
-    if (currentProvider === "opencode") {
-      return await callOpenCode(messages, useTools);
-    }
-    if (currentProvider === "anthropic") {
-      return await callAnthropic(messages, useTools, getEffort(chatId));
-    }
-    return await callGroq(messages, useTools, currentProvider === "groq-fast" ? config.GROQ_FAST_MODEL : model);
-  }
-
-  while (iterations++ < MAX_TOOL_ITERATIONS) {
-    let data;
-
-    // ── Provider fallback chain: Anthropic → Groq → Groq-fast → OpenCode ──
-    data = await callCurrent([sysMsg, ...history], currentProvider !== "opencode");
-
-    if (currentProvider === "anthropic" && data.error) {
-      if (!triedGroq && config.GROQ_KEY) {
-        triedGroq = true;
-        currentProvider = "groq";
-        console.log("[llm] Anthropic unavailable → falling back to Groq");
-        continue;
-      }
-      if (!triedOpenCode && config.OPENCODE_KEY) {
-        triedOpenCode = true;
-        currentProvider = "opencode";
-        console.log("[llm] falling back to OpenCode Zen");
-        continue;
-      }
-      return `🤖 Все LLM исчерпаны — ИИ вернётся позже. Команды (/status, /play, скриншот) и музыка работают как обычно.`;
-    }
-
-    if ((currentProvider === "groq" || currentProvider === "groq-fast") && isRateLimited(data)) {
-      if (currentProvider === "groq" && !triedFast) {
-        triedFast = true;
-        currentProvider = "groq-fast";
-        console.log("[llm] Groq rate limited → switching to", config.GROQ_FAST_MODEL);
-        continue;
-      }
-      if (!triedOpenCode && config.OPENCODE_KEY) {
-        triedOpenCode = true;
-        currentProvider = "opencode";
-        console.log("[llm] Groq exhausted → falling back to OpenCode Zen");
-        continue;
-      }
-      return `🤖 Лимит Groq исчерпан — ИИ вернётся через ~${rateLimitReset(data)}.
-Команды (/status, /play, скриншот) и музыка работают как обычно.`;
-    }
-
-    // ── Handle generation errors ──
-    if (data.error) {
-      const isGenerationError = data.error.type === "failed_generation"
-        || data.error.code === "tool_use_failed"
-        || data.error.code === "overloaded_error";
-      if (isGenerationError) {
-        console.log(`[llm] ${currentProvider} generation error, retrying without tools`);
-        data = await callCurrent([sysMsg, ...history], false);
-        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-      } else {
-        throw new Error(data.error.message || JSON.stringify(data.error));
-      }
-    }
-
-    const choice = data.choices[0];
-    const msg = choice.message;
-
-    if (choice.finish_reason === "tool_calls" && msg.tool_calls?.length) {
-      history.push(msg);
-      for (const call of msg.tool_calls) {
-        let args = {};
-        try { args = JSON.parse(call.function.arguments); } catch { /* leave empty */ }
-        console.log(`[tool] ${call.function.name}`, JSON.stringify(args).slice(0, 120));
-        const result = await tools.runTool(call.function.name, args);
-        history.push({ role: "tool", tool_call_id: call.id, content: String(result).slice(0, MAX_TOOL_RESULT) });
-      }
+  let envelope;
+  try {
+    envelope = await runClaude(buildArgs(userText, { resume, effort }));
+  } catch (err) {
+    // A stale/garbage-collected session must not break the chat — start fresh.
+    if (resume && isDeadSessionError(err)) {
+      sessions.delete(chatId);
+      saveSessions();
+      envelope = await runClaude(buildArgs(userText, { effort }));
     } else {
-      const reply = msg.content || "(пустой ответ)";
-      history.push({ role: "assistant", content: reply });
-      return reply;
+      stats.session.errors++;
+      stats.lastUpdated = new Date().toISOString();
+      throw err;
     }
   }
-  return "⚠️ Слишком много шагов — задача оказалась сложной. Сформулируй конкретнее или разбей на части.";
+
+  recordSuccess(envelope, startedAt);
+  if (envelope.session_id) {
+    sessions.set(chatId, envelope.session_id);
+    saveSessions();
+  }
+  return envelope.result || "(пустой ответ)";
+}
+
+const ASK_ONCE_SYSTEM = "Answer directly and concisely in the language of the question (default Russian). Plain text only. Avoid using tools unless strictly necessary.";
+
+async function askOnce(userText, chatId = null) {
+  const effort = chatId ? getEffort(chatId) : config.CLAUDE_EFFORT;
+  const startedAt = Date.now();
+  try {
+    const envelope = await runClaude(buildArgs(userText, { effort, system: ASK_ONCE_SYSTEM }));
+    recordSuccess(envelope, startedAt);
+    return envelope.result || "(пустой ответ)";
+  } catch (err) {
+    stats.session.errors++;
+    stats.lastUpdated = new Date().toISOString();
+    throw err;
+  }
 }
 
 function setEffort(chatId, level) {
@@ -387,41 +181,30 @@ function setEffort(chatId, level) {
 }
 
 function getEffort(chatId) {
-  return sessionEffort.get(chatId) || "medium";
-}
-
-async function askOnce(userText, chatId = null) {
-  const effort = chatId ? getEffort(chatId) : "medium";
-  const messages = [
-    { role: "system", content: "You are a helpful assistant. Be concise and direct." },
-    { role: "user", content: userText },
-  ];
-  const data = await callAnthropic(messages, false, effort);
-  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-  return data.choices[0]?.message?.content || "(пустой ответ)";
-}
-
-function getStats() {
-  return { groq: { ...groqStats }, opencode: { ...opencodeStats }, anthropic: { ...anthropicStats } };
-}
-
-function getOpenCodeStats() {
-  return { ...opencodeStats };
+  return sessionEffort.get(chatId) || config.CLAUDE_EFFORT;
 }
 
 function resetHistory(chatId) {
-  histories.delete(chatId);
+  sessions.delete(chatId);
+  saveSessions();
+}
+
+function getStats() {
+  return {
+    claude: {
+      ...stats,
+      session: { ...stats.session },
+      activeSessions: sessions.size,
+    },
+  };
 }
 
 module.exports = {
-  callGroq,
-  callOpenCode,
-  callAnthropic,
   ask,
   askOnce,
-  getStats,
-  getOpenCodeStats,
-  resetHistory,
   setEffort,
   getEffort,
+  resetHistory,
+  getStats,
+  deps,
 };

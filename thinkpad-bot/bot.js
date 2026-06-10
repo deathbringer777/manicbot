@@ -74,6 +74,14 @@ async function handleText(chatId, text) {
 
   if (await routeCommand(chatId, cmd, arg)) return;
 
+  // A pending blog revision eats the next free-text message as feedback.
+  try {
+    const blog = require("./commands/blog.js");
+    if (await blog.consumePendingRevision(chatId, text)) return;
+  } catch (e) {
+    console.error("[blog revision error]", e.message);
+  }
+
   // Fast intents (screenshot, music, volume): instant, 0 tokens, survive rate limits.
   try {
     const intentOut = await intents.tryIntent(text);

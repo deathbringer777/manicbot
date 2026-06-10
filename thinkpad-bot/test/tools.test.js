@@ -24,36 +24,22 @@ describe("tools.js (registry)", () => {
 
   after(() => mock.reset());
 
-  it("должен экспортировать массив TOOLS_DEFINITIONS с функциями", () => {
-    assert.ok(Array.isArray(tools.TOOLS_DEFINITIONS));
-    assert.ok(tools.TOOLS_DEFINITIONS.length > 0);
-  });
-
-  it("каждый инструмент должен иметь name, description, parameters", () => {
-    for (const t of tools.TOOLS_DEFINITIONS) {
-      assert.ok(t.function.name, `tool missing name`);
-      assert.ok(t.function.description, `${t.function.name} missing description`);
-      assert.ok(t.function.parameters, `${t.function.name} missing parameters`);
-    }
-  });
-
-  it("должен содержать все необходимые инструменты", () => {
-    const names = tools.TOOLS_DEFINITIONS.map(t => t.function.name);
-    const required = ["run_shell", "screenshot", "mouse_move", "keyboard_type", "clipboard", "window_manage", "system_stats", "browser_screenshot", "ssh_exec"];
-    for (const name of required) {
-      assert.ok(names.includes(name), `missing tool: ${name}`);
-    }
-  });
-
-  it("runTool должен вернуть ошибку для неизвестного инструмента", async () => {
-    const result = await tools.runTool("unknown_tool", {});
-    assert.ok(result.includes("Неизвестный инструмент"));
+  // The OpenAI-style TOOLS_DEFINITIONS/runTool loop is gone: the claude CLI
+  // brings its own agentic tools. tools.js keeps only the prompt/context
+  // helpers, system stats and the cron registry.
+  it("не должен больше экспортировать LLM tool-loop (runTool/TOOLS_DEFINITIONS)", () => {
+    assert.strictEqual(tools.TOOLS_DEFINITIONS, undefined);
+    assert.strictEqual(tools.runTool, undefined);
   });
 
   it("getSystemPrompt должен возвращать промпт с контекстом", () => {
     const prompt = tools.getSystemPrompt();
-    assert.ok(prompt.includes("личный AI-ассистент"));
-    assert.ok(prompt.includes("run_shell"));
+    assert.ok(prompt.length > 0);
+  });
+
+  it("getContextText отдаёт сырой контекст из context/*.md", () => {
+    const ctx = tools.getContextText();
+    assert.strictEqual(typeof ctx, "string");
   });
 
   it("getStats должен вернуть статистику", async () => {

@@ -86,6 +86,9 @@ async function handle(cq) {
   const data = cq.data || "";
   try {
     if (data === "noop") return await tg.answerCallbackQuery(cq.id);
+    if (data.startsWith("blog:")) {
+      return await require("./commands/blog.js").handleCallback(cq);
+    }
     if (data.startsWith("nav:")) return await nav(cq, data.slice(4));
     if (data.startsWith("ask:")) return await ask(cq, data.slice(4));
     if (data.startsWith("do:")) return await doAction(cq, data.slice(3));

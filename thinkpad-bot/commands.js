@@ -143,48 +143,28 @@ async function renderHealth() {
   return { text: block(log, { title: "🏥 Health (последние запуски)", maxLines: 12 }) };
 }
 
-// ── /groq ─────────────────────────────────────────────────────────────────────
-function renderGroq() {
-  const stats = llm.getStats();
-  const { rl, session, lastUpdated, startedAt, model } = stats.groq;
-  const fmt = (iso) => new Date(iso).toLocaleString("ru-RU", { timeZone: "Europe/Warsaw" });
-  const lines = [`🤖 <b>Groq</b> — ${code(model)}`, `<i>обновлено ${esc(fmt(lastUpdated))}</i>`, ""];
-
-  if (rl.tokDayLimit) {
-    const limit = parseInt(rl.tokDayLimit);
-    const remaining = parseInt(rl.tokDayRemaining || 0);
-    lines.push(`📅 Токены/день  ${bar(((limit - remaining) / limit) * 100)}`);
-    lines.push(kv("осталось", `${remaining.toLocaleString()} · сброс ${rl.tokDayReset || "—"}`));
-    lines.push("");
-  }
-  if (rl.tokLimit) {
-    const limit = parseInt(rl.tokLimit);
-    const remaining = parseInt(rl.tokRemaining || 0);
-    lines.push(`⚡ Токены/мин  ${bar(((limit - remaining) / limit) * 100)}`);
-    lines.push("");
-  }
-  lines.push(`📊 <b>Сессия</b> · ${esc(fmt(startedAt))}`);
-  lines.push(kv("вызовов", session.calls));
-  lines.push(kv("токенов", session.totalTokens.toLocaleString()));
-  if (session.calls) lines.push(kv("в среднем", Math.round(session.totalTokens / session.calls)));
-
-  // Anthropic Claude fallback info
-  const ac = stats.anthropic;
-  if (ac.session.calls) {
-    lines.push("");
-    lines.push(`🧠 <b>Anthropic Claude</b> — ${code(ac.model)}`);
-    lines.push(kv("вызовов", ac.session.calls));
-    lines.push(kv("токенов", ac.session.totalTokens.toLocaleString()));
-  }
-
-  // OpenCode Zen fallback info
-  const oc = stats.opencode;
-  if (oc.session.calls) {
-    lines.push("");
-    lines.push(`🧩 <b>OpenCode Zen</b> — ${code(oc.model)}`);
-    lines.push(kv("вызовов", oc.session.calls));
-    lines.push(kv("токенов", oc.session.totalTokens.toLocaleString()));
-  }
+// ── /ai (Claude CLI on the Max subscription; /groq kept as an alias) ───────────
+function renderAi() {
+  const s = llm.getStats().claude;
+  const fmt = (iso) => iso
+    ? new Date(iso).toLocaleString("ru-RU", { timeZone: "Europe/Warsaw" })
+    : "—";
+  const avgSec = s.session.calls
+    ? Math.round(s.session.totalDurationMs / s.session.calls / 100) / 10
+    : 0;
+  const lines = [
+    `🧠 <b>Claude</b> — ${code(s.model)} <i>(CLI, подписка Max)</i>`,
+    `<i>обновлено ${esc(fmt(s.lastUpdated))}</i>`,
+    "",
+    `📊 <b>Сессия бота</b> · с ${esc(fmt(s.startedAt))}`,
+    kv("вызовов", s.session.calls),
+    kv("ошибок", s.session.errors),
+    s.session.calls ? kv("ср. время", `${avgSec}s`) : null,
+    kv("номинал. стоимость", `$${s.session.totalCostUsd.toFixed(2)} <i>(не списывается — подписка)</i>`),
+    kv("чат-сессий", s.activeSessions),
+    "",
+    `Глубина рассуждений: /effort · голос: Groq Whisper`,
+  ].filter((l) => l !== null);
 
   return { text: lines.join("\n"), keyboard: kb.screenKb("groq") };
 }
@@ -226,7 +206,7 @@ function renderHelp() {
     "",
     `<b>📊 Система</b>`,
     `/status — CPU, память, диск, PM2`,
-    `/ps — процессы PM2 · /disk — диски · /groq — лимиты Groq`,
+    `/ps — процессы PM2 · /disk — диски · /ai — Claude-статистика`,
     `/health — health-check · /leads — прогресс лидов`,
     "",
     `<b>🖥 Экран и ввод</b>`,
@@ -246,8 +226,9 @@ function renderHelp() {
     `/ping · /ip · /uptime · /battery · /wifi · /calc · /weather &lt;город&gt;`,
     `/find &lt;шаблон&gt; · /upload &lt;путь&gt; · /backup &lt;путь&gt; · /todo`,
     "",
-    `<b>🧠 ИИ</b>`,
-    `/translate · /summarize · /note — или просто пиши текстом`,
+    `<b>🧠 ИИ (Claude, подписка)</b>`,
+    `/ask — быстрый вопрос · /effort — глубина рассуждений`,
+    `/blog — черновики блога · /translate · /summarize — или просто пиши текстом`,
     "",
     `/reset — очистить историю чата`,
   ].join("\n");
@@ -277,7 +258,8 @@ const COMMANDS = {
   "/crons": renderCron,
   "/leads": renderLeads,
   "/health": renderHealth,
-  "/groq": renderGroq,
+  "/ai": renderAi,
+  "/groq": renderAi,
   "/screenshot": renderScreenshot,
   "/mouse": renderMouse,
   "/windows": renderWindows,

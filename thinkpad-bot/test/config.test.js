@@ -11,7 +11,8 @@ describe("config.js", () => {
     delete process.env.GROQ_KEY;
     delete process.env.ALLOWED_USER_ID;
     delete process.env.CHAT_ID;
-    delete process.env.GROQ_MODEL;
+    delete process.env.CLAUDE_MODEL;
+    delete process.env.CLAUDE_EFFORT;
   });
 
   after(() => {
@@ -24,7 +25,6 @@ describe("config.js", () => {
     process.env.GROQ_KEY = "test:key";
     process.env.ALLOWED_USER_ID = "12345";
     process.env.CHAT_ID = "12345";
-    process.env.GROQ_MODEL = "test-model";
 
     // Force re-read by clearing module cache
     delete require.cache[path.resolve(__dirname, "../config.js")];
@@ -34,10 +34,14 @@ describe("config.js", () => {
     assert.strictEqual(config.GROQ_KEY, "test:key");
     assert.strictEqual(config.ALLOWED_USER_ID, 12345);
     assert.strictEqual(config.CHAT_ID, 12345);
-    assert.strictEqual(config.GROQ_MODEL, "test-model");
     assert.strictEqual(config.POLL_TIMEOUT, 30);
-    assert.strictEqual(config.MAX_TOKENS, 4096);
-    assert.strictEqual(config.TEMPERATURE, 0.2);
+    // Claude CLI defaults (the subscription-billed text-LLM lane)
+    assert.strictEqual(config.CLAUDE_BIN, "claude");
+    assert.strictEqual(config.CLAUDE_MODEL, "sonnet");
+    assert.strictEqual(config.CLAUDE_EFFORT, "medium");
+    assert.ok(config.CLAUDE_TIMEOUT_MS > 0);
+    // Whisper voice lane stays on Groq
+    assert.strictEqual(config.WHISPER_MODEL, "whisper-large-v3-turbo");
   });
 
   it("должен упасть если нет TELEGRAM_TOKEN", () => {

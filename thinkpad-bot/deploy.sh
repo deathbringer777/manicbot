@@ -27,10 +27,12 @@ source .deploy.local
 SSH_OPTS="-o ConnectTimeout=15 -o BatchMode=yes"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 
-echo "▶ Backing up live copy → ${DEPLOY_PATH}.bak.${STAMP}"
+# Code-only backup: .env (secrets) and node_modules must never be copied
+# into .bak dirs — old backups used to multiply token copies on disk.
+echo "▶ Backing up live code → ${DEPLOY_PATH}.bak.${STAMP}"
 ssh $SSH_OPTS "$DEPLOY_HOST" \
-  "cp -r '${DEPLOY_PATH}' '${DEPLOY_PATH}.bak.${STAMP}' && \
-   ls -dt '${DEPLOY_PATH}.bak.'* 2>/dev/null | tail -n +6 | xargs -r rm -rf"  # keep last 5 backups
+  "rsync -a --exclude '.env' --exclude 'node_modules' '${DEPLOY_PATH}/' '${DEPLOY_PATH}.bak.${STAMP}/' && \
+   ls -dt '${DEPLOY_PATH}.bak.'* 2>/dev/null | tail -n +3 | xargs -r rm -rf"  # keep last 2 backups
 
 echo "▶ Syncing source (secrets, deps, runtime state stay on the server)…"
 rsync -az --delete \

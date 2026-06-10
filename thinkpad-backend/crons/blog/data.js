@@ -1,0 +1,73 @@
+'use strict';
+/**
+ * Static data for the blog pipeline: curated image pool and fallback topics.
+ * Ported verbatim from the v1 blog-autopilot.js.
+ */
+
+const IMAGE_POOL = [
+  { url: 'https://images.unsplash.com/photo-1607779097040-26e80aa78e66?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['manicure', 'nails', 'beauty'] },
+  { url: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['messenger', 'communication', 'app'] },
+  { url: 'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['ai', 'robot', 'automation'] },
+  { url: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['pricing', 'money', 'business'] },
+  { url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['analytics', 'data', 'charts'] },
+  { url: 'https://images.unsplash.com/photo-1571290274554-6a2eaa771e5f?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['client', 'service', 'hands'] },
+  { url: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['technician', 'work', 'salon'] },
+  { url: 'https://images.unsplash.com/photo-1633681926022-84c23e8cb2d6?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['empty', 'chair', 'waiting'] },
+  { url: 'https://images.unsplash.com/photo-1606327054629-64c8b0fd6e4f?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['calendar', 'schedule', 'google'] },
+  { url: 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=1600&q=80&auto=format&fit=crop', credit: 'Unsplash', keywords: ['whatsapp', 'instagram', 'chat'] },
+  { url: 'https://images.pexels.com/photos/4960359/pexels-photo-4960359.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['nail', 'technician', 'client'] },
+  { url: 'https://images.pexels.com/photos/7388966/pexels-photo-7388966.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['team', 'salon', 'staff'] },
+  { url: 'https://images.pexels.com/photos/3183125/pexels-photo-3183125.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['laptop', 'analytics', 'desk'] },
+  { url: 'https://images.pexels.com/photos/1303087/pexels-photo-1303087.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['gift', 'present', 'marketing'] },
+  { url: 'https://images.pexels.com/photos/8886104/pexels-photo-8886104.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['phone', 'client', 'booking'] },
+  { url: 'https://images.pexels.com/photos/3764649/pexels-photo-3764649.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['appointment', 'calendar', 'planner'] },
+  { url: 'https://images.pexels.com/photos/3998391/pexels-photo-3998391.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['social', 'media', 'marketing'] },
+  { url: 'https://images.pexels.com/photos/4101144/pexels-photo-4101144.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['smartphone', 'online', 'booking'] },
+  { url: 'https://images.pexels.com/photos/4210355/pexels-photo-4210355.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['growth', 'success', 'business'] },
+  { url: 'https://images.pexels.com/photos/4498124/pexels-photo-4498124.jpeg?auto=compress&cs=tinysrgb&w=1600', credit: 'Pexels', keywords: ['relax', 'spa', 'wellness'] },
+];
+
+const FALLBACK_TOPICS = [
+  { slug: 'booking-reminders-automation', category: 'tips',
+    queryRu: 'напоминания о записи для nail-салона: как снизить неявки (no-show)',
+    queryEn: 'automated booking reminders for nail salons: reduce no-shows',
+    keywords: { ru: ['напоминания о записи', 'no-show салон', 'снижение неявок', 'автоматические напоминания'], ua: ['нагадування про запис', 'no-show салон', 'зниження неявок', 'автоматичні нагадування'], en: ['booking reminders', 'no-show salon', 'reduce missed appointments', 'automated reminders'], pl: ['przypomnienia o wizycie', 'no-show salon', 'zmniejszenie nieobecności', 'automatyczne przypomnienia'] } },
+  { slug: 'instagram-direct-bookings', category: 'tips',
+    queryRu: 'как настроить запись через Instagram Direct для салона красоты',
+    queryEn: 'how to set up Instagram Direct booking for a beauty salon',
+    keywords: { ru: ['Instagram Direct запись', 'салон красоты инстаграм', 'мессенджер запись'], ua: ['Instagram Direct запис', 'салон краси інстаграм', 'месенджер запис'], en: ['Instagram Direct booking', 'beauty salon Instagram', 'messenger booking'], pl: ['Instagram Direct rezerwacja', 'salon urody Instagram', 'rezerwacja przez komunikator'] } },
+  { slug: 'client-feedback-loops', category: 'business',
+    queryRu: 'сбор обратной связи от клиентов nail-салона: отзывы, опросы, аналитика',
+    queryEn: 'client feedback for nail salons: reviews, surveys, analytics',
+    keywords: { ru: ['обратная связь салон', 'отзывы клиентов', 'опрос клиентов nail-салона'], ua: ["зворотній зв'язок салон", 'відгуки клієнтів', 'опитування клієнтів nail-салону'], en: ['client feedback salon', 'customer reviews', 'nail salon surveys'], pl: ['informacje zwrotne salon', 'opinie klientów', 'ankiety salon paznokci'] } },
+  { slug: 'staff-scheduling-software', category: 'business',
+    queryRu: 'программы для управления расписанием сотрудников салона красоты',
+    queryEn: 'staff scheduling software for beauty salons',
+    keywords: { ru: ['расписание сотрудников салон', 'управление персоналом', 'график работы мастеров'], ua: ['розклад співробітників салон', 'управління персоналом', 'графік роботи майстрів'], en: ['staff scheduling salon', 'employee management', 'master schedule'], pl: ['harmonogram pracowników salon', 'zarządzanie personelem', 'grafik masterów'] } },
+  { slug: 'online-booking-psychology', category: 'trends',
+    queryRu: 'психология онлайн-записи: почему клиенты выбирают салон по кнопке "записаться"',
+    queryEn: 'psychology of online booking: why clients choose a salon by the "book now" button',
+    keywords: { ru: ['психология записи', 'онлайн бронирование', 'поведение клиентов'], ua: ['психологія запису', 'онлайн бронювання', 'поведінка клієнтів'], en: ['booking psychology', 'online reservation', 'client behavior'], pl: ['psychologia rezerwacji', 'rezerwacja online', 'zachowanie klientów'] } },
+  { slug: 'work-hours-optimization', category: 'tips',
+    queryRu: 'оптимальное рабочее время nail-салона: часы пик, выходные, продление',
+    queryEn: 'optimal nail salon working hours: peak times, weekends, extended hours',
+    keywords: { ru: ['рабочее время салона', 'часы пик салон', 'продление работы салона'], ua: ['робочий час салону', 'години пік салон', 'подовження роботи салону'], en: ['salon working hours', 'peak hours salon', 'extended salon hours'], pl: ['godziny pracy salonu', 'godziny szczytu salon', 'wydłużone godziny salonu'] } },
+  { slug: 'loyalty-programs-nail', category: 'business',
+    queryRu: 'программы лояльности для nail-салона: копилки, скидки, рефералы',
+    queryEn: 'loyalty programs for nail salons: stamp cards, discounts, referrals',
+    keywords: { ru: ['программа лояльности салон', 'копилка маникюр', 'скидки постоянным клиентам', 'реферальная программа'], ua: ['програма лояльності салон', 'скарбничка манікюр', 'знижки постійним клієнтам', 'реферальна програма'], en: ['loyalty program salon', 'stamp card manicure', 'repeat client discounts', 'referral program'], pl: ['program lojalnościowy salon', 'karta stałego klienta manicure', 'rabaty dla stałych klientów', 'program poleceń'] } },
+  { slug: 'google-business-profile', category: 'tips',
+    queryRu: 'Google Business Profile для салона красоты: как подняться в поиске',
+    queryEn: 'Google Business Profile for beauty salons: how to rank higher',
+    keywords: { ru: ['Google Business Profile салон', 'SEO салона красоты', 'продвижение салона в Google'], ua: ['Google Business Profile салон', 'SEO салону краси', 'просування салону в Google'], en: ['Google Business Profile salon', 'beauty salon SEO', 'salon Google ranking'], pl: ['Google Business Profile salon', 'SEO salonu urody', 'pozycjonowanie salonu Google'] } },
+  { slug: 'mobile-app-vs-web-booking', category: 'trends',
+    queryRu: 'мобильное приложение или веб-запись: что лучше для салона в 2026',
+    queryEn: 'mobile app vs web booking: what is better for a salon in 2026',
+    keywords: { ru: ['мобильное приложение запись', 'веб-виджет для салона', 'онлайн запись приложение'], ua: ['мобільний застосунок запис', 'веб-віджет для салону', 'онлайн запис застосунок'], en: ['mobile app booking', 'web widget salon', 'online booking app vs web'], pl: ['aplikacja mobilna rezerwacja', 'widget internetowy salon', 'rezerwacja online aplikacja vs web'] } },
+  { slug: 'seasonal-nail-trends', category: 'trends',
+    queryRu: 'сезонные тренды маникюра 2026: лето, осень, зима, весна',
+    queryEn: 'seasonal nail trends 2026: summer, fall, winter, spring',
+    keywords: { ru: ['тренды маникюра 2026', 'сезонный маникюр', 'модные цвета маникюра'], ua: ['тренди манікюру 2026', 'сезонний манікюр', 'модні кольори манікюру'], en: ['nail trends 2026', 'seasonal manicure', 'trendy nail colors'], pl: ['trendy paznokci 2026', 'sezonowy manicure', 'modne kolory paznokci'] } },
+];
+
+module.exports = { IMAGE_POOL, FALLBACK_TOPICS };

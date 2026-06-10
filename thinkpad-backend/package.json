@@ -1,10 +1,11 @@
 {
   "name": "manicbot-backend",
-  "version": "1.0.0",
-  "description": "",
+  "version": "1.1.0",
+  "description": "ThinkPad sidecar crons for ManicBot (nightly backup, lead parsers, blog autopilot)",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test --test-concurrency=1",
+    "test:watch": "node --test --watch --test-concurrency=1"
   },
   "keywords": [],
   "author": "",

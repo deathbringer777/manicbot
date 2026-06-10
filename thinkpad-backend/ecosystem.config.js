@@ -16,28 +16,28 @@ module.exports = {
     {
       name: 'health-check',
       script: `${BASE}/crons/health-check.js`,
-      cron_restart: '0 * * * *',   // hourly
+      cron_restart: '*/30 * * * *',   // every 30 min (2× hourly)
       autorestart: false,
       watch: false,
     },
     {
       name: 'nightly',
       script: `${BASE}/crons/nightly.js`,
-      cron_restart: '0 1 * * *',   // 01:00 — tenant sync + full D1 backup
+      cron_restart: '0 1,13 * * *',   // 01:00 + 13:00 — tenant sync + full D1 backup (2×/day)
       autorestart: false,
       watch: false,
     },
     {
       name: 'blog-autopilot',
       script: `${BASE}/crons/blog/autopilot.js`,
-      cron_restart: '0 2 * * *',   // 02:00 — draft + TG approval buttons
+      cron_restart: '0 2,14 * * *',   // 02:00 + 14:00 — draft + TG approval (2×/day; gated by pending draft)
       autorestart: false,
       watch: false,
     },
     {
       name: 'lead-scout',
       script: `${BASE}/crons/lead-scout/index.js`,
-      cron_restart: '0 * * * *',   // hourly slot rotation
+      cron_restart: '*/30 * * * *',   // every 30 min slot rotation (2× hourly)
       autorestart: false,
       watch: false,
       env: {
@@ -49,7 +49,7 @@ module.exports = {
     {
       name: 'booksy-full',
       script: `${BASE}/crons/lead-scout/booksy-full.js`,
-      cron_restart: '30 3 * * *',  // 03:30 — keeps clear of nightly (01:00) and blog (02:00)
+      cron_restart: '30 3,15 * * *',  // 03:30 + 15:30 — full crawl (2×/day), clear of nightly/blog
       autorestart: false,
       watch: false,
       env: {

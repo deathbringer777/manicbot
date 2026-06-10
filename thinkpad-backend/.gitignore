@@ -1,0 +1,14 @@
+# Secrets / infra details stay on the server only (public repo!)
+.env
+.deploy.local
+
+# Dependencies
+node_modules/
+
+# Runtime state — never versioned
+logs/
+locks/
+backups/
+data/
+reports/
+marketing/

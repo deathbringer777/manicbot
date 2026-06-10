@@ -198,6 +198,39 @@ function buildPreviewKeyboard(slug) {
   ];
 }
 
+// ─── Topic rotation (state shape identical to v1) ─────────────────────────────
+
+const TOPIC_CACHE_TTL_DAYS = 7;
+const USED_SLUGS_KEPT = 5;
+
+function pickTopicFromPool(state, pool, source) {
+  const s = { topicIndex: 0, usedSlugs: [], ...state };
+  if (s.source !== source) {
+    s.topicIndex = 0;
+    s.usedSlugs = [];
+  }
+  let topic = null;
+  const recentlyUsed = new Set(s.usedSlugs || []);
+  for (let attempt = 0; attempt < pool.length * 2; attempt++) {
+    const candidate = pool[s.topicIndex % pool.length];
+    s.topicIndex = (s.topicIndex + 1) % pool.length;
+    if (!recentlyUsed.has(candidate.slug) || recentlyUsed.size >= pool.length) {
+      topic = candidate;
+      break;
+    }
+  }
+  if (!topic) topic = pool[0];
+  s.usedSlugs = [...(s.usedSlugs || []), topic.slug].slice(-USED_SLUGS_KEPT);
+  s.source = source;
+  return { topic, state: s };
+}
+
+function shouldRefreshTopics(topics, mtimeMs, nowMs) {
+  const ageDays = (nowMs - (mtimeMs || 0)) / 86400000;
+  const usable = Array.isArray(topics) && topics.length > 0 && topics.some(t => t && t.slug);
+  return !(usable && ageDays < TOPIC_CACHE_TTL_DAYS);
+}
+
 // ─── Draft store ──────────────────────────────────────────────────────────────
 
 function createDraftStore(baseDir = BASE_DIR) {
@@ -249,5 +282,6 @@ module.exports = {
   parseArticleJSON, validateArticle, validateTopics,
   buildRow, pickImage,
   buildPreviewText, buildPreviewKeyboard,
+  pickTopicFromPool, shouldRefreshTopics,
   createDraftStore,
 };

@@ -115,13 +115,17 @@ test('preview: HTML text contains RU title/excerpt and word stats; keyboard fits
 
   const kb = core.buildPreviewKeyboard('test-topic');
   const flat = kb.flat();
-  assert.equal(flat.length, 3);
+  assert.equal(flat.length, 4); // read + publish + revise + skip
   for (const btn of flat) {
     assert.ok(Buffer.byteLength(btn.callback_data) <= 64, btn.callback_data);
   }
   assert.ok(flat.some(b => b.callback_data === 'blog:pub:test-topic'));
   assert.ok(flat.some(b => b.callback_data === 'blog:rev:test-topic'));
   assert.ok(flat.some(b => b.callback_data === 'blog:skip:test-topic'));
+  // The owner must be able to read the full article before approving.
+  // (Full-text rendering + language switching live in the bot — see
+  // thinkpad-bot/test/blog-cmd.test.js — since the bot handles the callback.)
+  assert.ok(flat.some(b => b.callback_data === 'blog:read:test-topic'));
 });
 
 test('draft store: save → list pending → move to published', () => {

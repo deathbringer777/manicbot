@@ -189,7 +189,11 @@ function buildPreviewText(draft) {
 }
 
 function buildPreviewKeyboard(slug) {
+  // "Читать целиком" lets the owner read the full article in Telegram before
+  // deciding — the preview above shows only the excerpt. The bot renders the
+  // full body (commands/blog.js handles blog:read / blog:rl).
   return [
+    [{ text: '📖 Читать целиком', callback_data: `blog:read:${slug}` }],
     [{ text: '✅ Опубликовать', callback_data: `blog:pub:${slug}` }],
     [
       { text: '✏️ Переделать', callback_data: `blog:rev:${slug}` },

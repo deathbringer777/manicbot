@@ -115,4 +115,49 @@ describe("blog callbacks", () => {
     assert.ok(sent.length >= 1);
     assert.ok(sent.some(c => String(c.opts.body).includes("Draft not found")));
   });
+
+  it("blog:read:<slug> sends the full RU body + language buttons (no publish.js)", async () => {
+    // a real draft with a long body
+    const dir = path.join(backendDir, "marketing", "articles", "drafts");
+    fs.mkdirSync(dir, { recursive: true });
+    const body = Array.from({ length: 450 }, (_, i) => `слово${i}`).join(" ");
+    const langs = ["ru", "ua", "en", "pl"];
+    const article = { titles: {}, excerpts: {}, bodies: {} };
+    for (const l of langs) { article.titles[l] = `Заголовок ${l}`; article.excerpts[l] = `e ${l}`; article.bodies[l] = body; }
+    fs.writeFileSync(path.join(dir, "read-me.json"), JSON.stringify({ slug: "read-me", topic: { category: "tips", keywords: {} }, article, image: { url: "u", credit: "c" } }));
+
+    const execCalls = [];
+    blogCmd.deps.execFile = (cmd, args, opts, cb) => { execCalls.push(args); cb(null, "{}", ""); };
+
+    await blogCmd.handleCallback(cq("blog:read:read-me"));
+    assert.strictEqual(execCalls.length, 0, "read must not run publish.js");
+    const sent = fetchCalls.filter(c => c.url.includes("sendMessage"));
+    assert.ok(sent.length >= 1);
+    const joined = sent.map(c => String(c.opts.body)).join("");
+    assert.ok(joined.includes("Заголовок ru"), "sends the RU title");
+    assert.ok(joined.includes("слово0"), "sends the full RU body");
+    assert.ok(joined.includes("blog:rl:read-me:en"), "offers language buttons");
+  });
+
+  it("blog:read on a published article still works (findAnywhere)", async () => {
+    const dir = path.join(backendDir, "marketing", "articles", "published");
+    fs.mkdirSync(dir, { recursive: true });
+    const article = { titles: { ru: "Опубликованная" }, excerpts: { ru: "e" }, bodies: { ru: "полный текст тут" } };
+    ["ua", "en", "pl"].forEach(l => { article.titles[l] = "T"; article.excerpts[l] = "e"; article.bodies[l] = "x"; });
+    fs.writeFileSync(path.join(dir, "done.json"), JSON.stringify({ slug: "done", topic: { keywords: {} }, article, image: { url: "u", credit: "c" } }));
+    await blogCmd.handleCallback(cq("blog:read:done"));
+    const sent = fetchCalls.filter(c => c.url.includes("sendMessage"));
+    assert.ok(sent.some(c => String(c.opts.body).includes("Опубликованная")));
+  });
+
+  it("blog:rl:<slug>:en sends the English body", async () => {
+    const dir = path.join(backendDir, "marketing", "articles", "drafts");
+    fs.mkdirSync(dir, { recursive: true });
+    const article = { titles: {}, excerpts: {}, bodies: {} };
+    ["ru", "ua", "en", "pl"].forEach(l => { article.titles[l] = `T-${l}`; article.excerpts[l] = "e"; article.bodies[l] = `body-${l}`; });
+    fs.writeFileSync(path.join(dir, "multi.json"), JSON.stringify({ slug: "multi", topic: { keywords: {} }, article, image: { url: "u", credit: "c" } }));
+    await blogCmd.handleCallback(cq("blog:rl:multi:en"));
+    const sent = fetchCalls.filter(c => c.url.includes("sendMessage"));
+    assert.ok(sent.some(c => String(c.opts.body).includes("body-en")));
+  });
 });

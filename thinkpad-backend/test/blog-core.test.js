@@ -35,16 +35,54 @@ function sampleTopic() {
 }
 
 test('validateArticle: passes on a complete 4-lang article', () => {
-  assert.doesNotThrow(() => core.validateArticle(sampleArticle()));
+  assert.doesNotThrow(() => core.validateArticle(sampleArticle(2000)));
 });
 
 test('validateArticle: fails on missing language and on too-short body', () => {
-  const broken = sampleArticle();
+  const broken = sampleArticle(2000);
   delete broken.titles.pl;
   assert.throws(() => core.validateArticle(broken), /pl/);
 
-  const short = sampleArticle(40); // garbage-length body must be rejected
+  const short = sampleArticle(400); // 400 words is now far below the ~2000 target
   assert.throws(() => core.validateArticle(short), /short/i);
+});
+
+test('long-form target: ~2000 words per language is the accepted band', () => {
+  assert.ok(core.MIN_BODY_WORDS >= 1400, 'min must enforce long-form');
+  assert.ok(core.MAX_BODY_WORDS >= 2400, 'max must allow ~2000+ words');
+  assert.doesNotThrow(() => core.validateOneLang(
+    { title: 'T', excerpt: 'E', body: Array.from({ length: 1900 }, (_, i) => `w${i}`).join(' ') }, 'ru'));
+  assert.throws(() => core.validateOneLang(
+    { title: 'T', excerpt: 'E', body: 'too short' }, 'ru'), /short/i);
+});
+
+test('bodyPrompt: asks for ONE language, ~2000 words, single-object JSON', () => {
+  const p = core.bodyPrompt(sampleTopic(), 'ru');
+  assert.ok(/2000|2,000/.test(p), 'states the ~2000-word target');
+  assert.ok(/Russian/i.test(p));
+  assert.ok(/"title"[\s\S]*"excerpt"[\s\S]*"body"/.test(p), 'single {title,excerpt,body} shape');
+  assert.ok(!/titles|bodies/.test(p), 'NOT the old 4-language multi-object shape');
+});
+
+test('translatePrompt: localizes a written RU article into another language', () => {
+  const source = { title: 'Заголовок', excerpt: 'Краткое', body: 'Тело статьи на русском.' };
+  const p = core.translatePrompt(sampleTopic(), 'ru', 'pl', source);
+  assert.ok(/Polish/i.test(p));
+  assert.ok(p.includes('Тело статьи'), 'embeds the source article');
+  assert.ok(/localize|localis|adapt/i.test(p), 'localize, not literal translate (SEO keywords)');
+});
+
+test('assembleArticle: per-language {title,excerpt,body} → {titles,excerpts,bodies}', () => {
+  const out = core.assembleArticle({
+    ru: { title: 'Tr', excerpt: 'Er', body: 'Br' },
+    ua: { title: 'Tu', excerpt: 'Eu', body: 'Bu' },
+    en: { title: 'Te', excerpt: 'Ee', body: 'Be' },
+    pl: { title: 'Tp', excerpt: 'Ep', body: 'Bp' },
+  });
+  assert.deepEqual(Object.keys(out).sort(), ['bodies', 'excerpts', 'titles']);
+  assert.equal(out.titles.en, 'Te');
+  assert.equal(out.bodies.pl, 'Bp');
+  assert.equal(out.excerpts.ru, 'Er');
 });
 
 test('parseArticleJSON: direct, fenced, embedded; throws on garbage', () => {

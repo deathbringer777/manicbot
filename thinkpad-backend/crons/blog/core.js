@@ -12,8 +12,12 @@ const { BASE_DIR } = require('../../lib/log');
 const { IMAGE_POOL, FALLBACK_TOPICS } = require('./data');
 
 const LANGS = ['ru', 'ua', 'en', 'pl'];
-const MIN_BODY_WORDS = 250;  // below this the article is garbage, not "concise"
-const MAX_BODY_WORDS = 1200;
+const LANG_NAMES = { ru: 'Russian', ua: 'Ukrainian', en: 'English', pl: 'Polish' };
+// Long-form target: ~2000 words PER language. Articles are written once and
+// localized (i18n), so each language carries the full ~2000-word body.
+const TARGET_WORDS = 2000;
+const MIN_BODY_WORDS = 1500;
+const MAX_BODY_WORDS = 2800;
 
 // ─── Time ─────────────────────────────────────────────────────────────────────
 
@@ -49,41 +53,68 @@ IMPORTANT: Return ONLY valid JSON. No markdown fences, no other text. The exact 
 ]}`;
 }
 
-function articlePrompt(topic) {
-  return `You are a blog writer for ManicBot — a SaaS platform that helps nail salons with online booking, AI receptionist, and marketing automation.
+// Write the article ONCE, in a single language, ~2000 words. Asking for all
+// four languages in one JSON would be ~8000 words → unreliable to parse; we
+// generate one body and localize the rest (see translatePrompt).
+function bodyPrompt(topic, lang = 'ru') {
+  const langName = LANG_NAMES[lang] || 'Russian';
+  return `You are an expert blog writer for ManicBot — a SaaS platform that helps nail salons with online booking, an AI receptionist, and marketing automation.
 
-Write a blog article about: "${topic.queryEn}".
+Write ONE in-depth, genuinely useful blog article in ${langName} about: "${topic.queryEn}".
 
 RULES:
-- Write in PLAIN TEXT with paragraphs separated by double newlines. No Markdown (no ##, no **, no *).
-- Write for salon owners in Poland, Ukraine, and Russian-speaking markets.
-- Include practical tips and real numbers/statistics.
-- Each language variant must be 400-600 words.
-- Active voice, short paragraphs, practical tone.
-- End with a soft CTA — mention ManicBot as a solution but don't make it the main focus.
-- The article MUST be useful even if the reader never uses ManicBot.
+- Language: ${langName}. Write natively, not translated.
+- Length: about ${TARGET_WORDS} words (between ${MIN_BODY_WORDS} and ${MAX_BODY_WORDS}). This is a long-form pillar article — go deep.
+- Audience: nail-salon owners in Poland, Ukraine, and Russian-speaking markets.
+- Structure: a strong intro, 5-8 themed sections (each a few paragraphs), and a conclusion. Use a plain-text section heading line before each section.
+- Include concrete, practical advice, realistic numbers/statistics, examples, and step-by-step tips.
+- PLAIN TEXT only: paragraphs separated by double newlines, headings on their own line. NO Markdown (no #, no **, no bullets with * or -).
+- Active voice, practical tone, no fluff. Must be useful even to a reader who never uses ManicBot.
+- End with a soft CTA mentioning ManicBot as one solution, not the main focus.
 
-Respond with valid JSON ONLY. The JSON must match this EXACT structure:
-{
-  "titles": { "ru": "title", "ua": "title", "en": "title", "pl": "title" },
-  "excerpts": { "ru": "short summary 1-2 sentences", "ua": "short summary", "en": "short summary", "pl": "short summary" },
-  "bodies": { "ru": "full article text in Russian", "ua": "full article text in Ukrainian", "en": "full article text in English", "pl": "full article text in Polish" }
+Respond with valid JSON ONLY (no markdown fences), this EXACT single-object shape:
+{"title": "...", "excerpt": "1-2 sentence summary", "body": "the full ~${TARGET_WORDS}-word article in ${langName}"}`;
 }
 
-Each body must be 400-600 words of useful, practical content about "${topic.queryRu}".`;
+// Localize an already-written article into another language, keeping length,
+// structure and facts but adapting phrasing and SEO keywords to that market.
+function translatePrompt(topic, fromLang, toLang, source) {
+  const fromName = LANG_NAMES[fromLang] || fromLang;
+  const toName = LANG_NAMES[toLang] || toLang;
+  return `You are a senior localization editor for ManicBot (nail-salon SaaS).
+
+Below is a long-form blog article written in ${fromName} (as JSON). Localize it into ${toName} for nail-salon owners in that market.
+
+Source (${fromName}):
+${JSON.stringify(source)}
+
+RULES:
+- Produce natural, native ${toName} — localize, do NOT translate word-for-word. Adapt idioms, examples and SEO keywords to the ${toName}-speaking market.
+- Keep the SAME structure, section count and approximate length (~${TARGET_WORDS} words, between ${MIN_BODY_WORDS} and ${MAX_BODY_WORDS}).
+- Keep all facts, numbers and the soft ManicBot CTA.
+- PLAIN TEXT only, no Markdown.
+
+Respond with valid JSON ONLY (no fences), this EXACT shape:
+{"title": "...", "excerpt": "1-2 sentence summary in ${toName}", "body": "the full localized article in ${toName}"}`;
 }
 
-function revisePrompt(draft, feedback) {
-  return `You are an editor revising a 4-language blog article for ManicBot (nail-salon SaaS).
+function revisePrompt(draft, feedback, lang = 'ru') {
+  const langName = LANG_NAMES[lang] || 'Russian';
+  const source = {
+    title: draft.article.titles[lang],
+    excerpt: draft.article.excerpts[lang],
+    body: draft.article.bodies[lang],
+  };
+  return `You are an editor revising a long-form ${langName} blog article for ManicBot (nail-salon SaaS).
 
-Here is the current article as JSON:
-${JSON.stringify({ titles: draft.article.titles, excerpts: draft.article.excerpts, bodies: draft.article.bodies })}
+Current article (${langName}, as JSON):
+${JSON.stringify(source)}
 
-Revision instructions from the owner (apply them to ALL four languages, keep meaning consistent across languages):
+Revision instructions from the owner:
 "${feedback}"
 
-Keep the same plain-text format (no Markdown), 400-600 words per body, soft ManicBot CTA at the end.
-Respond with valid JSON ONLY in the exact same {"titles": {...}, "excerpts": {...}, "bodies": {...}} structure.`;
+Keep plain-text format (no Markdown), keep it long-form (~${TARGET_WORDS} words), keep the soft ManicBot CTA.
+Respond with valid JSON ONLY, the EXACT shape: {"title": "...", "excerpt": "...", "body": "..."}`;
 }
 
 // ─── Parsing & validation ─────────────────────────────────────────────────────
@@ -113,6 +144,45 @@ function validateArticle(article) {
     if (words > MAX_BODY_WORDS) throw new Error(`Body for ${lang} is too long (${words} words)`);
   }
   return true;
+}
+
+// Validate a single-language {title, excerpt, body} object (one i18n unit).
+function validateOneLang(obj, lang) {
+  if (!obj?.title) throw new Error(`Missing title for ${lang}`);
+  if (!obj?.excerpt) throw new Error(`Missing excerpt for ${lang}`);
+  if (!obj?.body) throw new Error(`Missing body for ${lang}`);
+  const words = String(obj.body).trim().split(/\s+/).length;
+  if (words < MIN_BODY_WORDS) throw new Error(`Body for ${lang} is too short (${words} words, need ~${TARGET_WORDS})`);
+  if (words > MAX_BODY_WORDS) throw new Error(`Body for ${lang} is too long (${words} words)`);
+  return true;
+}
+
+// Parse a single-language {title, excerpt, body} object from an LLM response.
+function parseOneJSON(text) {
+  const raw = String(text ?? '');
+  try { return JSON.parse(raw); } catch { /* keep trying */ }
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) {
+    try { return JSON.parse(fence[1].trim()); } catch { /* keep trying */ }
+  }
+  const brace = raw.match(/\{[\s\S]*"body"[\s\S]*\}/);
+  if (brace) {
+    try { return JSON.parse(brace[0]); } catch { /* fall through */ }
+  }
+  throw new Error('Could not parse single-language JSON from LLM response');
+}
+
+// Fold per-language {title,excerpt,body} units into the {titles,excerpts,bodies}
+// shape the rest of the pipeline (buildRow, D1, preview) expects.
+function assembleArticle(perLang) {
+  const titles = {}, excerpts = {}, bodies = {};
+  for (const lang of LANGS) {
+    const u = perLang[lang] || {};
+    titles[lang] = u.title;
+    excerpts[lang] = u.excerpt;
+    bodies[lang] = u.body;
+  }
+  return { titles, excerpts, bodies };
 }
 
 function validateTopics(topics) {
@@ -282,8 +352,10 @@ module.exports = {
   LANGS, MIN_BODY_WORDS, MAX_BODY_WORDS,
   IMAGE_POOL, FALLBACK_TOPICS,
   getSeason,
-  topicDiscoveryPrompt, articlePrompt, revisePrompt,
-  parseArticleJSON, validateArticle, validateTopics,
+  LANG_NAMES, TARGET_WORDS,
+  topicDiscoveryPrompt, bodyPrompt, translatePrompt, revisePrompt,
+  parseArticleJSON, parseOneJSON, validateArticle, validateOneLang, validateTopics,
+  assembleArticle,
   buildRow, pickImage,
   buildPreviewText, buildPreviewKeyboard,
   pickTopicFromPool, shouldRefreshTopics,

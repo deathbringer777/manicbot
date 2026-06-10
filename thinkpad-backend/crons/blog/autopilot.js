@@ -23,6 +23,13 @@ const { createTg } = require('../../lib/tg');
 const { askClaude } = require('../../lib/claude');
 const { createD1 } = require('../../lib/d1');
 const core = require('./core');
+const { generateArticle: generateLocalized } = require('./generate');
+
+// Adapter: generate.js expects ask(prompt) -> text; claude returns an envelope.
+async function askText(prompt) {
+  const out = await askClaude(prompt, { timeoutMs: GENERATION_TIMEOUT_MS });
+  return out.text;
+}
 
 const STATE_FILE = path.join(BASE_DIR, 'marketing', 'blog-autopilot-state.json');
 const TOPICS_FILE = path.join(BASE_DIR, 'marketing', 'blog-topics.json');
@@ -68,21 +75,8 @@ async function discoverTopics(logger) {
 }
 
 async function generateArticle(topic, logger) {
-  let lastErr;
-  for (let attempt = 1; attempt <= GEN_ATTEMPTS; attempt++) {
-    try {
-      const out = await askClaude(core.articlePrompt(topic), {
-        json: true, timeoutMs: GENERATION_TIMEOUT_MS,
-      });
-      core.validateArticle(out.json);
-      return out.json;
-    } catch (err) {
-      lastErr = err;
-      logger.log(`Generation attempt ${attempt}/${GEN_ATTEMPTS} failed: ${err.message}`);
-      if (attempt < GEN_ATTEMPTS) await new Promise(r => setTimeout(r, attempt * 15000));
-    }
-  }
-  throw new Error(`Article generation failed after ${GEN_ATTEMPTS} attempts: ${lastErr.message}`);
+  // i18n: write the ~2000-word body once (RU), then localize to ua/en/pl.
+  return generateLocalized({ topic, ask: askText, logger, attemptsPerLang: GEN_ATTEMPTS });
 }
 
 async function slugExists(slug, store, d1, logger) {

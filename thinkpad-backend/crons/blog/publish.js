@@ -25,6 +25,12 @@ const { createTg, escapeHtml } = require('../../lib/tg');
 const { askClaude } = require('../../lib/claude');
 const { createD1 } = require('../../lib/d1');
 const core = require('./core');
+const { reviseArticle } = require('./generate');
+
+async function askText(prompt) {
+  const out = await askClaude(prompt, { timeoutMs: REVISE_TIMEOUT_MS });
+  return out.text;
+}
 
 const REVISE_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -78,14 +84,12 @@ async function reviseDraft(draft, feedback, { store, tg, logger }) {
   if (!feedback || !feedback.trim()) throw new Error('revise requires --feedback text');
   logger.log(`Revising ${draft.slug}: "${feedback.slice(0, 120)}"`);
 
-  const out = await askClaude(core.revisePrompt(draft, feedback), {
-    json: true, timeoutMs: REVISE_TIMEOUT_MS,
-  });
-  core.validateArticle(out.json);
+  // i18n revise: re-write the RU body from feedback, then re-localize the rest.
+  const article = await reviseArticle({ draft, feedback, ask: askText, logger });
 
   const revised = {
     ...draft,
-    article: out.json,
+    article,
     revisions: [...(draft.revisions || []), { feedback, at: new Date().toISOString() }],
   };
   store.saveDraft(revised);

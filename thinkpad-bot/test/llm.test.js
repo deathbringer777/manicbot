@@ -77,7 +77,12 @@ describe("llm.js — Claude CLI adapter", () => {
     assert.strictEqual(args[args.indexOf("--model") + 1], "sonnet");
     assert.strictEqual(args[args.indexOf("--effort") + 1], "medium");
     assert.strictEqual(args[args.indexOf("--output-format") + 1], "json");
-    assert.ok(args.includes("--dangerously-skip-permissions"));
+    // Permission system stays ON: an explicit tool allowlist, never the
+    // wholesale --dangerously-skip-permissions switch.
+    assert.ok(!args.includes("--dangerously-skip-permissions"));
+    assert.strictEqual(args[args.indexOf("--permission-mode") + 1], "acceptEdits");
+    const allowed = args[args.indexOf("--allowedTools") + 1];
+    assert.ok(allowed.includes("Bash"), "ops bot needs shell diagnostics");
     assert.ok(args.includes("--append-system-prompt"));
     assert.ok(opts.env, "child env must be explicit");
     assert.ok(!("ANTHROPIC_API_KEY" in opts.env), "must bill the subscription, not the API");

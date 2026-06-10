@@ -32,6 +32,9 @@ const config = {
   CLAUDE_EFFORT: process.env.CLAUDE_EFFORT || "medium",
   CLAUDE_TIMEOUT_MS: parseInt(process.env.CLAUDE_TIMEOUT_MS || "300000", 10),
   CLAUDE_SESSIONS_FILE: process.env.CLAUDE_SESSIONS_FILE || "/tmp/tg-bot-claude-sessions.json",
+  // Explicit tool allowlist for the headless claude agent (permission system
+  // stays on; everything not listed is denied in -p mode).
+  CLAUDE_ALLOWED_TOOLS: process.env.CLAUDE_ALLOWED_TOOLS || "Bash,Read,Glob,Grep,Edit,Write",
 
   TG_API_BASE: `https://api.telegram.org/bot${process.env.TELEGRAM_TOKEN}`,
   BOT_DIR: __dirname,

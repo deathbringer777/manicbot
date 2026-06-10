@@ -82,7 +82,11 @@ function buildArgs(text, { resume = null, effort = null, system = null } = {}) {
     "--model", config.CLAUDE_MODEL,
     "--effort", effort || config.CLAUDE_EFFORT,
     "--output-format", "json",
-    "--dangerously-skip-permissions",
+    // The CLI permission system stays active: tools outside this explicit
+    // allowlist are denied in headless mode. Tune via CLAUDE_ALLOWED_TOOLS
+    // in .env — never replace this with --dangerously-skip-permissions.
+    "--permission-mode", "acceptEdits",
+    "--allowedTools", config.CLAUDE_ALLOWED_TOOLS,
     "--append-system-prompt", system || systemPrompt(),
   ];
   if (resume) args.push("--resume", resume);

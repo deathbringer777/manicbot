@@ -39,6 +39,8 @@ async function runCron(name, fn, {
   }
   fs.writeFileSync(lockFile, String(process.pid));
   const releaseLock = () => { try { fs.unlinkSync(lockFile); } catch { /* already gone */ } };
+  // Crons may bail with process.exit() (hard timeouts) — still release the lock.
+  process.once('exit', releaseLock);
   process.once('SIGTERM', () => { releaseLock(); process.exit(0); });
 
   const startedAt = Date.now();

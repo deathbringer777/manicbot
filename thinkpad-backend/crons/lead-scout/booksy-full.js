@@ -1,65 +1,42 @@
 #!/usr/bin/env node
+'use strict';
 /**
  * booksy-full.js — Full Booksy Warsaw catalog crawl.
  *
  * Runs daily at 03:30 via PM2 cron_restart.
- * Crawls ALL pages of Booksy Warsaw nail/beauty listings.
- * Uses JSON-LD (schema.org ItemList) — no per-profile fetches needed,
- * no cheerio dependency, no login required.
+ * Crawls ALL pages of Booksy Warsaw nail/beauty listings via JSON-LD
+ * (schema.org ItemList) — no per-profile fetches, no login required.
  *
- * New URL format (2026-06-06):
- *   https://booksy.com/pl-pl/s/paznokcie/3_warszawa?page=N
- *   (Warsaw city ID = 3, category = paznokcie = nails)
- *
+ * URL format (2026-06-06): https://booksy.com/pl-pl/s/paznokcie/3_warszawa?page=N
  * Phone numbers are behind Booksy's login wall — not collectable.
- * We get: name, booksy_url, address, rating, reviews_count.
+ * Rate: 1 page / 1.5s; ~150 pages ≈ 4 minutes.
  *
- * Rate: 1 page / 1.5s.
- * Expected: ~50-100 pages × 20 salons = 5000+ leads.
- * Expected runtime: ~2-3 minutes (no per-profile fetches).
- * Max pages: 150 (safety cap).
+ * Hardening (2026-06-10): lock + failure alert moved to lib/runner;
+ * yield-collapse anomaly detection (JSON-LD drift) alerts to Telegram.
  */
-
-const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const https = require('https');
 const { URL } = require('url');
+const { BASE_DIR } = require('../../lib/log');
+require('dotenv').config({ path: path.join(BASE_DIR, '.env'), quiet: true });
 
-const BASE_DIR = path.join(os.homedir(), 'manicbot-backend');
-require('dotenv').config({ path: path.join(BASE_DIR, '.env') });
-
-const WORKER_URL = process.env.WORKER_URL;
-const NOTIFY_TOKEN = process.env.NOTIFY_TOKEN;
-const LOG_FILE = path.join(BASE_DIR, 'logs', 'booksy-full.log');
+const { runCron } = require('../../lib/runner');
+const { createTg } = require('../../lib/tg');
+const { crawlVerdict } = require('./anomaly');
+const storage = require('./storage');
 
 const BOOKSY_BASE = 'https://booksy.com/pl-pl/s/paznokcie/3_warszawa';
 const MAX_PAGES = 150;
 const PAGE_DELAY_MS = 1500;
-// Total timeout: 30 minutes (well under old 110 min since no profile fetches)
 const HARD_TIMEOUT_MS = 30 * 60 * 1000;
-const LOCK_FILE = path.join(BASE_DIR, 'marketing', 'research', 'booksy-full.lock');
-const LOCK_MAX_AGE_MS = 35 * 60 * 1000; // 35 min — stale if older than hard-timeout
+const LOCK_TTL_MS = 35 * 60 * 1000; // stale if older than the hard timeout
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timestamp() { return new Date().toISOString(); }
-
-function log(msg) {
-  const line = `[${timestamp()}] ${msg}\n`;
-  fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
-  fs.appendFileSync(LOG_FILE, line);
-  process.stdout.write(line);
-}
-
-function delay(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function httpGet(url) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
-    const options = {
+    const req = https.request({
       hostname: parsed.hostname,
       path: parsed.pathname + parsed.search,
       method: 'GET',
@@ -71,9 +48,7 @@ function httpGet(url) {
         'Cache-Control': 'no-cache',
       },
       timeout: 25000,
-    };
-
-    const req = https.request(options, (res) => {
+    }, (res) => {
       const chunks = [];
       let stream = res;
       const enc = (res.headers['content-encoding'] || '').toLowerCase();
@@ -82,7 +57,7 @@ function httpGet(url) {
         if (enc === 'gzip') stream = res.pipe(zlib.createGunzip());
         else if (enc === 'deflate') stream = res.pipe(zlib.createInflate());
         else if (enc === 'br') stream = res.pipe(zlib.createBrotliDecompress());
-      } catch {}
+      } catch { /* fall back to raw stream */ }
       stream.on('data', c => chunks.push(c));
       stream.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf-8') }));
     });
@@ -92,27 +67,13 @@ function httpGet(url) {
   });
 }
 
-// ─── TG notify ────────────────────────────────────────────────────────────────
-
-const { notifyTg } = require('./notify');
-function tgNotify(text) {
-  return notifyTg(WORKER_URL, NOTIFY_TOKEN, text).catch(() => {});
-}
-
-// ─── JSON-LD parsing ──────────────────────────────────────────────────────────
-
-/**
- * Extract business listings from Booksy page HTML via JSON-LD.
- * Returns an array of raw listing objects from the schema.org ItemList.
- */
+/** Extract business listings from Booksy page HTML via JSON-LD ItemList. */
 function parseJsonLd(html) {
-  // Booksy may have multiple JSON-LD blocks — try each until we find an ItemList
   const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/g;
   let match;
   while ((match = re.exec(html)) !== null) {
     try {
       const data = JSON.parse(match[1]);
-      // Accept ItemList at root or under @graph
       const list = data['@type'] === 'ItemList' ? data
         : Array.isArray(data['@graph']) ? data['@graph'].find(n => n['@type'] === 'ItemList')
         : null;
@@ -124,13 +85,10 @@ function parseJsonLd(html) {
   return [];
 }
 
-/**
- * Convert a raw ItemList element into our Lead shape.
- */
+/** Convert a raw ItemList element into our Lead shape. */
 function elementToLead(entry) {
   const biz = entry.item || entry;
   if (!biz.name) return null;
-
   const booksy_url = biz.url || biz['@id'] || null;
   if (!booksy_url) return null;
 
@@ -138,59 +96,32 @@ function elementToLead(entry) {
   const address = [addr.streetAddress, addr.postalCode, addr.addressLocality]
     .filter(Boolean).join(', ') || null;
 
-  const rating = biz.aggregateRating
-    ? String(biz.aggregateRating.ratingValue || '').slice(0, 4)
-    : null;
-  const reviews_count = biz.aggregateRating
-    ? String(biz.aggregateRating.reviewCount || '') || null
-    : null;
-
   return {
     source: 'booksy_full',
     district: 'Warszawa',
     name: biz.name,
-    phone: null,        // Booksy requires login to show phone numbers
+    phone: null, // Booksy requires login to show phone numbers
     email: null,
     address,
     website: null,
     instagram_url: null,
     booksy_url,
     maps_url: null,
-    rating,
-    reviews_count,
+    rating: biz.aggregateRating ? String(biz.aggregateRating.ratingValue || '').slice(0, 4) : null,
+    reviews_count: biz.aggregateRating ? String(biz.aggregateRating.reviewCount || '') || null : null,
   };
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
-async function run() {
+async function main(logger) {
   const hardTimer = setTimeout(() => {
-    log('⏰ Hard timeout — exiting');
-    process.exit(0);
+    logger.log('⏰ Hard timeout — exiting');
+    process.exit(1); // runner's exit hook releases the lock
   }, HARD_TIMEOUT_MS);
   hardTimer.unref();
 
-  log('=== Booksy Full Crawl started ===');
-
-  // ── Lock: prevent two concurrent full-crawl runs ──
-  const researchDir = path.join(BASE_DIR, 'marketing', 'research');
-  fs.mkdirSync(researchDir, { recursive: true });
-  if (fs.existsSync(LOCK_FILE)) {
-    const lockAge = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
-    if (lockAge < LOCK_MAX_AGE_MS) {
-      log(`⚠️  Lock file exists (age: ${Math.round(lockAge / 1000)}s) — another crawl is running. Exiting.`);
-      clearTimeout(hardTimer);
-      return;
-    }
-    log(`  Stale lock (age: ${Math.round(lockAge / 1000)}s) — removing and continuing`);
-  }
-  fs.writeFileSync(LOCK_FILE, String(process.pid));
-  process.on('exit', () => { try { fs.unlinkSync(LOCK_FILE); } catch {} });
-  process.on('SIGTERM', () => { try { fs.unlinkSync(LOCK_FILE); } catch {} process.exit(0); });
-
-  const storage = require('./storage');
+  const tg = createTg();
   const before = storage.init();
-  log(`Starting with ${before} existing leads`);
+  logger.log(`Starting with ${before} existing leads`);
 
   let totalAdded = 0;
   let totalScraped = 0;
@@ -199,16 +130,14 @@ async function run() {
 
   for (pageNum = 1; pageNum <= MAX_PAGES; pageNum++) {
     try {
-      log(`  Page ${pageNum}...`);
       const res = await httpGet(`${BOOKSY_BASE}?page=${pageNum}`);
 
       if (res.status === 404 || res.status === 410) {
-        log(`  Page ${pageNum}: HTTP ${res.status} — end of catalog`);
+        logger.log(`  Page ${pageNum}: HTTP ${res.status} — end of catalog`);
         break;
       }
-
       if (res.status !== 200) {
-        log(`  Page ${pageNum}: HTTP ${res.status} — skipping`);
+        logger.log(`  Page ${pageNum}: HTTP ${res.status} — skipping`);
         emptyPageStreak++;
         if (emptyPageStreak >= 3) break;
         await delay(PAGE_DELAY_MS * 2);
@@ -216,12 +145,11 @@ async function run() {
       }
 
       const elements = parseJsonLd(res.body);
-
       if (elements.length === 0) {
         emptyPageStreak++;
-        log(`  Page ${pageNum}: 0 listings in JSON-LD (streak: ${emptyPageStreak})`);
+        logger.log(`  Page ${pageNum}: 0 listings in JSON-LD (streak: ${emptyPageStreak})`);
         if (emptyPageStreak >= 3) {
-          log('  3 consecutive empty pages — end of catalog');
+          logger.log('  3 consecutive empty pages — end of catalog');
           break;
         }
         await delay(PAGE_DELAY_MS);
@@ -230,38 +158,40 @@ async function run() {
 
       emptyPageStreak = 0;
       totalScraped += elements.length;
-
       for (const entry of elements) {
         const lead = elementToLead(entry);
         if (!lead) continue;
-        const ok = storage.appendLead(lead);
-        if (ok) totalAdded++;
+        if (storage.appendLead(lead)) totalAdded++;
       }
-
-      log(`  Page ${pageNum}: ${elements.length} listings, +${totalAdded} unique so far (total: ${storage.getTotal()})`);
-
+      logger.log(`  Page ${pageNum}: ${elements.length} listings, +${totalAdded} unique so far (total: ${storage.getTotal()})`);
       await delay(PAGE_DELAY_MS);
-
     } catch (pageErr) {
-      log(`  Page ${pageNum} error: ${pageErr.message}`);
+      logger.log(`  Page ${pageNum} error: ${pageErr.message}`);
       await delay(PAGE_DELAY_MS * 2);
     }
   }
 
+  const pagesRun = Math.min(pageNum, MAX_PAGES);
+  const verdict = crawlVerdict({ pagesRun, totalScraped, reachedCap: pageNum > MAX_PAGES });
   const finalTotal = storage.getTotal();
-  const pagesRun = pageNum - 1;
-  log(`=== Booksy Full Crawl done: ${pagesRun} pages, ${totalScraped} scraped, +${totalAdded} new, ${finalTotal} total ===`);
+  logger.log(`Crawl summary: ${pagesRun} pages, ${totalScraped} scraped, +${totalAdded} new, ${finalTotal} total`);
+  verdict.reasons.forEach(r => logger.log(`  ANOMALY: ${r}`));
+  verdict.warnings.forEach(w => logger.log(`  WARN: ${w}`));
 
-  await tgNotify([
-    `📚 Booksy Full Crawl завершён`,
+  const lines = [
+    verdict.anomaly ? '⚠️ Booksy Full Crawl: похоже, ПАРСЕР СЛОМАЛСЯ' : '📚 Booksy Full Crawl завершён',
     `📄 Страниц: ${pagesRun}`,
     `🔍 Собрано: ${totalScraped} объявлений`,
     `🆕 Новых в базе: +${totalAdded}`,
     `📊 Всего лидов: ${finalTotal}`,
-  ].join('\n'));
+    ...verdict.reasons.map(r => `❗ ${r}`),
+    ...verdict.warnings.map(w => `⚠️ ${w}`),
+  ];
+  await tg.sendMessage(lines.join('\n'), { parseMode: null }).catch(() => {});
 }
 
-run().catch((err) => {
-  log(`FATAL: ${err.message}\n${err.stack}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  runCron('booksy-full', main, { lockTtlMs: LOCK_TTL_MS });
+}
+
+module.exports = { parseJsonLd, elementToLead, main };

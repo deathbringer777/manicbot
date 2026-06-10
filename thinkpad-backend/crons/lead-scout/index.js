@@ -1,36 +1,39 @@
 #!/usr/bin/env node
+'use strict';
 /**
  * lead-scout/index.js — Warsaw nail salon lead scraper.
  *
  * Runs every hour via PM2 cron_restart.
- * Each run: picks the next (district, query, source) slot, scrapes, appends new leads to CSV.
- * Goal: 5000 unique leads with at least one contact (phone/email/website/instagram).
+ * Each run: picks the next (district, query, source) slot, scrapes, appends
+ * new leads to CSV. Goal: 5000 unique leads with at least one contact.
  *
- * State persists in: ~/manicbot-backend/marketing/research/lead-scout-state.json
- * Output CSV:         ~/manicbot-backend/marketing/research/leads.csv
+ * State:  ~/manicbot-backend/marketing/research/lead-scout-state.json
+ * Output: ~/manicbot-backend/marketing/research/leads.csv
+ *
+ * Hardening (2026-06-10):
+ *   - rotation/retry extracted to rotation.js: a failing slot is retried
+ *     up to MAX_FAILS hours, then force-advanced (with a TG warning) so one
+ *     broken source can't stall the whole rotation;
+ *   - lock + FATAL alert via lib/runner;
+ *   - Telegram pings only when something happened (new leads / error /
+ *     forced advance) instead of 24 noise messages a day.
  */
-
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
+const { BASE_DIR } = require('../../lib/log');
+require('dotenv').config({ path: path.join(BASE_DIR, '.env'), quiet: true });
 
-// ─── Config ───────────────────────────────────────────────────────────────────
-
-const BASE_DIR = path.join(os.homedir(), 'manicbot-backend');
-require('dotenv').config({ path: path.join(BASE_DIR, '.env') });
-
-const WORKER_URL = process.env.WORKER_URL;
-const NOTIFY_TOKEN = process.env.NOTIFY_TOKEN;
+const { runCron } = require('../../lib/runner');
+const { createTg } = require('../../lib/tg');
+const rotation = require('./rotation');
+const storage = require('./storage');
 
 const RESEARCH_DIR = path.join(BASE_DIR, 'marketing', 'research');
 const STATE_FILE = path.join(RESEARCH_DIR, 'lead-scout-state.json');
-const LOG_FILE = path.join(BASE_DIR, 'logs', 'lead-scout.log');
 
 const LEAD_TARGET = 5000;
-// 8-minute hard timeout — PM2 will kill on cron restart, but this ensures a clean exit
+// 8-minute hard timeout — a hung scraper must not block the hourly slot
 const HARD_TIMEOUT_MS = 8 * 60 * 1000;
-const LOCK_FILE = path.join(RESEARCH_DIR, 'lead-scout.lock');
-const LOCK_MAX_AGE_MS = 10 * 60 * 1000; // 10 min — if lock is older, it's from a crashed run
 
 // ─── Corpus ───────────────────────────────────────────────────────────────────
 
@@ -50,28 +53,24 @@ const QUERY_TEMPLATES = [
   (d) => `prywatna kosmetyczka ${d} Warszawa`,
 ];
 
-// 3 sources in rotation order (index % 3)
+// 3 sources in rotation order (sourceIndex % 3)
 const SOURCES = ['google_maps', 'booksy', 'duckduckgo'];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function timestamp() { return new Date().toISOString(); }
-
-function log(msg) {
-  const line = `[${timestamp()}] ${msg}\n`;
-  fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
-  fs.appendFileSync(LOG_FILE, line);
-  process.stdout.write(line);
-}
+const CORPUS = {
+  districts: DISTRICTS.length,
+  queries: QUERY_TEMPLATES.length,
+  sources: SOURCES.length,
+};
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
 const DEFAULT_STATE = {
-  districtIndex: 0,   // 0–13
-  queryIndex: 0,      // 0–4
-  sourceIndex: 0,     // ever-incrementing, mod 3 = which source
+  districtIndex: 0,
+  queryIndex: 0,
+  sourceIndex: 0,
   totalLeads: 0,
   runsCompleted: 0,
+  failStreak: 0,
   lastRunAt: null,
   createdAt: null,
 };
@@ -82,20 +81,12 @@ function loadState() {
       return { ...DEFAULT_STATE, ...JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8')) };
     }
   } catch { /* corrupt state — start fresh */ }
-  return { ...DEFAULT_STATE, createdAt: timestamp() };
+  return { ...DEFAULT_STATE, createdAt: new Date().toISOString() };
 }
 
 function saveState(state) {
   fs.mkdirSync(RESEARCH_DIR, { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify({ ...state, lastRunAt: timestamp() }, null, 2));
-}
-
-// ─── Notify TG ────────────────────────────────────────────────────────────────
-
-const { notifyTg } = require('./notify');
-
-function tgNotify(text) {
-  return notifyTg(WORKER_URL, NOTIFY_TOKEN, text);
+  fs.writeFileSync(STATE_FILE, JSON.stringify({ ...state, lastRunAt: new Date().toISOString() }, null, 2));
 }
 
 // ─── Scrapers ─────────────────────────────────────────────────────────────────
@@ -109,11 +100,8 @@ async function runScraper(sourceName, query, district, state) {
     case 'google_maps':
       return googleMaps.scrape(query, district);
     case 'booksy':
-      // Pass the Booksy page hint derived from the sourceIndex so hourly runs don't
-      // always repeat page 1. Every 3rd Booksy run advances the page by 1.
-      return booksy.scrape(query, district, {
-        pageHint: Math.floor(state.sourceIndex / 3) + 1,
-      });
+      // Page hint derived from sourceIndex so hourly runs don't repeat page 1.
+      return booksy.scrape(query, district, { pageHint: Math.floor(state.sourceIndex / 3) + 1 });
     case 'duckduckgo':
       return ddg.scrape(query, district);
     default:
@@ -123,110 +111,79 @@ async function runScraper(sourceName, query, district, state) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-async function run() {
-  const timer = setTimeout(() => {
-    log('⏰ Hard timeout reached — exiting cleanly');
-    process.exit(0);
+async function main(logger) {
+  const hardTimer = setTimeout(() => {
+    logger.log('⏰ Hard timeout reached — exiting');
+    process.exit(1); // runner's exit hook releases the lock
   }, HARD_TIMEOUT_MS);
-  timer.unref(); // Don't prevent natural exit
+  hardTimer.unref();
 
-  log('=== Lead Scout run started ===');
-
-  // ── Lock: prevent two concurrent runs (e.g. PM2 restart + manual test overlap) ──
-  fs.mkdirSync(RESEARCH_DIR, { recursive: true });
-  if (fs.existsSync(LOCK_FILE)) {
-    const lockAge = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
-    if (lockAge < LOCK_MAX_AGE_MS) {
-      log(`⚠️  Lock file exists (age: ${Math.round(lockAge / 1000)}s) — another run is in progress. Exiting.`);
-      clearTimeout(timer);
-      return;
-    }
-    log(`  Lock file is stale (age: ${Math.round(lockAge / 1000)}s) — removing and continuing`);
-  }
-  fs.writeFileSync(LOCK_FILE, String(process.pid));
-  process.on('exit', () => { try { fs.unlinkSync(LOCK_FILE); } catch {} });
-  process.on('SIGTERM', () => { try { fs.unlinkSync(LOCK_FILE); } catch {} process.exit(0); });
-
-  // Storage init — reads existing CSV to rebuild dedup sets
-  const storage = require('./storage');
+  const tg = createTg();
   const existingCount = storage.init();
-  log(`Loaded ${existingCount} existing leads from CSV`);
+  logger.log(`Loaded ${existingCount} existing leads from CSV`);
 
-  const state = loadState();
+  let state = loadState();
 
-  // ── Check if goal already reached ──
   if (state.totalLeads >= LEAD_TARGET) {
-    log(`🎯 Target of ${LEAD_TARGET} leads already reached (${state.totalLeads} total). Skipping run.`);
-    await tgNotify(`🎯 Lead Scout: цель достигнута! ${state.totalLeads} лидов в базе.\nЧтобы продолжить — увеличь LEAD_TARGET в index.js`);
+    logger.log(`🎯 Target of ${LEAD_TARGET} leads reached (${state.totalLeads}). Skipping run.`);
+    await tg.sendMessage(`🎯 Lead Scout: цель достигнута! ${state.totalLeads} лидов в базе.\nЧтобы продолжить — увеличь LEAD_TARGET в index.js`, { parseMode: null });
     return;
   }
 
-  // Clamp indices (safety: if state is from a previous run with different corpus sizes)
-  state.districtIndex = Math.min(state.districtIndex, DISTRICTS.length - 1);
-  state.queryIndex = Math.min(state.queryIndex, QUERY_TEMPLATES.length - 1);
+  const slot = rotation.currentSlot(state, CORPUS);
+  const district = DISTRICTS[slot.districtIndex];
+  const query = QUERY_TEMPLATES[slot.queryIndex](district);
+  const sourceName = SOURCES[slot.sourceOrdinal];
 
-  const district = DISTRICTS[state.districtIndex];
-  const query = QUERY_TEMPLATES[state.queryIndex](district);
-  const sourceName = SOURCES[state.sourceIndex % SOURCES.length];
-
-  log(`🔍 Run #${state.runsCompleted + 1}: district=${district}, query="${query}", source=${sourceName}`);
+  logger.log(`🔍 Run #${state.runsCompleted + 1}: district=${district}, query="${query}", source=${sourceName}${state.failStreak ? ` (retry ${state.failStreak}/${rotation.MAX_FAILS})` : ''}`);
 
   let added = 0;
-  let scraped = [];
   let scraperError = null;
+  let forcedAdvance = false;
 
   try {
-    scraped = await runScraper(sourceName, query, district, state);
-    log(`  Scraper returned ${scraped.length} raw results`);
+    const scraped = await runScraper(sourceName, query, district, state);
+    logger.log(`  Scraper returned ${scraped.length} raw results`);
 
     for (const lead of scraped) {
-      const ok = storage.appendLead(lead);
-      if (ok) added++;
+      if (storage.appendLead(lead)) added++;
     }
+    logger.log(`  +${added} new unique leads (${storage.getTotal()} total)`);
 
-    log(`  +${added} new unique leads (${storage.getTotal()} total)`);
-
-    // ── Advance state ONLY on success ──
-    state.sourceIndex++;
-
-    // After cycling through all 3 sources on a query, advance the query
-    if (state.sourceIndex % SOURCES.length === 0) {
-      state.queryIndex++;
+    state = rotation.advanceOnSuccess(state, CORPUS);
+    if (state.queryIndex === 0 && state.sourceIndex % CORPUS.sources === 0) {
+      logger.log(`  → district pointer now: ${DISTRICTS[state.districtIndex]}`);
     }
-
-    // After all 5 queries on a district, advance the district
-    if (state.queryIndex >= QUERY_TEMPLATES.length) {
-      state.queryIndex = 0;
-      state.districtIndex = (state.districtIndex + 1) % DISTRICTS.length;
-      log(`  → Moving to next district: ${DISTRICTS[state.districtIndex]}`);
-    }
-
     state.totalLeads = storage.getTotal();
     state.runsCompleted = (state.runsCompleted || 0) + 1;
-    saveState(state);
-
   } catch (err) {
     scraperError = err.message;
-    log(`  ❌ Scraper error: ${scraperError} (state NOT advanced — will retry next hour)`);
-    // Don't advance state on error — retry the same slot next hour
+    const r = rotation.onFailure(state, CORPUS);
+    state = r.state;
+    forcedAdvance = r.forced;
+    logger.log(`  ❌ Scraper error: ${scraperError}${forcedAdvance
+      ? ` — slot force-advanced after ${rotation.MAX_FAILS} failures`
+      : ` (retry ${state.failStreak}/${rotation.MAX_FAILS} next hour)`}`);
   }
+  saveState(state);
 
-  // ── TG Summary ──
-  const statusIcon = scraperError ? '⚠️' : (added > 0 ? '✅' : '🔄');
-  const msg = [
-    `${statusIcon} Lead Scout`,
-    `📍 ${district} / ${sourceName}`,
-    `+${added} новых лидов`,
-    `📊 Всего: ${storage.getTotal()} / ${LEAD_TARGET}`,
-    scraperError ? `❌ Ошибка: ${scraperError}` : null,
-  ].filter(Boolean).join('\n');
-
-  await tgNotify(msg).catch(() => {});
-
-  log('=== Lead Scout run done ===\n');
+  // ── TG summary: only when something is worth reading ──
+  if (added > 0 || scraperError) {
+    const statusIcon = scraperError ? '⚠️' : '✅';
+    const msg = [
+      `${statusIcon} Lead Scout`,
+      `📍 ${district} / ${sourceName}`,
+      `+${added} новых лидов`,
+      `📊 Всего: ${storage.getTotal()} / ${LEAD_TARGET}`,
+      scraperError ? `❌ Ошибка: ${scraperError}` : null,
+      forcedAdvance ? `⏭ Слот пропущен после ${rotation.MAX_FAILS} неудач подряд` : null,
+    ].filter(Boolean).join('\n');
+    await tg.sendMessage(msg, { parseMode: null }).catch(() => {});
+  }
 }
 
-run().catch((err) => {
-  log(`FATAL: ${err.message}\n${err.stack}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  runCron('lead-scout', main, { lockTtlMs: 10 * 60 * 1000 });
+}
+
+module.exports = { main, DISTRICTS, QUERY_TEMPLATES, SOURCES, CORPUS };

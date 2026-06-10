@@ -1,55 +1,62 @@
 #!/usr/bin/env node
-const fs = require('fs');
+'use strict';
+/**
+ * Hourly liveness check: local system stats + Worker /api/health probe.
+ * FAILs are pushed to Telegram (before this rewrite a dead Worker was only
+ * visible in a log file nobody reads at 4 AM).
+ */
 const path = require('path');
-const https = require('https');
 const os = require('os');
+const { BASE_DIR } = require('../lib/log');
+require('dotenv').config({ path: path.join(BASE_DIR, '.env'), quiet: true });
 
-const LOG_FILE = path.join(os.homedir(), 'manicbot-backend', 'logs', 'health.log');
+const { runCron } = require('../lib/runner');
+const { createTg } = require('../lib/tg');
+const { httpJson } = require('../lib/http');
 
-function timestamp() {
-  return new Date().toISOString();
+/** The Worker liveness route is /api/health (a bare /health falls through to the landing proxy). */
+function endpointUrl(base) {
+  return `${String(base).replace(/\/+$/, '')}/api/health`;
 }
 
-function log(message) {
-  const line = `[${timestamp()}] ${message}\n`;
-  fs.appendFileSync(LOG_FILE, line);
-  process.stdout.write(line);
-}
-
-function getSystemStats() {
-  const uptime = os.uptime();
-  const loadAvg = os.loadavg()[0].toFixed(2);
-  const freeMem = Math.round(os.freemem() / 1024 / 1024);
+function systemStats() {
   const totalMem = Math.round(os.totalmem() / 1024 / 1024);
-  return { uptime, loadAvg, freeMem, totalMem, usedMem: totalMem - freeMem };
+  const freeMem = Math.round(os.freemem() / 1024 / 1024);
+  return {
+    uptimeH: Math.round(os.uptime() / 3600),
+    loadAvg: os.loadavg()[0].toFixed(2),
+    usedMem: totalMem - freeMem,
+    totalMem,
+  };
 }
 
-function checkEndpoint(url) {
-  return new Promise((resolve) => {
-    const req = https.get(url, { timeout: 5000 }, (res) => {
-      resolve({ ok: res.statusCode < 400, status: res.statusCode });
-    });
-    req.on('error', (err) => resolve({ ok: false, status: err.message }));
-    req.on('timeout', () => { req.destroy(); resolve({ ok: false, status: 'timeout' }); });
-  });
-}
-
-async function run() {
-  log('=== Health check started ===');
-
-  const stats = getSystemStats();
-  log(`System | uptime=${Math.round(stats.uptime / 3600)}h | load=${stats.loadAvg} | mem=${stats.usedMem}/${stats.totalMem}MB`);
+async function main(logger) {
+  const s = systemStats();
+  logger.log(`System | uptime=${s.uptimeH}h | load=${s.loadAvg} | mem=${s.usedMem}/${s.totalMem}MB`);
 
   const workerUrl = process.env.WORKER_URL;
-  if (workerUrl) {
-    const result = await checkEndpoint(`${workerUrl}/health`);
-    log(`Worker ${workerUrl}/health → ${result.ok ? 'OK' : 'FAIL'} (${result.status})`);
+  if (!workerUrl) {
+    logger.log('WORKER_URL not set — endpoint check skipped');
+    return;
   }
 
-  log('=== Health check done ===\n');
+  const url = endpointUrl(workerUrl);
+  let ok = false;
+  let detail = '';
+  try {
+    const res = await httpJson(url, { timeoutMs: 10000 });
+    ok = res.status === 200 && res.data?.status === 'ok';
+    detail = `HTTP ${res.status}`;
+  } catch (err) {
+    detail = err.message;
+  }
+  logger.log(`Worker ${url} → ${ok ? 'OK' : 'FAIL'} (${detail})`);
+
+  if (!ok) {
+    await createTg().sendMessage(`🚨 Worker health FAIL: ${url} → ${detail}`, { parseMode: null });
+  }
 }
 
-run().catch((err) => {
-  log(`ERROR: ${err.message}`);
-  process.exit(1);
-});
+if (require.main === module) runCron('health-check', main);
+
+module.exports = { endpointUrl, main };

@@ -11,7 +11,8 @@ const https = require('https');
 const os = require('os');
 
 const BASE_DIR = path.join(os.homedir(), 'manicbot-backend');
-require('dotenv').config({ path: path.join(BASE_DIR, '.env') });
+require('dotenv').config({ path: path.join(BASE_DIR, '.env'), quiet: true });
+const { runCron } = require('../lib/runner');
 const LOG_FILE = path.join(BASE_DIR, 'logs', 'nightly.log');
 
 const WORKER_URL = process.env.WORKER_URL;
@@ -244,7 +245,6 @@ async function backupD1() {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function run() {
-  log('=== Nightly run started ===');
   const errors = [];
 
   let clientCount = 0;
@@ -268,10 +268,9 @@ async function run() {
   const msg = `${status} Ночной крон ${date}\nКлиентов: ${clientCount}\nBackup D1: ${backupOk ? 'OK' : 'пропущен/ошибка'}`;
 
   await notifyTg(msg);
-  log(`=== Nightly run done ===\n`);
 }
 
-run().catch((err) => {
-  log(`FATAL: ${err.message}`);
-  process.exit(1);
-});
+// Lock + FATAL Telegram alert + exit code via the shared harness.
+if (require.main === module) runCron('nightly', run, { logger: { log } });
+
+module.exports = { run };

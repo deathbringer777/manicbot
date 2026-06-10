@@ -145,10 +145,8 @@ async function renderHealth() {
 
 // ── /groq ─────────────────────────────────────────────────────────────────────
 function renderGroq() {
-  const { rl, session, lastUpdated, startedAt, model } = llm.getStats();
-  if (!lastUpdated) {
-    return { text: `🤖 <b>Groq</b> — ${code(model)}\n<i>нет данных — отправь текстовый запрос</i>` };
-  }
+  const stats = llm.getStats();
+  const { rl, session, lastUpdated, startedAt, model } = stats.groq;
   const fmt = (iso) => new Date(iso).toLocaleString("ru-RU", { timeZone: "Europe/Warsaw" });
   const lines = [`🤖 <b>Groq</b> — ${code(model)}`, `<i>обновлено ${esc(fmt(lastUpdated))}</i>`, ""];
 
@@ -169,6 +167,25 @@ function renderGroq() {
   lines.push(kv("вызовов", session.calls));
   lines.push(kv("токенов", session.totalTokens.toLocaleString()));
   if (session.calls) lines.push(kv("в среднем", Math.round(session.totalTokens / session.calls)));
+
+  // Anthropic Claude fallback info
+  const ac = stats.anthropic;
+  if (ac.session.calls) {
+    lines.push("");
+    lines.push(`🧠 <b>Anthropic Claude</b> — ${code(ac.model)}`);
+    lines.push(kv("вызовов", ac.session.calls));
+    lines.push(kv("токенов", ac.session.totalTokens.toLocaleString()));
+  }
+
+  // OpenCode Zen fallback info
+  const oc = stats.opencode;
+  if (oc.session.calls) {
+    lines.push("");
+    lines.push(`🧩 <b>OpenCode Zen</b> — ${code(oc.model)}`);
+    lines.push(kv("вызовов", oc.session.calls));
+    lines.push(kv("токенов", oc.session.totalTokens.toLocaleString()));
+  }
+
   return { text: lines.join("\n"), keyboard: kb.screenKb("groq") };
 }
 

@@ -13,8 +13,9 @@ function longBody(lang, n = 1900) {
   return Array.from({ length: n }, (_, i) => `${lang}word${i}`).join(' ');
 }
 
+// The real model output uses the marker format (NOT JSON) — exercise that path.
 function oneLangJSON(lang) {
-  return JSON.stringify({ title: `Title ${lang}`, excerpt: `Excerpt ${lang}`, body: longBody(lang) });
+  return `@@TITLE@@\nTitle ${lang}\n@@EXCERPT@@\nExcerpt ${lang}\n@@BODY@@\n${longBody(lang)}`;
 }
 
 const TOPIC = { slug: 't', category: 'tips', queryRu: 'тема', queryEn: 'topic', keywords: {} };

@@ -56,12 +56,33 @@ test('long-form target: ~2000 words per language is the accepted band', () => {
     { title: 'T', excerpt: 'E', body: 'too short' }, 'ru'), /short/i);
 });
 
-test('bodyPrompt: asks for ONE language, ~2000 words, single-object JSON', () => {
+test('bodyPrompt: asks for ONE language, ~2000 words, marker format (no JSON wrapping)', () => {
   const p = core.bodyPrompt(sampleTopic(), 'ru');
   assert.ok(/2000|2,000/.test(p), 'states the ~2000-word target');
   assert.ok(/Russian/i.test(p));
-  assert.ok(/"title"[\s\S]*"excerpt"[\s\S]*"body"/.test(p), 'single {title,excerpt,body} shape');
+  // The long body must NOT be wrapped in a JSON string — markers instead.
+  assert.ok(p.includes('@@TITLE@@') && p.includes('@@EXCERPT@@') && p.includes('@@BODY@@'));
   assert.ok(!/titles|bodies/.test(p), 'NOT the old 4-language multi-object shape');
+});
+
+test('parseUnit: marker format with messy body (newlines, quotes) parses cleanly', () => {
+  const body = 'Para one with "quotes".\n\nPara two.\nLine with, commas: and — dashes.';
+  const text = `@@TITLE@@\nЗаголовок статьи\n@@EXCERPT@@\nКраткое описание.\n@@BODY@@\n${body}`;
+  const u = core.parseUnit(text);
+  assert.equal(u.title, 'Заголовок статьи');
+  assert.equal(u.excerpt, 'Краткое описание.');
+  assert.equal(u.body, body);
+});
+
+test('parseUnit: tolerates preamble before the first marker', () => {
+  const text = 'Sure, here it is:\n@@TITLE@@\nT\n@@EXCERPT@@\nE\n@@BODY@@\nB';
+  const u = core.parseUnit(text);
+  assert.equal(u.title, 'T');
+  assert.equal(u.body, 'B');
+});
+
+test('parseUnit: throws when markers are missing', () => {
+  assert.throws(() => core.parseUnit('no markers here at all'), /marker/i);
 });
 
 test('translatePrompt: localizes a written RU article into another language', () => {

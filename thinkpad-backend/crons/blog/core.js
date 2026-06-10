@@ -72,8 +72,13 @@ RULES:
 - Active voice, practical tone, no fluff. Must be useful even to a reader who never uses ManicBot.
 - End with a soft CTA mentioning ManicBot as one solution, not the main focus.
 
-Respond with valid JSON ONLY (no markdown fences), this EXACT single-object shape:
-{"title": "...", "excerpt": "1-2 sentence summary", "body": "the full ~${TARGET_WORDS}-word article in ${langName}"}`;
+Respond in EXACTLY this marker format and nothing else (NO JSON, NO markdown fences). The body goes after @@BODY@@ as raw plain text:
+@@TITLE@@
+<one-line title in ${langName}>
+@@EXCERPT@@
+<1-2 sentence summary in ${langName}>
+@@BODY@@
+<the full ~${TARGET_WORDS}-word article in ${langName}>`;
 }
 
 // Localize an already-written article into another language, keeping length,
@@ -94,8 +99,13 @@ RULES:
 - Keep all facts, numbers and the soft ManicBot CTA.
 - PLAIN TEXT only, no Markdown.
 
-Respond with valid JSON ONLY (no fences), this EXACT shape:
-{"title": "...", "excerpt": "1-2 sentence summary in ${toName}", "body": "the full localized article in ${toName}"}`;
+Respond in EXACTLY this marker format and nothing else (NO JSON, NO fences):
+@@TITLE@@
+<title in ${toName}>
+@@EXCERPT@@
+<1-2 sentence summary in ${toName}>
+@@BODY@@
+<the full localized article in ${toName}>`;
 }
 
 function revisePrompt(draft, feedback, lang = 'ru') {
@@ -114,7 +124,13 @@ Revision instructions from the owner:
 "${feedback}"
 
 Keep plain-text format (no Markdown), keep it long-form (~${TARGET_WORDS} words), keep the soft ManicBot CTA.
-Respond with valid JSON ONLY, the EXACT shape: {"title": "...", "excerpt": "...", "body": "..."}`;
+Respond in EXACTLY this marker format and nothing else (NO JSON):
+@@TITLE@@
+<title in ${langName}>
+@@EXCERPT@@
+<1-2 sentence summary in ${langName}>
+@@BODY@@
+<the full revised article in ${langName}>`;
 }
 
 // ─── Parsing & validation ─────────────────────────────────────────────────────
@@ -158,6 +174,30 @@ function validateOneLang(obj, lang) {
 }
 
 // Parse a single-language {title, excerpt, body} object from an LLM response.
+// JSON is a poor container for a ~2000-word multi-paragraph body (the model
+// routinely emits unescaped newlines/quotes → invalid JSON). The marker format
+// (@@TITLE@@/@@EXCERPT@@/@@BODY@@) lets the body be raw text; we keep a JSON
+// fallback for robustness.
+const M_TITLE = '@@TITLE@@';
+const M_EXCERPT = '@@EXCERPT@@';
+const M_BODY = '@@BODY@@';
+
+function parseUnit(text) {
+  const raw = String(text ?? '');
+  const t = raw.indexOf(M_TITLE);
+  const e = raw.indexOf(M_EXCERPT);
+  const b = raw.indexOf(M_BODY);
+  if (t !== -1 && e > t && b > e) {
+    const title = raw.slice(t + M_TITLE.length, e).trim();
+    const excerpt = raw.slice(e + M_EXCERPT.length, b).trim();
+    const body = raw.slice(b + M_BODY.length).trim();
+    if (title && excerpt && body) return { title, excerpt, body };
+  }
+  try { return parseOneJSON(raw); } catch { /* fall through */ }
+  throw new Error('Could not parse article unit: missing @@TITLE@@/@@EXCERPT@@/@@BODY@@ markers');
+}
+
+// Legacy single-object JSON parser (kept as a parseUnit fallback).
 function parseOneJSON(text) {
   const raw = String(text ?? '');
   try { return JSON.parse(raw); } catch { /* keep trying */ }
@@ -354,7 +394,7 @@ module.exports = {
   getSeason,
   LANG_NAMES, TARGET_WORDS,
   topicDiscoveryPrompt, bodyPrompt, translatePrompt, revisePrompt,
-  parseArticleJSON, parseOneJSON, validateArticle, validateOneLang, validateTopics,
+  parseArticleJSON, parseOneJSON, parseUnit, validateArticle, validateOneLang, validateTopics,
   assembleArticle,
   buildRow, pickImage,
   buildPreviewText, buildPreviewKeyboard,

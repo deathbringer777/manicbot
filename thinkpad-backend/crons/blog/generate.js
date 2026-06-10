@@ -25,7 +25,7 @@ async function produceLang({ lang, buildPrompt, ask, attempts, retryMs, logger }
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const text = await ask(buildPrompt());
-      const unit = core.parseOneJSON(text);
+      const unit = core.parseUnit(text);
       core.validateOneLang(unit, lang);
       return unit;
     } catch (err) {

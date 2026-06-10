@@ -110,7 +110,10 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 async function loadArticles(): Promise<BlogArticle[]> {
   try {
     const dbPosts = await api.blog.listPublic({});
-    if (dbPosts.length > 0) return dbPosts.map(dtoToArticle);
+    const dbArticles = dbPosts.map(dtoToArticle);
+    const dbSlugs = new Set(dbArticles.map((a) => a.slug));
+    const staticOnly = BLOG_ARTICLES.filter((a) => !dbSlugs.has(a.slug));
+    return [...dbArticles, ...staticOnly];
   } catch {
     /* fall through */
   }

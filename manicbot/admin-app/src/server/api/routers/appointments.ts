@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { appointments, users, masters, services, masterClientBlocks } from "~/server/db/schema";
 import { eq, desc, sql, and, gte, lte, isNull, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
-import { assertTenantOwner } from "~/server/api/tenantAccess";
+import { assertTenantOwner, assertTenantBillingActive } from "~/server/api/tenantAccess";
 import { slotsBusy } from "~/server/api/slotsBusy";
 import { appointmentNameColumns, foldAppointmentNames } from "~/server/api/appointmentNames";
 import { log } from "~/server/utils/logger";
@@ -336,6 +336,10 @@ export const appointmentsRouter = createTRPCRouter({
     ))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
+      // CS-1 (audit 2026-06-12): the billing gate must hold server-side, not
+      // only as the client render-swap — booking writes are locked for an
+      // expired-trial / churned tenant.
+      await assertTenantBillingActive(ctx, input.tenantId);
 
       // Role scoping: masters can only book on their own calendar. The
       // lookup MUST be bound to `web_user_id = caller` — filtering only on
@@ -660,6 +664,8 @@ export const appointmentsRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
+      // CS-1: server-side billing gate (see createManual).
+      await assertTenantBillingActive(ctx, input.tenantId);
 
       // Load the appointment up front — we need its current master/service
       // both for the conflict check (service duration) and for the master
@@ -864,6 +870,8 @@ export const appointmentsRouter = createTRPCRouter({
       }
 
       await assertTenantOwner(ctx, current.tenantId);
+      // CS-1: server-side billing gate (see createManual).
+      await assertTenantBillingActive(ctx, current.tenantId);
 
       // Cross-tenant guards — never trust the input. masterId/serviceId
       // must belong to the same tenant as the appointment.

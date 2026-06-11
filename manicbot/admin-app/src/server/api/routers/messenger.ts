@@ -43,6 +43,7 @@ import {
   assertMessengerTenantAccess,
   assertThreadMember,
 } from "~/server/api/messenger/access";
+import { assertTenantBillingActive } from "~/server/api/tenantAccess";
 import { filterActiveRecipients, MUTE_FOREVER } from "~/server/api/messenger/mute";
 import { sanitizeFtsQuery, buildMessageSearchSql } from "~/server/api/messenger/ftsQuery";
 import { mintWsToken } from "~/lib/wsToken";
@@ -562,6 +563,11 @@ export const messengerRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { thread } = await assertThreadMember(ctx, input.tenantId, input.threadId);
+      // CS-1 (audit 2026-06-12): outbound messaging is a high-value product
+      // action — locked server-side for an expired-trial / churned tenant.
+      // Placed AFTER the membership assert so billing state is never an
+      // oracle for tenants the caller doesn't belong to.
+      await assertTenantBillingActive(ctx, input.tenantId);
       const webUserId = ctx.webUser!.id;
 
       // is_internal_note only makes sense on client_conv threads (it gates the

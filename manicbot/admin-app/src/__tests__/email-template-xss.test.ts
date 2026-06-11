@@ -116,3 +116,36 @@ describe("ownershipTransferCompletedNewOwnerEmailHtml — tenantName / oldOwnerN
     }
   });
 });
+
+describe("actionOtpEmailHtml — actionLabel XSS", () => {
+  it("strips script/img payloads in actionLabel in every language", async () => {
+    const { actionOtpEmailHtml } = await import("~/server/email/templates");
+    for (const lang of LANGS) {
+      for (const payload of [SCRIPT, IMG]) {
+        const html = actionOtpEmailHtml({ code: "123456", actionLabel: payload }, lang);
+        assertNoActivePayload(html);
+      }
+    }
+  });
+});
+
+describe("masterPasswordResetCredentialsForOwnerHtml — masterName XSS", () => {
+  it("strips script/img payloads in masterName in every language", async () => {
+    const { masterPasswordResetCredentialsForOwnerHtml } = await import("~/server/email/templates");
+    for (const lang of LANGS) {
+      for (const payload of [SCRIPT, IMG]) {
+        const html = masterPasswordResetCredentialsForOwnerHtml(
+          {
+            salonName: "Salon",
+            masterName: payload,
+            masterLogin: "m@x.salon.manicbot.local",
+            newPassword: "irrelevant",
+            loginUrl: "https://x.test/login",
+          },
+          lang,
+        );
+        assertNoActivePayload(html);
+      }
+    }
+  });
+});

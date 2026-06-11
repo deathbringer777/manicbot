@@ -1061,8 +1061,10 @@ export async function handleGoogleWebhook(ctx, request) {
   if (!integrationId) return new Response('Missing channel token', { status: 400 });
   const integration = await getGoogleIntegrationById(ctx, integrationId);
   if (!integration) return new Response('Unknown integration', { status: 404 });
-  // Validate the channel ID matches what we registered to prevent spoofed webhooks
-  if (integration.watchChannelId && channelId && integration.watchChannelId !== channelId) {
+  // Validate the channel ID matches what we registered to prevent spoofed
+  // webhooks. A missing header must NOT bypass the check — Google always
+  // sends X-Goog-Channel-ID, so an omitted header is itself a spoof signal.
+  if (integration.watchChannelId && integration.watchChannelId !== channelId) {
     log.warn('services.googleCalendarOauth', { message: 'gcal webhook channel ID mismatch', channelId, watchChannelId: integration.watchChannelId });
     return new Response('Channel ID mismatch', { status: 403 });
   }

@@ -227,3 +227,27 @@ function detailFor(event: ResendEvent): string {
     return "";
   }
 }
+
+/**
+ * Svix replay-protection window. Svix's own SDK rejects webhooks whose
+ * `svix-timestamp` is more than 5 minutes away from the receiver's clock
+ * (in either direction) — a captured signed payload must not be replayable
+ * forever. Mirror that contract here since we verify signatures manually.
+ */
+export const SVIX_TIMESTAMP_TOLERANCE_SEC = 300;
+
+/**
+ * Returns true when the `svix-timestamp` header value is a valid unix-seconds
+ * integer within ±SVIX_TIMESTAMP_TOLERANCE_SEC of `nowSec`. Anything else
+ * (missing, non-numeric, float-ish, out of window) is stale/forged → reject.
+ */
+export function isSvixTimestampFresh(
+  tsHeader: string | null,
+  nowSec: number,
+  toleranceSec: number = SVIX_TIMESTAMP_TOLERANCE_SEC,
+): boolean {
+  if (!tsHeader || !/^\d+$/.test(tsHeader.trim())) return false;
+  const ts = Number(tsHeader.trim());
+  if (!Number.isSafeInteger(ts)) return false;
+  return Math.abs(nowSec - ts) <= toleranceSec;
+}

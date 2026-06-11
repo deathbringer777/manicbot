@@ -23,6 +23,7 @@ import { emailSuppressions } from "~/server/db/schema";
 import { log } from "~/server/utils/logger";
 import {
   processResendEvent,
+  isSvixTimestampFresh,
   type ResendEvent,
 } from "~/server/marketing/webhooks/processResendEvent";
 
@@ -71,6 +72,12 @@ function timingSafeStrEq(a: string, b: string): boolean {
 export async function POST(req: Request) {
   const secret = process.env.RESEND_WEBHOOK_SECRET;
   if (!secret) return new Response("Webhook not configured", { status: 503 });
+
+  // Replay protection: Svix's standard ±5 min freshness window. A captured
+  // webhook (valid signature, old timestamp) must not be re-playable later.
+  if (!isSvixTimestampFresh(req.headers.get("svix-timestamp"), Math.floor(Date.now() / 1000))) {
+    return new Response("Stale timestamp", { status: 403 });
+  }
 
   const rawBody = await req.text();
   const valid = await verifySvixSignature(rawBody, req.headers, secret);

@@ -94,7 +94,9 @@ export function MessageBubble({
             {buttonRows.map((row, rowIdx) => (
               <div key={rowIdx} className="flex flex-wrap gap-1">
                 {row.map((btn, btnIdx) => {
-                  if (btn.url) {
+                  // Only http(s) may reach an href — a javascript:/data: URL
+                  // stored upstream must degrade to a plain disabled button.
+                  if (btn.url && /^https?:\/\//i.test(btn.url)) {
                     return (
                       <a
                         key={btnIdx}

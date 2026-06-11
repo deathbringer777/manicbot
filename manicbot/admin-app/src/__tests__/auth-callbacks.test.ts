@@ -37,6 +37,21 @@ describe("NextAuth signIn callback — Google web_users lookup", () => {
     expect(SRC).toMatch(/account\?\.provider\s*===\s*"google"/);
   });
 
+  it("rejects Google sign-in when the ID token does not assert email_verified === true", () => {
+    // Without this gate, any Google-issued token asserting a victim's email
+    // (e.g. an unverified Workspace alias) logs straight into the existing
+    // password-based account — account takeover with no password and no
+    // mailbox access. The check must run BEFORE the web_users lookup.
+    expect(SRC).toMatch(/email_verified/);
+    const gateIdx = SRC.indexOf("email_verified");
+    const lookupIdx = SRC.indexOf("eq(webUsers.email, user.email.toLowerCase().trim())");
+    expect(gateIdx).toBeGreaterThan(-1);
+    expect(lookupIdx).toBeGreaterThan(-1);
+    expect(gateIdx).toBeLessThan(lookupIdx);
+    // And the rejection path must refuse sign-in.
+    expect(SRC).toMatch(/email_verified[\s\S]{0,200}return false;/);
+  });
+
   it("returns false (refuses sign-in) when AUTH_SECRET is missing", () => {
     expect(SRC).toMatch(/AUTH_SECRET missing/);
     expect(SRC).toMatch(/return false;/);

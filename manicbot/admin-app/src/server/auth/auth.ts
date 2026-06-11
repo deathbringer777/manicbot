@@ -293,6 +293,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Google OAuth: existing web_users → session; new → signed redirect to complete registration
       if (account?.provider === "google" && user.email) {
         try {
+          // A Google ID token can assert an UNVERIFIED email (e.g. a Workspace
+          // alias the attacker controls the domain for). Matching web_users by
+          // email alone would then hand over an existing password-based account.
+          const emailVerified = (profile as { email_verified?: boolean } | null | undefined)?.email_verified;
+          if (emailVerified !== true) {
+            log.warn("auth.googleSignIn", { message: "rejected: email_verified is not true" });
+            return false;
+          }
           const db = getDb();
           const rows = await db
             .select()

@@ -105,6 +105,31 @@ describe('maybeSendReviewCta — URL gate', () => {
     expect(sendCalls).toHaveLength(0);
   });
 
+  it('drops non-http(s) URLs (javascript:/data:) — scheme guard at the consumption point', async () => {
+    mockInstallRow = {
+      settings_json: JSON.stringify({
+        googleReviewUrl: 'javascript:alert(1)',
+        yandexReviewUrl: 'data:text/html,<script>alert(1)</script>',
+      }),
+    };
+    expect(await maybeSendReviewCta(baseCtx, 999, 5)).toBe(false);
+    expect(sendCalls).toHaveLength(0);
+  });
+
+  it('keeps the https button while dropping a javascript: sibling', async () => {
+    mockInstallRow = {
+      settings_json: JSON.stringify({
+        googleReviewUrl: 'https://g.page/r/ok',
+        yandexReviewUrl: 'JaVaScRiPt:alert(1)',
+      }),
+    };
+    const sent = await maybeSendReviewCta(baseCtx, 5552, 5);
+    expect(sent).toBe(true);
+    const buttons = sendCalls[0].opts.reply_markup.inline_keyboard;
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0][0].url).toBe('https://g.page/r/ok');
+  });
+
   it('sends Google-only when only google URL is set', async () => {
     mockInstallRow = { settings_json: JSON.stringify({ googleReviewUrl: 'https://g.page/r/xyz' }) };
     const sent = await maybeSendReviewCta(baseCtx, 5551, 5);

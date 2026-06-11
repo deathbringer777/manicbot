@@ -127,3 +127,46 @@ describe("processResendEvent", () => {
     expect(complained.sendUpdate!.statusRank!).toBeGreaterThan(bounced.sendUpdate!.statusRank!);
   });
 });
+
+// ── Svix timestamp freshness (replay protection) ────────────────────────────
+
+import {
+  isSvixTimestampFresh,
+  SVIX_TIMESTAMP_TOLERANCE_SEC,
+} from "~/server/marketing/webhooks/processResendEvent";
+
+describe("isSvixTimestampFresh — replay window", () => {
+  const NOW = 1_750_000_000;
+
+  it("accepts a timestamp exactly at now", () => {
+    expect(isSvixTimestampFresh(String(NOW), NOW)).toBe(true);
+  });
+
+  it("accepts timestamps at the ±tolerance boundary (inclusive)", () => {
+    expect(isSvixTimestampFresh(String(NOW - SVIX_TIMESTAMP_TOLERANCE_SEC), NOW)).toBe(true);
+    expect(isSvixTimestampFresh(String(NOW + SVIX_TIMESTAMP_TOLERANCE_SEC), NOW)).toBe(true);
+  });
+
+  it("rejects timestamps just outside the window (replay)", () => {
+    expect(isSvixTimestampFresh(String(NOW - SVIX_TIMESTAMP_TOLERANCE_SEC - 1), NOW)).toBe(false);
+    expect(isSvixTimestampFresh(String(NOW + SVIX_TIMESTAMP_TOLERANCE_SEC + 1), NOW)).toBe(false);
+  });
+
+  it("rejects an hour-old captured webhook", () => {
+    expect(isSvixTimestampFresh(String(NOW - 3600), NOW)).toBe(false);
+  });
+
+  it("rejects missing / empty / non-numeric headers", () => {
+    expect(isSvixTimestampFresh(null, NOW)).toBe(false);
+    expect(isSvixTimestampFresh("", NOW)).toBe(false);
+    expect(isSvixTimestampFresh("abc", NOW)).toBe(false);
+    expect(isSvixTimestampFresh("12.5", NOW)).toBe(false);
+    expect(isSvixTimestampFresh("-100", NOW)).toBe(false);
+    expect(isSvixTimestampFresh("1e10", NOW)).toBe(false);
+  });
+
+  it("honours a custom tolerance", () => {
+    expect(isSvixTimestampFresh(String(NOW - 10), NOW, 5)).toBe(false);
+    expect(isSvixTimestampFresh(String(NOW - 4), NOW, 5)).toBe(true);
+  });
+});

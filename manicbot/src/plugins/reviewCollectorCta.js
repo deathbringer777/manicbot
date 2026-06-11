@@ -51,8 +51,15 @@ export async function maybeSendReviewCta(ctx, cid, rating) {
     return false;
   }
 
-  const google = typeof settings.googleReviewUrl === 'string' ? settings.googleReviewUrl.trim() : '';
-  const yandex = typeof settings.yandexReviewUrl === 'string' ? settings.yandexReviewUrl.trim() : '';
+  // settings_json is tenant-written via a generic record — enforce the URL
+  // scheme at the consumption point so a javascript:/data: value can never
+  // reach an inline-button href (Telegram client or the web-chat widget).
+  const safeUrl = (v) => {
+    const s = typeof v === 'string' ? v.trim() : '';
+    return /^https?:\/\//i.test(s) ? s : '';
+  };
+  const google = safeUrl(settings.googleReviewUrl);
+  const yandex = safeUrl(settings.yandexReviewUrl);
   if (!google && !yandex) return false;
 
   const text = (typeof settings.customMessage === 'string' && settings.customMessage.trim()

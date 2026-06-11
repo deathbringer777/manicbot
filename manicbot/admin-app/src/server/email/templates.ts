@@ -1435,7 +1435,7 @@ function passwordResetCredentialsForOwnerCopy(
   masterName: string,
 ): PasswordResetCredentialsForOwnerCopy {
   const sn = sanitizeEmailDisplayName(salonName) || "ManicBot"; // #MAIL-1/#MAIL-2 — tenant-controlled, sanitize before HTML interpolation
-  const mn = masterName || "—";
+  const mn = sanitizeEmailDisplayName(masterName) || "—"; // owner-controlled, same HTML sink as salonName
   switch (lang) {
     case "ru":
       return {
@@ -1553,7 +1553,10 @@ type ActionOtpCopy = {
   copy: string;
 };
 
-function actionOtpCopy(lang: Lang, actionLabel: string): ActionOtpCopy {
+function actionOtpCopy(lang: Lang, rawActionLabel: string): ActionOtpCopy {
+  // actionLabel arrives from client input (otp.request zod string) and lands
+  // in the email HTML body — sanitize like every other user-controlled value.
+  const actionLabel = sanitizeEmailDisplayName(rawActionLabel, 200);
   switch (lang) {
     case "ru":
       return {

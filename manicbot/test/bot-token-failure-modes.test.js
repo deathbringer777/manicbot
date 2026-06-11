@@ -19,7 +19,7 @@ import { createMockD1, makeMockKv } from './helpers/mock-db.js';
 
 const KEY_A = 'failure-modes-test-key-a-32chars-long!';
 const KEY_B = 'failure-modes-test-key-b-32chars-long!';
-const PLAINTEXT = '8752028834:AAHgSXM9iT7zF5cLMI97vLpPnIoqTNm3jn0';
+const PLAINTEXT = '0000000000:AAfake_placeholder_token_for_tests0';
 const BOT_TOKEN_LABEL = 'bot-token-v1';
 
 function makeCtx(extra = {}) {

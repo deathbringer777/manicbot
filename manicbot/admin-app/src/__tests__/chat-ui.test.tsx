@@ -212,3 +212,33 @@ describe("MessageBubble integration", () => {
     expect(screen.getByText("Назад")).toBeTruthy();
   });
 });
+
+describe("MessageBubble — URL button scheme guard", () => {
+  const mkMsg = (url: string): ChatMessage => ({
+    role: "bot",
+    id: "m3",
+    ts: 1,
+    text: "Ссылки:",
+    buttons: [[{ text: "Открыть", callback_data: null, url }]],
+    photo: null,
+    editMessageId: null,
+  });
+
+  it("renders an anchor for an https URL", () => {
+    const { container } = render(
+      <MessageBubble msg={mkMsg("https://example.com/x")} salon={salon} lang="ru" onButtonClick={() => {}} />,
+    );
+    const a = container.querySelector("a[href='https://example.com/x']");
+    expect(a).toBeTruthy();
+  });
+
+  it("never renders javascript:/data: URLs as anchors", () => {
+    for (const bad of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "JaVaScRiPt:alert(1)"]) {
+      const { container } = render(
+        <MessageBubble msg={mkMsg(bad)} salon={salon} lang="ru" onButtonClick={() => {}} />,
+      );
+      expect(container.querySelector("a")).toBeNull();
+      cleanup();
+    }
+  });
+});

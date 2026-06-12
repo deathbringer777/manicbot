@@ -7,6 +7,18 @@ import { sendSupportReplyEmail } from "~/server/email/emailService";
 import { log } from "~/server/utils/logger";
 import { signUploadToken } from "~/server/lib/uploadToken";
 import { isHttpsUrl } from "~/server/lib/url";
+import { checkRateLimit } from "~/server/auth/rateLimit";
+
+// ─── Rate limits (IU-6, audit 2026-06-12) — per-user (web_users.id) ──
+/** createTicket: 5 new tickets per hour per user. */
+const RL_TICKET_CREATE_MAX = 5;
+const RL_TICKET_CREATE_WINDOW_MS = 60 * 60_000;
+/** replyToMyTicket: 30 replies per hour per user. */
+const RL_TICKET_REPLY_MAX = 30;
+const RL_TICKET_REPLY_WINDOW_MS = 60 * 60_000;
+/** mintTicketUploadToken: 30 mints per 10 minutes per user. */
+const RL_TICKET_MINT_MAX = 30;
+const RL_TICKET_MINT_WINDOW_MS = 10 * 60_000;
 import { env } from "~/env";
 import type { Lang } from "~/lib/i18n";
 import { notifyWebUser, notifyManyWebUsers } from "~/server/services/notifyWebUser";
@@ -279,6 +291,12 @@ export const supportRouter = createTRPCRouter({
       attachmentUrl: z.string().max(2000).refine(isHttpsUrl, { message: "url_must_be_https" }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // IU-6: per-user limiter before any work.
+      const rl = await checkRateLimit(ctx.db, ctx.webUser!.id, "support_ticket_reply", RL_TICKET_REPLY_MAX, RL_TICKET_REPLY_WINDOW_MS);
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many replies. Try again later." });
+      }
+
       const filter = myTicketsFilter(ctx);
       const rows = await ctx.db
         .select()
@@ -340,6 +358,12 @@ export const supportRouter = createTRPCRouter({
     .input(z.object({ ticketId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      // IU-6: per-user limiter before any work.
+      const rl = await checkRateLimit(ctx.db, ctx.webUser.id, "support_mint_upload", RL_TICKET_MINT_MAX, RL_TICKET_MINT_WINDOW_MS);
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many upload requests. Try again later." });
+      }
 
       // Resolve the ticket so we can decide tenant scope + authorization.
       const ticketRows = await ctx.db
@@ -405,6 +429,13 @@ export const supportRouter = createTRPCRouter({
 
       // Resolve caller identity
       if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      // IU-6: per-user limiter before any insert.
+      const rl = await checkRateLimit(ctx.db, ctx.webUser.id, "support_ticket_create", RL_TICKET_CREATE_MAX, RL_TICKET_CREATE_WINDOW_MS);
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many tickets. Try again later." });
+      }
+
       const clientChatId = 0;
       const clientName: string | null = ctx.webUser.email;
       const tenantId: string | null = ctx.webUser.tenantId ?? null;

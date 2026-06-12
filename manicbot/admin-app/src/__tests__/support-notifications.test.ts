@@ -14,6 +14,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("~/server/db", () => ({ getDb: () => null }));
+// IU-6 (audit 2026-06-12): messenger/support writes now consult a per-user
+// rate limiter (one extra D1 SELECT). Neutralized here to keep the mock-db
+// select queue stable; the limiter wiring is pinned in
+// messenger-support-rate-limit.test.ts.
+vi.mock("~/server/auth/rateLimit", () => ({
+  checkRateLimit: vi.fn(async () => ({ allowed: true, remaining: 99, resetAt: 0 })),
+}));
 vi.mock("~/env", () => ({
   env: {
     ADMIN_CHAT_ID: undefined,

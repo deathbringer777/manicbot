@@ -19,6 +19,7 @@ import {
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
 import { isHttpsUrl } from "~/server/lib/url";
+import { maskEmail } from "~/server/lib/maskEmail";
 import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt, inArray, getTableColumns } from "drizzle-orm";
 import { appointmentNameColumns, foldAppointmentNames } from "~/server/api/appointmentNames";
 import {
@@ -3683,20 +3684,28 @@ export const salonRouter = createTRPCRouter({
       }
 
       const nowSec = Math.floor(Date.now() / 1000);
+      const emailMatch = (caller.email ?? "").trim().toLowerCase() === inv.email.toLowerCase();
+      // TI-1 (audit 2026-06-12): this procedure is reachable by ANY
+      // authenticated user holding the (unguessable) invitation id — reveal
+      // full emails only to the invitee themselves or platform staff;
+      // everyone else gets a masked form (k***@example.com), which still
+      // serves the "sign in as …" hint on the accept page.
+      const revealPii = emailMatch || caller.webRole === "system_admin";
+      const inviterEmail = inviterRows[0]?.email ?? null;
       return {
         invitationId: inv.id,
         tenantId: inv.tenantId,
         salonName: inv.tenantName ?? "ManicBot",
-        inviterEmail: inviterRows[0]?.email ?? null,
+        inviterEmail: revealPii ? inviterEmail : maskEmail(inviterEmail),
         /** The email the invitation was sent to — surfaced on the accept
          *  page so the recipient can see which account they need to sign
-         *  in as when emailMatch is false. */
-        email: inv.email,
+         *  in as when emailMatch is false (masked unless caller == invitee). */
+        email: revealPii ? inv.email : maskEmail(inv.email),
         status: inv.status,
         scenario: inv.scenario,
         expiresAt: inv.tokenExpiresAt,
         expired: inv.tokenExpiresAt < nowSec,
-        emailMatch: (caller.email ?? "").trim().toLowerCase() === inv.email.toLowerCase(),
+        emailMatch,
         callerOwnsOtherTenant,
         callerTenantName,
       };

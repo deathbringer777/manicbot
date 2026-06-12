@@ -649,9 +649,11 @@ describe("salonRouter.getInvitationContext — dual-role disclaimer detection", 
     const ctx = await caller.getInvitationContext({ invitationId: "inv_4" });
 
     expect(ctx.emailMatch).toBe(false);
-    // Invitee email is returned (lowercase normalization happens at send-time,
-    // not here) so the UI can prompt "sign in as TARGET@example.com".
-    expect(ctx.email).toBe("TARGET@example.com");
+    // TI-1 (audit 2026-06-12): when the caller is NOT the invitee, the
+    // invitee email comes back MASKED — still enough for the UI's
+    // "sign in as T***@example.com" hint, no longer a PII disclosure.
+    expect(ctx.email).toBe("T***@example.com");
+    expect(ctx.inviterEmail).toBe("i***@example.com");
   });
 
   it("flags expired=true when tokenExpiresAt is in the past", async () => {

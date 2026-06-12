@@ -561,6 +561,15 @@ export const pluginsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // AG-1 (audit 2026-06-12): checkout is a BILLING action — gate it with
+      // the same write-scope check as every other mutation in this router
+      // (owner / personal master / sysadmin), before any other work.
+      const tenantId = ctx.webUser!.tenantId;
+      if (!tenantId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Tenant required for addon checkout" });
+      }
+      await assertCanWriteScope(ctx as never, tenantId);
+
       const plugin = getPlugin(input.slug);
       if (!plugin) throw new TRPCError({ code: "NOT_FOUND" });
       const m = plugin.manifest;
@@ -588,11 +597,6 @@ export const pluginsRouter = createTRPCRouter({
           message: "WORKER_PUBLIC_URL / ADMIN_KEY not configured",
         });
       }
-      const tenantId = ctx.webUser!.tenantId;
-      if (!tenantId) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Tenant required for addon checkout" });
-      }
-
       const r = await fetch(`${workerUrl.replace(/\/$/, "")}/admin/plugin-addon-checkout`, {
         method: "POST",
         headers: {

@@ -44,6 +44,7 @@ import {
   assertThreadMember,
 } from "~/server/api/messenger/access";
 import { assertTenantBillingActive } from "~/server/api/tenantAccess";
+import { checkRateLimit } from "~/server/auth/rateLimit";
 import { filterActiveRecipients, MUTE_FOREVER } from "~/server/api/messenger/mute";
 import { sanitizeFtsQuery, buildMessageSearchSql } from "~/server/api/messenger/ftsQuery";
 import { mintWsToken } from "~/lib/wsToken";
@@ -56,6 +57,18 @@ import { notifyManyWebUsers } from "~/server/services/notifyWebUser";
 
 const MAX_ATTACHMENTS_PER_MESSAGE = 4;
 const MAX_ATTACHMENT_URL_LEN = 2000;
+
+// ─── Rate limits (IU-6, audit 2026-06-12) ──────────────────────────
+// Per-user (web_users.id) D1-backed limits. Message spam bloats D1 and
+// fans out a bell notification per recipient; token mints are bounded
+// by single-use jti but still free DB writes.
+
+/** sendMessage: 30 messages per minute per user. */
+const RL_SEND_MAX = 30;
+const RL_SEND_WINDOW_MS = 60_000;
+/** mintAttachmentUploadToken: 30 mints per 10 minutes per user. */
+const RL_MINT_MAX = 30;
+const RL_MINT_WINDOW_MS = 10 * 60_000;
 
 // ─── Validation ────────────────────────────────────────────────────
 
@@ -562,6 +575,12 @@ export const messengerRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // IU-6: per-user limiter before any work.
+      const rl = await checkRateLimit(ctx.db, ctx.webUser!.id, "messenger_send", RL_SEND_MAX, RL_SEND_WINDOW_MS);
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many messages. Try again later." });
+      }
+
       const { thread } = await assertThreadMember(ctx, input.tenantId, input.threadId);
       // CS-1 (audit 2026-06-12): outbound messaging is a high-value product
       // action — locked server-side for an expired-trial / churned tenant.
@@ -1607,6 +1626,12 @@ export const messengerRouter = createTRPCRouter({
       threadId: z.string().min(1),
     }))
     .mutation(async ({ ctx, input }) => {
+      // IU-6: per-user limiter before any work.
+      const rl = await checkRateLimit(ctx.db, ctx.webUser!.id, "messenger_mint_upload", RL_MINT_MAX, RL_MINT_WINDOW_MS);
+      if (!rl.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many upload requests. Try again later." });
+      }
+
       await assertThreadMember(ctx, input.tenantId, input.threadId);
 
       if (!env.UPLOAD_TOKEN_SECRET) {

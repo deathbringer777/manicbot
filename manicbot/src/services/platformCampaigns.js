@@ -475,7 +475,36 @@ async function buildBodies(ctx, campaign, tenant, recipient, occurrenceKey) {
       vars.expiresAt = promo.expires_at ? formatPromoExpiry(promo.expires_at, locale) : '';
     }
   }
-  return renderAnnouncementBodies(campaign, locale, ctx, vars);
+  // Seasonal campaigns built by the ThinkPad content-plan carry an empty body and
+  // a template_key; resolve the per-locale template content (tenant locale → EN)
+  // so the message renders localized copy instead of the empty campaign body.
+  let effectiveCampaign = campaign;
+  if (campaign.template_key) {
+    const tplBody = await resolveTemplateBodyForLocale(ctx, campaign.template_key, locale).catch(() => null);
+    if (tplBody) {
+      effectiveCampaign = { ...campaign, body: tplBody.center || campaign.body, bodies_json: JSON.stringify(tplBody) };
+    }
+  }
+  return renderAnnouncementBodies(effectiveCampaign, locale, ctx, vars);
+}
+
+/**
+ * Resolve the approved per-locale template body for a key (tenant locale → EN →
+ * first available). Returns the parsed per-channel bodies object, or null.
+ * Kept here (not imported from reactiveMessaging) to avoid a circular import.
+ */
+async function resolveTemplateBodyForLocale(ctx, templateKey, locale) {
+  // tenant-scan-ignore: platform_message_templates is PLATFORM-scoped (no tenant_id by design, migration 0100).
+  const rows = await dbAll(
+    ctx,
+    "SELECT locale, bodies_json FROM platform_message_templates WHERE template_key = ? AND status = 'approved'",
+    templateKey,
+  ).catch(() => []);
+  if (!rows || rows.length === 0) return null;
+  const byLocale = new Map();
+  for (const r of rows) byLocale.set(r.locale, r);
+  const pick = byLocale.get(locale) || byLocale.get('en') || rows[0];
+  return parseJson(pick.bodies_json) || null;
 }
 
 /** Localized short date for a promo expiry epoch (sec). */

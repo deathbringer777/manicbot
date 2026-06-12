@@ -1,10 +1,10 @@
 /**
  * Reviews router — public-surface audit (P2-7).
  *
- * Procedure-level access model (admin-app convention: `publicProcedure` is the
- * tRPC base, but every mutation/query in this router enforces an explicit
- * `assertTenantOwner(ctx, input.tenantId)` guard so a caller without a
- * NextAuth session cannot reach the data).
+ * Procedure-level access model: since #259 closure (2026-06-12) every
+ * owner-facing procedure uses `protectedProcedure` (typed session gate) AND
+ * enforces an explicit `assertTenantOwner(ctx, input.tenantId)` guard — the
+ * assert remains the tenant-scope authority (personal masters pass it).
  *
  * Callers (verified):
  *   * `getForSalon`     — SalonDashboard → Reviews tab (owner-only).
@@ -17,12 +17,12 @@
  *     and only returns `status IN ('active', 'featured')` rows + already-
  *     redacted fields (no chatId, no IP, no internal notes).
  *
- * Therefore: no procedure in this router is silently public. The file uses
- * `publicProcedure` as the tRPC scaffold; access control is at the call
- * site via `assertTenantOwner` or content-level filtering.
+ * Therefore: `getPublicReviews` is the only public procedure in this file;
+ * everything else requires a session at the boundary plus the in-handler
+ * assert (or content-level filtering).
  */
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { reviews, masters, tenantConfig, users } from "~/server/db/schema";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
@@ -32,7 +32,7 @@ const tenantIdInput = z.object({ tenantId: z.string() });
 
 export const reviewsRouter = createTRPCRouter({
   // ── Salon owner: list reviews with filters ────────────────────────────
-  getForSalon: publicProcedure
+  getForSalon: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       masterId: z.string().optional(),
@@ -78,7 +78,7 @@ export const reviewsRouter = createTRPCRouter({
     }),
 
   // ── Salon owner / master: stats ───────────────────────────────────────
-  getStats: publicProcedure
+  getStats: protectedProcedure
     .input(z.object({ tenantId: z.string(), masterId: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -107,8 +107,7 @@ export const reviewsRouter = createTRPCRouter({
     }),
 
   // ── Salon owner: update review status ─────────────────────────────────
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  updateStatus: publicProcedure
+  updateStatus: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       reviewId: z.string(),
@@ -123,8 +122,7 @@ export const reviewsRouter = createTRPCRouter({
     }),
 
   // ── Salon owner: reply to review ──────────────────────────────────────
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  addReply: publicProcedure
+  addReply: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       reviewId: z.string(),
@@ -137,9 +135,7 @@ export const reviewsRouter = createTRPCRouter({
         .where(and(eq(reviews.id, input.reviewId), eq(reviews.tenantId, input.tenantId)));
       return { ok: true };
     }),
-
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  deleteReply: publicProcedure
+  deleteReply: protectedProcedure
     .input(z.object({ tenantId: z.string(), reviewId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -210,7 +206,7 @@ export const reviewsRouter = createTRPCRouter({
   // Drives the worker post-visit rating prompt. `reviews_enabled` is read by
   // the worker as a truthy STRING ("1" = on, "" = off — never "0", which the
   // worker would treat as truthy). `reviews_prompt_timing` ∈ immediate|delayed.
-  getSettings: publicProcedure
+  getSettings: protectedProcedure
     .input(tenantIdInput)
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -228,8 +224,7 @@ export const reviewsRouter = createTRPCRouter({
     }),
 
   // ── Salon owner: update review-collection settings ────────────────────
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  updateSettings: publicProcedure
+  updateSettings: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       enabled: z.boolean().optional(),
@@ -251,7 +246,7 @@ export const reviewsRouter = createTRPCRouter({
     }),
 
   // ── Salon owner: per-master rating breakdown (monitoring) ─────────────
-  getMasterBreakdown: publicProcedure
+  getMasterBreakdown: protectedProcedure
     .input(tenantIdInput)
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);

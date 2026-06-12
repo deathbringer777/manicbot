@@ -10,7 +10,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, publicProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { users, userOrigins, appointments, trackingLinks } from "~/server/db/schema";
 import { and, eq, gte, sql, desc } from "drizzle-orm";
@@ -50,7 +50,7 @@ export const analyticsRouter = createTRPCRouter({
    * Telegram chat_id, so they never produce a `users` row).
    * Returns one row per (day, source) and the unique-sources list.
    */
-  getAcquisition: publicProcedure
+  getAcquisition: protectedProcedure
     .input(tenantDaysInput)
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -117,7 +117,7 @@ export const analyticsRouter = createTRPCRouter({
    * Conversion funnel for new users who first touched in the window:
    *   touches → unique users → registered (phone captured) → booked → confirmed.
    */
-  getFunnel: publicProcedure
+  getFunnel: protectedProcedure
     .input(tenantDaysInput)
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -200,7 +200,7 @@ export const analyticsRouter = createTRPCRouter({
    * touches/visitors with zero bookings (a web visitor hasn't booked via Telegram
    * under that touch). Uses CREATE INDEX idx_uo_tenant_first.
    */
-  getTopCampaigns: publicProcedure
+  getTopCampaigns: protectedProcedure
     .input(tenantDaysInput)
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);

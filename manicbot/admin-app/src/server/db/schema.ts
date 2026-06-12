@@ -1719,9 +1719,13 @@ export const platformCampaigns = sqliteTable("platform_campaigns", {
   createdBy: text("created_by"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
+  // 0120: holiday occasion + keyed-template linkage for the messaging service.
+  occasionKey: text("occasion_key"),
+  templateKey: text("template_key"),
 }, (t) => [
   index("idx_platform_campaigns_status_next").on(t.status, t.nextRunAt),
   index("idx_platform_campaigns_kind").on(t.kind),
+  index("idx_platform_campaigns_occasion").on(t.occasionKey),
   // The singleton partial-UNIQUE (WHERE kind IN (...)) lives in migration 0100
   // / schema.sql only — the SQLite builder cannot express a partial WHERE on
   // uniqueIndex (same limitation as the newsletter confirm-token index).
@@ -1756,8 +1760,59 @@ export const platformMessageTemplates = sqliteTable("platform_message_templates"
   createdBy: text("created_by"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
+  // 0118: keyed, approval-gated, per-locale library for the messaging service.
+  templateKey: text("template_key"),
+  status: text("status").notNull().default("draft"),
+  variablesJson: text("variables_json"),
 }, (t) => [
   index("idx_pmt_category").on(t.category),
+  // Partial UNIQUE(template_key, locale) WHERE template_key IS NOT NULL lives in
+  // migration 0118 / schema.sql only (SQLite builder can't express the WHERE).
+  index("idx_pmt_status").on(t.status),
+]);
+
+// 0119: holiday_calendar — Polish recurring-occasions DB for seasonal messaging.
+// PLATFORM-scoped (no tenant_id). Populated by the ThinkPad holidays-sync cron
+// via the Worker /admin/messaging/holidays-upsert seam. Names carried in all 4
+// product locales so a seasonal campaign renders in the tenant's locale (EN fb).
+export const holidayCalendar = sqliteTable("holiday_calendar", {
+  id: text("id").primaryKey(),
+  date: text("date").notNull(),
+  country: text("country").notNull().default("PL"),
+  occasionKey: text("occasion_key").notNull(),
+  namePl: text("name_pl"),
+  nameRu: text("name_ru"),
+  nameUk: text("name_uk"),
+  nameEn: text("name_en"),
+  type: text("type").notNull().default("observance"),
+  recurrenceJson: text("recurrence_json"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_holiday_occasion_date").on(t.occasionKey, t.date),
+  index("idx_holiday_date").on(t.date),
+]);
+
+// 0120: subscription_promo_codes — owner-facing SUBSCRIPTION discount codes for
+// seasonal offers. DISTINCT from the tenant-level loyalty `promo_codes` (0029,
+// salon→client). Minted as Stripe coupon + promotion_code by promoCodes.js.
+export const subscriptionPromoCodes = sqliteTable("subscription_promo_codes", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull(),
+  couponCode: text("coupon_code").notNull(),
+  campaignId: text("campaign_id"),
+  percentOff: integer("percent_off").notNull(),
+  duration: text("duration").notNull().default("once"),
+  durationMonths: integer("duration_months"),
+  expiresAt: integer("expires_at"),
+  maxRedemptions: integer("max_redemptions"),
+  stripePromoId: text("stripe_promo_id"),
+  livemode: integer("livemode").notNull().default(0),
+  createdBy: text("created_by"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_sub_promo_code").on(t.code),
+  index("idx_sub_promo_campaign").on(t.campaignId),
 ]);
 
 // 0083: self-hosted marketing blog CMS. Drives admin CRUD at /system/blog +

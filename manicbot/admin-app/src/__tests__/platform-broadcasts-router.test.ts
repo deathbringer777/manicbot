@@ -42,6 +42,11 @@ describe("platformBroadcastsRouter — auth gating", () => {
     ["templateCreate", (c) => c.templateCreate({ name: "T", channels: ["center"], bodies: { center: "x" } })],
     ["getWelcomeSettings", (c) => c.getWelcomeSettings()],
     ["setWelcomeSettings", (c) => c.setWelcomeSettings({ enabled: true, channels: ["center"], body: "x" })],
+    ["templateApprove", (c) => c.templateApprove({ id: "x" })],
+    ["templateArchive", (c) => c.templateArchive({ id: "x" })],
+    ["contentPlanList", (c) => c.contentPlanList({})],
+    ["contentPlanApprove", (c) => c.contentPlanApprove({ id: "x" })],
+    ["contentPlanSkip", (c) => c.contentPlanSkip({ id: "x" })],
   ];
 
   for (const [name, invoke] of invocations) {
@@ -231,6 +236,72 @@ describe("templates", () => {
     await expect(
       createCaller(makeAdminCtx(del.db) as never).templateDelete({ id: "pmt_builtin_x" }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "builtin_readonly" });
+  });
+
+  it("templateList filters by status", async () => {
+    const mock = createDbMock([[{ id: "pmt_1", status: "approved" }]]);
+    const res = await createCaller(makeAdminCtx(mock.db) as never).templateList({ status: "approved" });
+    expect(res).toHaveLength(1);
+    expect(mock.db.select).toHaveBeenCalled();
+  });
+
+  it("templateApprove sets status=approved on a non-builtin row", async () => {
+    const mock = createDbMock([[{ id: "pmt_draft", isBuiltin: 0 }]]);
+    const res = await createCaller(makeAdminCtx(mock.db) as never).templateApprove({ id: "pmt_draft" });
+    expect(res).toMatchObject({ ok: true });
+    expect(mock.updateCalls[0]!.values).toMatchObject({ status: "approved" });
+  });
+
+  it("templateArchive sets status=archived on a non-builtin row", async () => {
+    const mock = createDbMock([[{ id: "pmt_x", isBuiltin: 0 }]]);
+    const res = await createCaller(makeAdminCtx(mock.db) as never).templateArchive({ id: "pmt_x" });
+    expect(res).toMatchObject({ ok: true });
+    expect(mock.updateCalls[0]!.values).toMatchObject({ status: "archived" });
+  });
+
+  it("templateApprove / templateArchive refuse a builtin row", async () => {
+    const ap = createDbMock([[{ id: "pmt_b", isBuiltin: 1 }]]);
+    await expect(
+      createCaller(makeAdminCtx(ap.db) as never).templateApprove({ id: "pmt_b" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "builtin_readonly" });
+
+    const ar = createDbMock([[{ id: "pmt_b", isBuiltin: 1 }]]);
+    await expect(
+      createCaller(makeAdminCtx(ar.db) as never).templateArchive({ id: "pmt_b" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "builtin_readonly" });
+  });
+
+  it("templateApprove / templateArchive NOT_FOUND when the row is missing", async () => {
+    const ap = createDbMock([[]]);
+    await expect(
+      createCaller(makeAdminCtx(ap.db) as never).templateApprove({ id: "nope" }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+// ─── Content plan (seasonal occasion drafts) ────────────────────────────────
+
+describe("content plan", () => {
+  it("contentPlanList returns occasion-tagged campaign rows", async () => {
+    const rows = [{ id: "pcamp_1", occasionKey: "new_year", scheduledAt: 123, status: "draft" }];
+    const mock = createDbMock([rows]);
+    const res = await createCaller(makeAdminCtx(mock.db) as never).contentPlanList({});
+    expect(res).toEqual(rows);
+    expect(mock.db.select).toHaveBeenCalled();
+  });
+
+  it("contentPlanApprove activates the draft", async () => {
+    const mock = createDbMock();
+    const res = await createCaller(makeAdminCtx(mock.db) as never).contentPlanApprove({ id: "pcamp_1" });
+    expect(res).toMatchObject({ ok: true });
+    expect(mock.updateCalls[0]!.values).toMatchObject({ status: "active" });
+  });
+
+  it("contentPlanSkip marks the draft done", async () => {
+    const mock = createDbMock();
+    const res = await createCaller(makeAdminCtx(mock.db) as never).contentPlanSkip({ id: "pcamp_1" });
+    expect(res).toMatchObject({ ok: true });
+    expect(mock.updateCalls[0]!.values).toMatchObject({ status: "done" });
   });
 });
 

@@ -22,6 +22,7 @@ import { tryLegalPages } from './http/legalPagesHttp.js';
 import { tryStripe } from './http/stripeHttp.js';
 import { tryAdminKeyRoutes } from './http/adminKeyHttp.js';
 import { tryMessengerOutboundRoute } from './http/messengerOutboundHttp.js';
+import { tryMessagingRoutes } from './http/messagingHttp.js';
 import { tryMessengerWsRoute } from './http/messengerWsHttp.js';
 export { MessengerHub } from './durable/messengerHub.js';
 import { tryLeadRoutes } from './http/leadsHttp.js';
@@ -490,6 +491,11 @@ export default {
     if (res) return res; // Stripe webhook — no browser headers needed
 
     res = await tryAdminKeyRoutes(request, env, url);
+    if (res) return addSecurityHeaders(res);
+
+    // System & Seasonal Messaging seam (ThinkPad tier → Worker → D1).
+    // Bearer MESSAGING_TOKEN; routed before browser-facing handlers.
+    res = await tryMessagingRoutes(request, env, url);
     if (res) return addSecurityHeaders(res);
 
     // Internal messenger relay (admin-app → Worker → channel adapter).

@@ -64,6 +64,15 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # Low-privilege notify-only Bearer token for POST /admin/notify (min 32 chars)
 # NOTIFY_TOKEN=your_notify_only_token_min_32_chars
 
+# ─── SYSTEM & SEASONAL MESSAGING ─────────────────────────────────────────────
+# Global real-send gate. "0" (default) STAGES every reactive/seasonal delivery
+# (ledger 'skipped_flag', zero egress). Flip to "1" after reviewing templates.
+# Declared in wrangler.toml [vars]; override here for local dev if needed.
+# MESSAGING_SEND_ENABLED=0
+# Low-privilege Bearer token for the ThinkPad → /admin/messaging/* seam (min 32
+# chars). Can ONLY touch messaging tables. Set in prod via wrangler secret put.
+# MESSAGING_TOKEN=your_messaging_seam_token_min_32_chars
+
 # Telegram bot token for internal admin notifications (defaults to BOT_TOKEN)
 # NOTIFY_BOT_TOKEN=123456:ABCdef...
 

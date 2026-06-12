@@ -349,5 +349,10 @@ export function buildCtx(env) {
     APP_BASE_URL: env.APP_BASE_URL || null,
     baseUrl: env.APP_BASE_URL || null,
     ADMIN_APP_URL: env.ADMIN_APP_URL || null,
+    // Stripe REST secret (seasonal promo-code rendering needs it in the cron
+    // dispatch path) + the messaging real-send gate (default OFF → seasonal
+    // campaigns stage instead of sending). See src/services/reactiveMessaging.js.
+    stripeSecretKey: env.STRIPE_SECRET_KEY || null,
+    messagingSendEnabled: env.MESSAGING_SEND_ENABLED === '1',
   };
 }

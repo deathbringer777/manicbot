@@ -27,6 +27,7 @@ import {
   handleReferralSubscriptionDeleted,
 } from './referralWebhooks.js';
 import { notifyTenantOwner } from '../services/userNotify.js';
+import { fireReactiveForTenant } from '../services/reactiveMessaging.js';
 
 // #P1-5 (relax.md §5) — plan tier order is the single source of truth for
 // upgrade detection. Mirrored verbatim by `notificationEmails.PLAN_ORDER`.
@@ -388,6 +389,23 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
         sendPlanUpgradeEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, oldPlanForUpgrade, newPlanForUpgrade)
           .catch(e => log.error('webhook.planUpgradeEmail', e));
       }
+
+      // Messaging service: reactive plan-changed / subscription-expired news
+      // messages (flag-gated, staged until MESSAGING_SEND_ENABLED). The tenant
+      // row already carries the new plan (updateTenantBilling ran above); pass
+      // {plan} explicitly so the message names the new tier.
+      if (type === 'customer.subscription.deleted') {
+        fireReactiveForTenant(ctx, tenantId, {
+          kind: 'sys_subscription_expired',
+          occurrenceKey: `sub_expired:${sub.id}`,
+        }).catch((e) => log.warn('webhooks', { action: 'reactive_sub_expired', error: e?.message }));
+      } else if (updates.plan && oldPlanForUpgrade && updates.plan !== oldPlanForUpgrade) {
+        fireReactiveForTenant(ctx, tenantId, {
+          kind: 'sys_plan_changed',
+          occurrenceKey: `plan_changed:${sub.id}:${updates.plan}`,
+          vars: { plan: updates.plan },
+        }).catch((e) => log.warn('webhooks', { action: 'reactive_plan_changed', error: e?.message }));
+      }
     }
   }
 
@@ -420,6 +438,13 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
             graceEndsAt: null,
             updatedAt: nowSec(),
           });
+          // Messaging service: reactive "payment received / you're back" message
+          // — only on dunning RECOVERY (not on every routine renewal, to avoid
+          // monthly noise). Flag-gated, idempotent per invoice.
+          fireReactiveForTenant(ctx, tenantId, {
+            kind: 'sys_payment_success',
+            occurrenceKey: `payment_success:${invoice?.id || tenantId}`,
+          }).catch((e) => log.warn('webhooks', { action: 'reactive_payment_success', error: e?.message }));
         }
         // Multi-salon cascade (0117): mirror the parent's (possibly recovered)
         // MAX entitlement onto its secondary salons — restore them when the card
@@ -488,6 +513,12 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
         } catch (e) {
           log.warn('webhooks', { action: 'billing_payment_failed_bell', error: e?.message });
         }
+        // Messaging service: reactive news-channel message (flag-gated, staged
+        // until MESSAGING_SEND_ENABLED). Fire-and-forget — never blocks the 200.
+        fireReactiveForTenant(ctx, tenantId, {
+          kind: 'sys_payment_failed',
+          occurrenceKey: `payment_failed:${invoice?.id || subscriptionId}`,
+        }).catch((e) => log.warn('webhooks', { action: 'reactive_payment_failed', error: e?.message }));
       }
     }
   }
@@ -526,6 +557,11 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
       } catch (e) {
         log.warn('webhooks', { action: 'billing_trial_will_end_bell', error: e?.message });
       }
+      // Messaging service: reactive trial-ending news message (flag-gated).
+      fireReactiveForTenant(ctx, tenantId, {
+        kind: 'sys_trial_ending',
+        occurrenceKey: `trial_will_end:${sub.id}`,
+      }).catch((e) => log.warn('webhooks', { action: 'reactive_trial_ending', error: e?.message }));
     }
   }
 

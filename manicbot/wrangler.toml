@@ -51,6 +51,14 @@ MARKETING_ASSETS_PUBLIC_URL = "https://pub-1dff67fc0bd644c59f1677cb5d553ce6.r2.d
 # Manual triggers /admin/marketing-tick + /admin/marketing-publish-one ignore this flag.
 MARKETING_AUTOPILOT_ENABLED = "1"
 
+# System & Seasonal Messaging — global real-send gate. Default "0": the reactive
+# engine + seasonal dispatch STAGE every delivery (ledger row 'skipped_flag', zero
+# external egress — no center/bell/Telegram/email). Flip to "1" ONLY after the
+# operator has reviewed the seeded templates + content plan. See messaging/HANDOFF.md.
+# The low-privilege MESSAGING_TOKEN (ThinkPad → /admin/messaging/* seam) is a
+# secret, set via `wrangler secret put MESSAGING_TOKEN`.
+MESSAGING_SEND_ENABLED = "0"
+
 # Tenant whose `channel_configs` Instagram row holds the @manicbot_com publishing
 # token (connected via the product's Instagram-login OAuth: long-lived, auto-refreshed,
 # encrypted). The autopilot reads + decrypts it from here when the MARKETING_IG_*

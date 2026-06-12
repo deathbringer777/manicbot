@@ -40,7 +40,8 @@ CREATE TABLE platform_campaigns (
   id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT, body TEXT, bodies_json TEXT,
   audience_filter_json TEXT, channels_json TEXT NOT NULL, schedule_kind TEXT NOT NULL DEFAULT 'now',
   scheduled_at INTEGER, recurrence_json TEXT, template_id TEXT, status TEXT NOT NULL DEFAULT 'draft',
-  next_run_at INTEGER, last_run_at INTEGER, created_by TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  next_run_at INTEGER, last_run_at INTEGER, created_by TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+  occasion_key TEXT, template_key TEXT
 );
 CREATE TABLE platform_campaign_deliveries (
   id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL, occurrence_key TEXT NOT NULL,

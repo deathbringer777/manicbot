@@ -17,7 +17,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Megaphone, BarChart3, CreditCard, Send, Loader2, Trash2, Pause, Play, Check,
-  Sparkles, LayoutTemplate, Plus, Pencil, Lock, X,
+  Sparkles, LayoutTemplate, Plus, Pencil, Lock, X, CheckCircle2, Archive,
+  CalendarClock, SkipForward,
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { Switch } from "~/components/ui/Switch";
@@ -531,6 +532,27 @@ const STATUS_LABEL: Record<string, string> = {
   draft: "Черновик", scheduled: "Запланировано", active: "Активно", paused: "Пауза", done: "Отправлено", failed: "Ошибка",
 };
 
+// Template approval lifecycle (migration 0118): draft → approved → archived.
+// 'approved' is the state the Worker reactive engine requires before delivery.
+const TEMPLATE_STATUS_CHIP: Record<string, { label: string; cls: string }> = {
+  draft: { label: "ЧЕРНОВИК", cls: "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300" },
+  approved: { label: "ОДОБРЕН", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300" },
+  archived: { label: "В АРХИВЕ", cls: "bg-amber-500/15 text-amber-600 dark:text-amber-300" },
+};
+
+function TemplateStatusChip({ status }: { status: string | null | undefined }) {
+  const s = status ?? "draft";
+  const chip = TEMPLATE_STATUS_CHIP[s] ?? TEMPLATE_STATUS_CHIP.draft!;
+  return (
+    <span
+      className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${chip.cls}`}
+      data-testid={`template-status-${s}`}
+    >
+      {chip.label}
+    </span>
+  );
+}
+
 function AnnouncementsList() {
   const utils = api.useUtils();
   const list = api.platformBroadcasts.campaignList.useQuery({});
@@ -587,6 +609,8 @@ function TemplatesLibrary({ onUse }: { onUse: (p: ComposerPrefill) => void }) {
   const utils = api.useUtils();
   const list = api.platformBroadcasts.templateList.useQuery({});
   const del = api.platformBroadcasts.templateDelete.useMutation({ onSuccess: () => void utils.platformBroadcasts.templateList.invalidate() });
+  const approve = api.platformBroadcasts.templateApprove.useMutation({ onSuccess: () => void utils.platformBroadcasts.templateList.invalidate() });
+  const archive = api.platformBroadcasts.templateArchive.useMutation({ onSuccess: () => void utils.platformBroadcasts.templateList.invalidate() });
   const [editing, setEditing] = useState<TemplateDraft | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -628,8 +652,9 @@ function TemplatesLibrary({ onUse }: { onUse: (p: ComposerPrefill) => void }) {
                 {rows.map((t) => (
                   <li key={t.id} className="flex items-center justify-between gap-3 py-2">
                     <div className="min-w-0">
-                      <p className="flex items-center gap-1 truncate text-sm font-medium text-slate-900 dark:text-white">
-                        {t.name}
+                      <p className="flex items-center gap-1.5 truncate text-sm font-medium text-slate-900 dark:text-white">
+                        <span className="truncate">{t.name}</span>
+                        <TemplateStatusChip status={t.status} />
                         {t.isBuiltin === 1 && <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="встроенный" />}
                       </p>
                       <p className="truncate text-[11px] text-slate-400">{templateCenter(t.bodiesJson).slice(0, 90) || "—"}</p>
@@ -641,6 +666,18 @@ function TemplatesLibrary({ onUse }: { onUse: (p: ComposerPrefill) => void }) {
                       </Button>
                       {t.isBuiltin !== 1 && (
                         <>
+                          {t.status !== "approved" && t.status !== "archived" && (
+                            <Button size="sm" variant="ghost" tone="emerald" leadingIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+                              onClick={() => approve.mutate({ id: t.id })}>
+                              Одобрить
+                            </Button>
+                          )}
+                          {t.status !== "archived" && (
+                            <Button size="sm" variant="ghost" tone="amber" leadingIcon={<Archive className="h-3.5 w-3.5" />}
+                              onClick={() => archive.mutate({ id: t.id })}>
+                              В архив
+                            </Button>
+                          )}
                           <Button size="sm" variant="ghost" leadingIcon={<Pencil className="h-3.5 w-3.5" />}
                             onClick={() => setEditing({ id: t.id, name: t.name, category: t.category ?? "", body: templateCenter(t.bodiesJson), channels: fromChannels(templateChannels(t.channelsJson)) })}>
                             Изм.
@@ -738,6 +775,68 @@ function TemplateEditorModal({ draft, onClose, onSaved }: { draft: TemplateDraft
   );
 }
 
+// ─── Seasonal content plan (ThinkPad-generated occasion drafts) ─────────────
+
+function fmtSchedAt(ts: number | null | undefined): string {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleString("ru-RU", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function ContentPlanCard() {
+  const utils = api.useUtils();
+  const list = api.platformBroadcasts.contentPlanList.useQuery({});
+  const approve = api.platformBroadcasts.contentPlanApprove.useMutation({ onSuccess: () => void utils.platformBroadcasts.contentPlanList.invalidate() });
+  const skip = api.platformBroadcasts.contentPlanSkip.useMutation({ onSuccess: () => void utils.platformBroadcasts.contentPlanList.invalidate() });
+
+  const items = list.data ?? [];
+
+  return (
+    <div className={CARD}>
+      <div className="mb-3 flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/10 text-violet-500"><CalendarClock className="h-4 w-4" /></div>
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Сезонный контент-план</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Праздничные черновики, сгенерированные пайплайном. Одобрите — уйдёт в срок; пропустите — останется в истории.</p>
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-400">Пока нет сезонных черновиков.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100 dark:divide-white/5">
+          {items.map((c) => (
+            <li key={c.id} className="flex items-center justify-between gap-3 py-3" data-testid="content-plan-item">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                  {c.title || c.occasionKey || "(без заголовка)"}
+                </p>
+                <p className="truncate text-[11px] text-slate-400">
+                  {c.occasionKey ?? "—"} · {fmtSchedAt(c.scheduledAt)} · {STATUS_LABEL[c.status] ?? c.status}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {c.status !== "active" && c.status !== "done" && (
+                  <Button size="sm" variant="ghost" tone="emerald" leadingIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+                    onClick={() => approve.mutate({ id: c.id })}>
+                    Одобрить
+                  </Button>
+                )}
+                {c.status !== "done" && (
+                  <Button size="sm" variant="ghost" tone="amber" leadingIcon={<SkipForward className="h-3.5 w-3.5" />}
+                    onClick={() => skip.mutate({ id: c.id })}>
+                    Пропустить
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function BroadcastsClient() {
   const [prefill, setPrefill] = useState<ComposerPrefill | null>(null);
   return (
@@ -749,6 +848,7 @@ export default function BroadcastsClient() {
           <SubscriptionReminderCard />
         </div>
         <Composer prefill={prefill} onPrefillConsumed={() => setPrefill(null)} />
+        <ContentPlanCard />
         <TemplatesLibrary onUse={setPrefill} />
         <AnnouncementsList />
       </div>

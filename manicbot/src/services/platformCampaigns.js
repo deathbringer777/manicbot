@@ -33,6 +33,7 @@ import {
 } from './platformCampaignStats.js';
 import { buildCampaignVars } from './platformCampaignVars.js';
 import { deliverEmail } from './platformCampaignEmail.js';
+import { getPromoForCampaign } from '../billing/promoCodes.js';
 
 const NOT_DUE = Object.freeze({ due: false, occurrenceKey: null });
 
@@ -301,7 +302,7 @@ async function resolveTenantRecipients(ctx) {
  * case (and the test mock); the UNIQUE index (migration 0100) is the race
  * backstop in production.
  */
-async function tryClaimDelivery(ctx, campaignId, occurrenceKey, webUserId, channel, tenantId, nowSec) {
+export async function tryClaimDelivery(ctx, campaignId, occurrenceKey, webUserId, channel, tenantId, nowSec) {
   const existing = await dbGet(
     ctx,
     `SELECT id FROM platform_campaign_deliveries
@@ -325,7 +326,7 @@ async function tryClaimDelivery(ctx, campaignId, occurrenceKey, webUserId, chann
   }
 }
 
-async function markDelivery(ctx, id, status, error, nowSec) {
+export async function markDelivery(ctx, id, status, error, nowSec) {
   await dbRun(
     ctx,
     'UPDATE platform_campaign_deliveries SET status = ?, error = ?, sent_at = ? WHERE id = ?',
@@ -438,7 +439,7 @@ async function deliverEmailChannel(ctx, recipient, campaign, bodies) {
   return { ok: false, skipped: res.error === 'resend_unconfigured', error: res.error };
 }
 
-async function deliverChannel(ctx, channel, recipient, campaign, bodies, occurrenceKey, nowSec) {
+export async function deliverChannel(ctx, channel, recipient, campaign, bodies, occurrenceKey, nowSec) {
   switch (channel) {
     case 'center': return deliverCenter(ctx, recipient, campaign, bodies, occurrenceKey, nowSec);
     case 'bell': return deliverBell(ctx, recipient, campaign, bodies, occurrenceKey);
@@ -464,7 +465,29 @@ async function buildBodies(ctx, campaign, tenant, recipient, occurrenceKey) {
     );
   }
   const vars = buildCampaignVars(tenant, recipient);
+  // Seasonal/promo offers: if a subscription promo code is linked to this
+  // campaign, expose {promoCode}/{expiresAt} so the operator-authored body can
+  // render a real, redeemable discount code.
+  if (campaign.id) {
+    const promo = await getPromoForCampaign(ctx, campaign.id).catch(() => null);
+    if (promo) {
+      vars.promoCode = promo.code;
+      vars.expiresAt = promo.expires_at ? formatPromoExpiry(promo.expires_at, locale) : '';
+    }
+  }
   return renderAnnouncementBodies(campaign, locale, ctx, vars);
+}
+
+/** Localized short date for a promo expiry epoch (sec). */
+function formatPromoExpiry(epochSec, locale) {
+  const localeTag = { ru: 'ru-RU', ua: 'uk-UA', uk: 'uk-UA', pl: 'pl-PL', en: 'en-GB' }[locale] || 'en-GB';
+  try {
+    return new Intl.DateTimeFormat(localeTag, {
+      timeZone: TIMEZONE, day: '2-digit', month: '2-digit', year: 'numeric',
+    }).format(new Date(epochSec * 1000));
+  } catch {
+    return '';
+  }
 }
 
 async function maybeFinalizeOnce(ctx, campaign, nowSec) {
@@ -533,6 +556,12 @@ export async function phasePlatformCampaigns(ctx, nowMs) {
       }
 
       const channels = parseChannels(c.channels_json);
+      // Seasonal (occasion-linked) campaigns belong to the new messaging service
+      // → gated by MESSAGING_SEND_ENABLED. When off, claim the ledger slot as
+      // 'skipped_flag' (no center/bell/TG/email egress) so the dry-run is
+      // observable but inert. Welcome/monthly_report/announcement (no occasion_key)
+      // are NOT gated — existing behavior is preserved.
+      const seasonalGated = !!c.occasion_key && ctx.messagingSendEnabled !== true;
       let delivered = false;
       for (const r of recipients) {
         // Welcome backfill fills only EMPTY channels — never late-welcome an
@@ -545,6 +574,10 @@ export async function phasePlatformCampaigns(ctx, nowMs) {
           const claimId = await tryClaimDelivery(ctx, c.id, occurrenceKey, r.id, ch, ctx.tenantId, nowSec);
           if (!claimId) continue;
           delivered = true;
+          if (seasonalGated) {
+            await markDelivery(ctx, claimId, 'skipped_flag', 'messaging_send_disabled', nowSec);
+            continue;
+          }
           let result;
           try {
             result = await deliverChannel(ctx, ch, r, c, bodies, occurrenceKey, nowSec);

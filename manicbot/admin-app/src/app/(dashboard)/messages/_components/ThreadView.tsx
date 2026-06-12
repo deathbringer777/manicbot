@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Archive, StickyNote, Users, Clock, Check, CheckCheck, AlertCircle, Pencil, Trash2 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
-import { t, formatDate, type Lang } from "~/lib/i18n";
+import { t, formatDate, formatTime, type Lang } from "~/lib/i18n";
 import { MessageComposer, ATTACHMENT_ONLY_BODY } from "./MessageComposer";
 import { GroupMembersModal } from "./GroupMembersModal";
 import { useMessengerSocketCtx } from "./socketContext";
@@ -17,9 +17,7 @@ interface Props {
 
 function fmtFull(ts: number, lang: Lang): string {
   const d = new Date(ts * 1000);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${formatDate(d, lang)} ${hh}:${mm}`;
+  return `${formatDate(d, lang)} ${formatTime(d, lang)}`;
 }
 
 /**

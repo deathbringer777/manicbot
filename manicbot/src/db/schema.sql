@@ -1700,12 +1700,17 @@ CREATE TABLE IF NOT EXISTS platform_campaigns (
   last_run_at           INTEGER,
   created_by            TEXT,
   created_at            INTEGER NOT NULL,
-  updated_at            INTEGER NOT NULL
+  updated_at            INTEGER NOT NULL,
+  -- 0120: link a campaign to a holiday occasion + a keyed per-locale template.
+  occasion_key          TEXT,
+  template_key          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_platform_campaigns_status_next
   ON platform_campaigns(status, next_run_at);
 CREATE INDEX IF NOT EXISTS idx_platform_campaigns_kind
   ON platform_campaigns(kind);
+CREATE INDEX IF NOT EXISTS idx_platform_campaigns_occasion
+  ON platform_campaigns(occasion_key);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_platform_campaigns_singleton_kind
   ON platform_campaigns(kind)
   WHERE kind IN ('monthly_report', 'subscription_reminder', 'welcome');
@@ -1742,10 +1747,64 @@ CREATE TABLE IF NOT EXISTS platform_message_templates (
   is_builtin            INTEGER NOT NULL DEFAULT 0,
   created_by            TEXT,
   created_at            INTEGER NOT NULL,
-  updated_at            INTEGER NOT NULL
+  updated_at            INTEGER NOT NULL,
+  -- 0118: keyed, approval-gated, per-locale library for the messaging service.
+  template_key          TEXT,
+  status                TEXT NOT NULL DEFAULT 'draft',
+  variables_json        TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pmt_category
   ON platform_message_templates(category);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pmt_template_key_locale
+  ON platform_message_templates(template_key, locale)
+  WHERE template_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pmt_status
+  ON platform_message_templates(status);
+
+-- 0119: holiday_calendar — Polish recurring-occasions DB for seasonal messaging.
+-- PLATFORM-scoped (no tenant_id). Populated by the ThinkPad holidays-sync cron
+-- via /admin/messaging/holidays-upsert. See migrations/0119_holiday_calendar.sql.
+CREATE TABLE IF NOT EXISTS holiday_calendar (
+  id                TEXT PRIMARY KEY,
+  date              TEXT NOT NULL,
+  country           TEXT NOT NULL DEFAULT 'PL',
+  occasion_key      TEXT NOT NULL,
+  name_pl           TEXT,
+  name_ru           TEXT,
+  name_uk           TEXT,
+  name_en           TEXT,
+  type              TEXT NOT NULL DEFAULT 'observance',
+  recurrence_json   TEXT,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_holiday_occasion_date
+  ON holiday_calendar(occasion_key, date);
+CREATE INDEX IF NOT EXISTS idx_holiday_date
+  ON holiday_calendar(date);
+
+-- 0120: subscription_promo_codes — owner-facing SUBSCRIPTION discount codes for
+-- seasonal offers (distinct from tenant-level loyalty promo_codes, 0029). Minted
+-- as Stripe coupon + promotion_code by src/billing/promoCodes.js. livemode marks
+-- test vs live Stripe objects. See migrations/0120_campaign_occasion_and_promo.sql.
+CREATE TABLE IF NOT EXISTS subscription_promo_codes (
+  id                TEXT PRIMARY KEY,
+  code              TEXT NOT NULL,
+  coupon_code       TEXT NOT NULL,
+  campaign_id       TEXT,
+  percent_off       INTEGER NOT NULL,
+  duration          TEXT NOT NULL DEFAULT 'once',
+  duration_months   INTEGER,
+  expires_at        INTEGER,
+  max_redemptions   INTEGER,
+  stripe_promo_id   TEXT,
+  livemode          INTEGER NOT NULL DEFAULT 0,
+  created_by        TEXT,
+  created_at        INTEGER NOT NULL,
+  UNIQUE(code)
+);
+CREATE INDEX IF NOT EXISTS idx_sub_promo_campaign
+  ON subscription_promo_codes(campaign_id);
 
 -- 0083: blog_posts — self-hosted marketing blog CMS (system_admin only).
 -- See migrations/0083_blog_posts.sql for column rationale.

@@ -749,13 +749,22 @@ export const messengerRouter = createTRPCRouter({
         // icon. 'queued' = the Worker is auto-retrying a transient 429/5xx → keep
         // 'pending' (the retry queue resolves it to sent/failed).
         if (relay.ok) {
+          // Terminal-guard the advance to 'sent': only a still-'pending' row may
+          // move forward. A concurrent Meta 'delivered' webhook receipt is
+          // terminal and must NOT be clobbered back to 'sent' by this relay ack.
           await ctx.db
             .update(threadMessages)
             .set({
               deliveryState: "sent",
               ...(relay.externalMsgId ? { externalMsgId: relay.externalMsgId } : {}),
             })
-            .where(and(eq(threadMessages.id, id), eq(threadMessages.tenantId, input.tenantId)));
+            .where(
+              and(
+                eq(threadMessages.id, id),
+                eq(threadMessages.tenantId, input.tenantId),
+                eq(threadMessages.deliveryState, "pending"),
+              ),
+            );
         } else if (!relay.queued) {
           await ctx.db
             .update(threadMessages)
@@ -952,6 +961,10 @@ export const messengerRouter = createTRPCRouter({
       await assertThreadMember(ctx, input.tenantId, input.threadId);
       const webUserId = ctx.webUser!.id;
 
+      // Monotonic guard: the read pointer may only move FORWARD. Opening an old
+      // paginated view must not drag `last_read_message_id` backwards (that would
+      // resurrect already-cleared unread badges). ULIDs sort lexicographically by
+      // creation time, so a plain `<` compare is a valid "older than" test.
       await ctx.db
         .update(threadMembers)
         .set({ lastReadMessageId: input.lastSeenMessageId, lastReadAt: nowSec() })
@@ -960,6 +973,10 @@ export const messengerRouter = createTRPCRouter({
             eq(threadMembers.threadId, input.threadId),
             eq(threadMembers.memberKind, "web_user"),
             eq(threadMembers.memberRef, webUserId),
+            or(
+              isNull(threadMembers.lastReadMessageId),
+              lt(threadMembers.lastReadMessageId, input.lastSeenMessageId),
+            ),
           ),
         );
       return { ok: true };

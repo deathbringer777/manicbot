@@ -1,0 +1,19 @@
+{
+  "_comment": "Curated commercially-relevant occasions for Polish beauty/nail salons. Facts only — no secrets. Public holidays come from the date-holidays npm library; these enrich the calendar with industry/observance dates it doesn't carry. month/day are 1-based; type ∈ public|observance|commercial.",
+  "occasions": [
+    { "occasion_key": "new_year",       "month": 1,  "day": 1,  "type": "public",     "name_pl": "Nowy Rok",            "name_ru": "Новый год",          "name_uk": "Новий рік",          "name_en": "New Year" },
+    { "occasion_key": "valentines",     "month": 2,  "day": 14, "type": "commercial", "name_pl": "Walentynki",          "name_ru": "День святого Валентина", "name_uk": "День святого Валентина", "name_en": "Valentine's Day" },
+    { "occasion_key": "fat_thursday",   "month": 2,  "day": 8,  "type": "observance", "name_pl": "Tłusty Czwartek",     "name_ru": "Жирный четверг",     "name_uk": "Жирний четвер",      "name_en": "Fat Thursday" },
+    { "occasion_key": "womens_day",     "month": 3,  "day": 8,  "type": "commercial", "name_pl": "Dzień Kobiet",        "name_ru": "8 Марта",            "name_uk": "8 Березня",          "name_en": "Women's Day" },
+    { "occasion_key": "spring_start",   "month": 3,  "day": 21, "type": "observance", "name_pl": "Pierwszy dzień wiosny", "name_ru": "Начало весны",     "name_uk": "Початок весни",      "name_en": "First day of spring" },
+    { "occasion_key": "mothers_day",    "month": 5,  "day": 26, "type": "commercial", "name_pl": "Dzień Matki",         "name_ru": "День матери",        "name_uk": "День матері",        "name_en": "Mother's Day" },
+    { "occasion_key": "childrens_day",  "month": 6,  "day": 1,  "type": "observance", "name_pl": "Dzień Dziecka",       "name_ru": "День защиты детей",  "name_uk": "День захисту дітей", "name_en": "Children's Day" },
+    { "occasion_key": "summer_start",   "month": 6,  "day": 21, "type": "observance", "name_pl": "Pierwszy dzień lata", "name_ru": "Начало лета",        "name_uk": "Початок літа",       "name_en": "First day of summer" },
+    { "occasion_key": "womens_womd",    "month": 9,  "day": 30, "type": "commercial", "name_pl": "Dzień Chłopaka",      "name_ru": "День парня",         "name_uk": "День хлопця",        "name_en": "Boys' Day" },
+    { "occasion_key": "halloween",      "month": 10, "day": 31, "type": "commercial", "name_pl": "Halloween",           "name_ru": "Хэллоуин",           "name_uk": "Геловін",            "name_en": "Halloween" },
+    { "occasion_key": "black_friday",   "month": 11, "day": 28, "type": "commercial", "name_pl": "Black Friday",        "name_ru": "Чёрная пятница",     "name_uk": "Чорна п'ятниця",     "name_en": "Black Friday" },
+    { "occasion_key": "mikolajki",      "month": 12, "day": 6,  "type": "commercial", "name_pl": "Mikołajki",           "name_ru": "День святого Николая", "name_uk": "День святого Миколая", "name_en": "St. Nicholas Day" },
+    { "occasion_key": "christmas",      "month": 12, "day": 24, "type": "public",     "name_pl": "Wigilia Bożego Narodzenia", "name_ru": "Сочельник",    "name_uk": "Святвечір",          "name_en": "Christmas Eve" },
+    { "occasion_key": "new_years_eve",  "month": 12, "day": 31, "type": "commercial", "name_pl": "Sylwester",           "name_ru": "Новогодняя ночь",    "name_uk": "Новорічна ніч",      "name_en": "New Year's Eve" }
+  ]
+}

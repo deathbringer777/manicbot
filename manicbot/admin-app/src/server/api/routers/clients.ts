@@ -60,6 +60,7 @@ import {
   type ExportFormat,
 } from "~/server/clients/csv";
 import { sanitizeText } from "~/server/security/sanitize";
+import { isCdnUploadUrl } from "~/server/lib/url";
 import { log } from "~/server/utils/logger";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -84,20 +85,17 @@ const contactsSchema = z.object({
 });
 
 // 0072 avatar fields. Emoji is short (we cap at 20 to leave room for ZWJ
-// sequences like 👩‍🎤); avatarUrl must be an https URL pointing at our own
-// `/cdn/t/<tenantId>/client_avatar-<hash>.<ext>` path (minted via
-// salon.mintUploadToken + uploadHttp.buildAssetKey). The path shape is
-// deterministic across envs; the hostname is not, so we lock the path and
-// reject anything that smells like an external/tracking URL.
-const AVATAR_URL_PATH_RE =
-  /^https:\/\/[^/]+\/cdn\/t\/[A-Za-z0-9_-]+\/client_avatar-[a-f0-9]{6,64}\.(?:webp|jpg|jpeg|png)$/i;
+// sequences like 👩‍🎤); avatarUrl must be a CDN URL minted via
+// salon.mintUploadToken (kind=client_avatar). V-2 follow-up (2026-06-12):
+// host is now pinned too (not just the path) via isCdnUploadUrl, closing the
+// external tracking-pixel injection that an unconstrained host allowed.
 const avatarEmojiSchema = z.string().min(1).max(20).nullable().optional();
 const avatarUrlSchema = z
   .string()
   .max(2048)
-  .refine((v) => AVATAR_URL_PATH_RE.test(v), {
+  .refine((v) => isCdnUploadUrl(v, ["client_avatar"]), {
     message:
-      "avatarUrl must be an https URL minted by salon.mintUploadToken (path: /cdn/t/<tenantId>/client_avatar-<hash>.<ext>)",
+      "avatarUrl must be a CDN URL minted by salon.mintUploadToken (host-pinned /cdn/t/<tenantId>/client_avatar-<hash>.<ext>)",
   })
   .nullable()
   .optional();

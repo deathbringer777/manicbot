@@ -18,6 +18,9 @@
  */
 
 import { useMemo, useEffect, useState, useRef, type ReactNode } from "react";
+import { useNowTicker } from "~/lib/useNowTicker";
+import { MASTER_BLOCK_PALETTE as MASTER_PALETTE } from "~/lib/calendar/masterHues";
+import { pad, fmtIsoDate, parseHHMMToMinutes, makeTimeGeometry } from "~/lib/calendar/geometry";
 import { ChevronLeft, ChevronRight, CalendarDays, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
@@ -37,6 +40,7 @@ import type { DayViewBlock } from "~/components/dashboards/SalonDayView";
 import { WEEKDAY_KEYS, type WorkHoursState, type DayHours } from "~/lib/workHours";
 
 const HOUR_HEIGHT = 48; // slightly tighter than Day view (more density per row in Week)
+const { timeToTop, durationToHeight } = makeTimeGeometry(HOUR_HEIGHT);
 
 // The grid always renders the FULL 24h day (Google-Calendar style) so night and
 // early-morning slots stay reachable by scrolling. Working hours no longer clip
@@ -49,17 +53,6 @@ const PREFERRED_SCROLL_HOUR = 9; // default viewport top — 09:00
 // "everything is unavailable". Shared by the working-hours overlay and blocks.
 const HATCH_BG =
   "repeating-linear-gradient(45deg, rgba(100,116,139,0.10) 0 6px, rgba(100,116,139,0.03) 6px 14px)";
-
-const MASTER_PALETTE = [
-  { bg: "rgba(124,58,237,0.18)", border: "rgba(124,58,237,0.55)", text: "#7c3aed" },
-  { bg: "rgba(11,155,107,0.18)", border: "rgba(11,155,107,0.55)", text: "#0b9b6b" },
-  { bg: "rgba(6,182,212,0.18)",  border: "rgba(6,182,212,0.55)",  text: "#0891b2" },
-  { bg: "rgba(244,114,182,0.18)", border: "rgba(244,114,182,0.55)", text: "#ec4899" },
-  { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.55)", text: "#d97706" },
-  { bg: "rgba(59,130,246,0.18)", border: "rgba(59,130,246,0.55)", text: "#2563eb" },
-  { bg: "rgba(168,85,247,0.18)", border: "rgba(168,85,247,0.55)", text: "#9333ea" },
-  { bg: "rgba(20,184,166,0.18)", border: "rgba(20,184,166,0.55)", text: "#0d9488" },
-] as const;
 
 interface MasterRow {
   chatId: number;
@@ -114,31 +107,6 @@ interface Props {
   /** Rendered in the header, right of the prev/today/next nav — the calendar
    *  view switcher lives here so it no longer needs its own row above the grid. */
   headerRight?: ReactNode;
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function fmtIsoDate(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function parseHHMMToMinutes(hhmm: string | undefined): number {
-  if (!hhmm) return 0;
-  const [h, m] = hhmm.split(":");
-  return Number(h ?? 0) * 60 + Number(m ?? 0);
-}
-
-function timeToTop(hhmm: string, hourStart: number): number {
-  const minutes = parseHHMMToMinutes(hhmm);
-  const start = hourStart * 60;
-  return ((minutes - start) / 60) * HOUR_HEIGHT;
-}
-
-function durationToHeight(durationMin: number | null | undefined): number {
-  const d = Math.max(15, durationMin ?? 60);
-  return (d / 60) * HOUR_HEIGHT;
 }
 
 /**
@@ -352,19 +320,12 @@ export function SalonWeekView({
     return () => window.clearTimeout(tid);
   }, [weekHasToday, days, todayIso, isMobile, preferredStartHour]);
 
-  // Current-time line.
-  const [nowMinutes, setNowMinutes] = useState(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  });
-  useEffect(() => {
-    if (!weekHasToday) return;
-    const interval = window.setInterval(() => {
-      const now = new Date();
-      setNowMinutes(now.getHours() * 60 + now.getMinutes());
-    }, 60_000);
-    return () => window.clearInterval(interval);
-  }, [weekHasToday]);
+  // Current-time line. DC-7 (dedup 2026-06-12): drive off the shared
+  // `useNowTicker` (same source SalonDayView uses) instead of a second
+  // hand-rolled setInterval loop — that is exactly what the hook centralizes.
+  const nowMs = useNowTicker(60_000);
+  const nowDate = new Date(nowMs);
+  const nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
   const currentTimeTop = ((nowMinutes - hourStart * 60) / 60) * HOUR_HEIGHT;
   // Show the now-line only when today is within the visible window.
   const currentTimeVisible =

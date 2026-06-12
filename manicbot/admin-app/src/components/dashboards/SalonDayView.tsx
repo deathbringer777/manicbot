@@ -25,6 +25,8 @@
  */
 
 import { useMemo, useEffect, useState, useRef, type ReactNode } from "react";
+import { MASTER_BLOCK_PALETTE as MASTER_PALETTE } from "~/lib/calendar/masterHues";
+import { pad, fmtIsoDate, parseHHMMToMinutes, makeTimeGeometry } from "~/lib/calendar/geometry";
 import { ChevronLeft, ChevronRight, Users, Eye, EyeOff, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { useNowTicker } from "~/lib/useNowTicker";
@@ -45,6 +47,7 @@ import { WEEKDAY_KEYS, type WorkHoursState } from "~/lib/workHours";
 
 const VISIBLE_MASTERS_KEY = "manicbot_day_view_visible_masters";
 const HOUR_HEIGHT = 56;
+const { timeToTop, durationToHeight } = makeTimeGeometry(HOUR_HEIGHT);
 
 // The grid always renders the FULL 24h day (Google-Calendar style) so night and
 // early-morning slots stay reachable by scrolling. Working hours no longer clip
@@ -60,17 +63,6 @@ const HATCH_BG =
 
 /** Brand-derived palette — assigned to master columns by index. Each tone
  *  has enough contrast against both light and dark surfaces. */
-const MASTER_PALETTE = [
-  { bg: "rgba(124,58,237,0.18)", border: "rgba(124,58,237,0.55)", text: "#7c3aed" }, // brand purple
-  { bg: "rgba(11,155,107,0.18)", border: "rgba(11,155,107,0.55)", text: "#0b9b6b" }, // accent green
-  { bg: "rgba(6,182,212,0.18)",  border: "rgba(6,182,212,0.55)",  text: "#0891b2" }, // cyan
-  { bg: "rgba(244,114,182,0.18)", border: "rgba(244,114,182,0.55)", text: "#ec4899" }, // pink
-  { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.55)", text: "#d97706" }, // amber
-  { bg: "rgba(59,130,246,0.18)", border: "rgba(59,130,246,0.55)", text: "#2563eb" }, // blue
-  { bg: "rgba(168,85,247,0.18)", border: "rgba(168,85,247,0.55)", text: "#9333ea" }, // violet
-  { bg: "rgba(20,184,166,0.18)", border: "rgba(20,184,166,0.55)", text: "#0d9488" }, // teal
-] as const;
-
 interface MasterRow {
   chatId: number;
   name: string | null;
@@ -173,32 +165,6 @@ interface Props {
   /** Rendered in the header, right of the prev/today/next nav — the calendar
    *  view switcher lives here instead of on its own row above the grid. */
   headerRight?: ReactNode;
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function fmtIsoDate(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function parseHHMMToMinutes(hhmm: string | undefined): number {
-  if (!hhmm) return 0;
-  const [h, m] = hhmm.split(":");
-  return Number(h ?? 0) * 60 + Number(m ?? 0);
-}
-
-/** Convert a HH:MM time on the visible day into an absolute pixel offset. */
-function timeToTop(hhmm: string, hourStart: number): number {
-  const minutes = parseHHMMToMinutes(hhmm);
-  const start = hourStart * 60;
-  return ((minutes - start) / 60) * HOUR_HEIGHT;
-}
-
-function durationToHeight(durationMin: number | null | undefined): number {
-  const d = Math.max(15, durationMin ?? 60); // minimum visible height = 15min slot
-  return (d / 60) * HOUR_HEIGHT;
 }
 
 /**

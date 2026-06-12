@@ -25,21 +25,11 @@
  */
 
 import { useMemo, useState, useEffect, useRef, type ReactNode } from "react";
+import { MASTER_ACCENT_PALETTE as MASTER_PALETTE } from "~/lib/calendar/masterHues";
 import { CalendarDays, Loader2, MoreHorizontal, CheckCircle2, XCircle, UserX, AlertTriangle } from "lucide-react";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { STATUS_TONE } from "~/components/dashboards/CalendarLeftRail";
 import { t, type Lang } from "~/lib/i18n";
-
-const MASTER_PALETTE = [
-  "#7c3aed",
-  "#0b9b6b",
-  "#0891b2",
-  "#ec4899",
-  "#d97706",
-  "#2563eb",
-  "#9333ea",
-  "#0d9488",
-] as const;
 
 type AgendaApt = Record<string, any> & {
   id: number | string;

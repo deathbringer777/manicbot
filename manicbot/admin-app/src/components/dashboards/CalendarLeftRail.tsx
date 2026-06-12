@@ -30,23 +30,13 @@
  */
 
 import { useMemo, useState } from "react";
+import { MASTER_RAIL_PALETTE as MASTER_PALETTE } from "~/lib/calendar/masterHues";
 import { ChevronLeft, ChevronRight, ChevronDown, Eye, EyeOff, Users, Filter, Scissors } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { FilterDropdown } from "~/components/ui/FilterDropdown";
 
 /** Brand-derived palette — must match SalonDayView/SalonWeekView so the
  *  same master gets the same color in the rail and the grid. */
-const MASTER_PALETTE = [
-  { dot: "#7c3aed", bg: "rgba(124,58,237,0.15)" },
-  { dot: "#0b9b6b", bg: "rgba(11,155,107,0.15)" },
-  { dot: "#0891b2", bg: "rgba(6,182,212,0.15)" },
-  { dot: "#ec4899", bg: "rgba(244,114,182,0.15)" },
-  { dot: "#d97706", bg: "rgba(245,158,11,0.15)" },
-  { dot: "#2563eb", bg: "rgba(59,130,246,0.15)" },
-  { dot: "#9333ea", bg: "rgba(168,85,247,0.15)" },
-  { dot: "#0d9488", bg: "rgba(20,184,166,0.15)" },
-] as const;
-
 /** Status palette — drives both the rail toggle dot and the agenda row pill.
  *  Keys match the status filter Set values so callers can look up a tone
  *  by status string. */

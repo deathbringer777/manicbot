@@ -32,10 +32,12 @@ import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 import { HomeWidgetHostProvider } from "~/components/dashboards/home-widgets/HomeWidgetContext";
 import {
   applyPendingStatusChanges as mergeStatusPatches,
+  applyPendingMoves,
   buildCancelPatch,
   buildStatusChangePatch,
   buildNoShowPatch,
   type PendingStatusPatches,
+  type PendingMoves,
 } from "~/lib/optimisticStatusMerge";
 import { AptCard, SectionHeader, Btn, Input } from "~/components/salon/SalonShared";
 import { SalonChannelsTab } from "~/components/salon/SalonChannelsTab";
@@ -1893,22 +1895,11 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   });
 
   // Apply pending optimistic moves on top of the appointment arrays before
-  // they reach the views. Same patch runs for Day/Week/calendar caches so
-  // the dragged block visually settles into its new slot immediately.
-  const applyPendingMoves = (rows: any[] | undefined): any[] => {
-    if (!rows) return [];
-    const ids = Object.keys(pendingMoves);
-    if (ids.length === 0) return rows;
-    return rows.map((r) => {
-      const patch = pendingMoves[String(r.id)];
-      if (!patch) return r;
-      // Recompute `ts` so cross-day moves don't desync the agenda sort.
-      const [hh, mm] = patch.time.split(":").map(Number);
-      const [y, mo, d] = patch.date.split("-").map(Number);
-      const ts = Math.floor(Date.UTC(y!, mo! - 1, d!, hh!, mm!) / 1000);
-      return { ...r, date: patch.date, time: patch.time, masterId: patch.masterId || r.masterId, ts };
-    });
-  };
+  // they reach the views (shared helper — DC-8). Same patch runs for
+  // Day/Week/calendar caches so the dragged block visually settles into its
+  // new slot immediately.
+  const applyMoves = (rows: any[] | undefined): any[] =>
+    applyPendingMoves(rows ?? [], pendingMoves as PendingMoves);
 
   // Layer in-flight status mutations onto the appointment arrays — twin of
   // applyPendingMoves, but for confirm/cancel/no-show. The merged row gets
@@ -2320,8 +2311,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
         // applyPendingStatusChanges does the same for confirm/cancel/no-show
         // mutations — without it the user reads the 300–800 ms refetch gap
         // as "nothing happened" after clicking the status dropdown.
-        const dayAptsFiltered = applyPendingMoves(applyPendingStatusChanges((dayApts.data ?? []).filter(filterApt)));
-        const weekAptsFiltered = applyPendingMoves(applyPendingStatusChanges((weekApts.data ?? []).filter(filterApt)));
+        const dayAptsFiltered = applyMoves(applyPendingStatusChanges((dayApts.data ?? []).filter(filterApt)));
+        const weekAptsFiltered = applyMoves(applyPendingStatusChanges((weekApts.data ?? []).filter(filterApt)));
         const calAptsFiltered = applyPendingStatusChanges((calApts.data ?? []).filter(filterApt));
 
         return (

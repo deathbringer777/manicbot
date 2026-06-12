@@ -62,3 +62,36 @@ export function applyPendingStatusChanges<T extends { id: string | number }>(
     return patch ? { ...r, ...patch } : r;
   });
 }
+
+// ─── Pending reschedule moves (drag-to-move) ───────────────────────────────
+// DC-8 (dedup 2026-06-12): the drag-to-reschedule optimistic layer was
+// hand-copied into SalonDashboard and master/ScheduleTab. Unified here next to
+// its status-change twin. A move patches date/time (+ optional master) and
+// recomputes `ts` (epoch seconds) so list-mode `ORDER BY ts` keeps the dragged
+// row in place until the server round-trip lands.
+
+export type PendingMove = { date: string; time: string; masterId?: number };
+export type PendingMoves = Record<string, PendingMove>;
+
+/**
+ * Apply in-flight reschedule moves over a fresh server snapshot. `masterId` is
+ * carried only when the patch supplies a truthy one (single-master columns
+ * never change master, so it is a no-op there) — preserving the prior
+ * `patch.masterId || r.masterId` semantics. Returns `rows` unchanged when
+ * there are no pending moves.
+ */
+export function applyPendingMoves<T extends { id: string | number; masterId?: number | null }>(
+  rows: T[] | undefined,
+  pending: PendingMoves,
+): T[] {
+  if (!rows) return [];
+  if (Object.keys(pending).length === 0) return rows;
+  return rows.map((r) => {
+    const patch = pending[String(r.id)];
+    if (!patch) return r;
+    const [hh, mm] = patch.time.split(":").map(Number);
+    const [y, mo, d] = patch.date.split("-").map(Number);
+    const ts = Math.floor(Date.UTC(y!, mo! - 1, d!, hh!, mm!) / 1000);
+    return { ...r, date: patch.date, time: patch.time, masterId: patch.masterId || r.masterId, ts };
+  });
+}

@@ -596,6 +596,10 @@ export const masterRouter = createTRPCRouter({
       bio: z.string().max(500).optional(),
       // SEC-003: https-only. `.url()` accepts `javascript:`/`data:`; both fields
       // render into `<img src>` and could move into an `<a href>` later.
+      // Portfolio + profile photo are PASTED URLs (the master can link an
+      // external image, e.g. an Instagram post) — they are NOT mint-only, so
+      // pinning them to the CDN would break that flow. Keep the https scheme
+      // guard (blocks javascript:/data:); the render sites are <img src> only.
       photo: z.string().max(2048).refine(isHttpsUrl, { message: "url_must_be_https" }).optional().or(z.literal("")),
       portfolio: z.array(z.string().max(2048).refine(isHttpsUrl, { message: "url_must_be_https" })).optional(),
     }))

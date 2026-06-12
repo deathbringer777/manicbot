@@ -37,6 +37,7 @@ import { MonthCalendar } from "~/components/calendar/MonthCalendar";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
 import type { MoveCommit } from "~/lib/calendar/useDragToMove";
 import type { ResizeCommit } from "~/lib/calendar/useDragToResize";
+import { applyPendingMoves, type PendingMoves } from "~/lib/optimisticStatusMerge";
 
 interface ScheduleData {
   isLoading: boolean;
@@ -66,26 +67,6 @@ interface ScheduleTabProps {
   masterWorkHours?: unknown;
 }
 
-type Pending = Record<string, { date: string; time: string; masterId: number }>;
-
-/**
- * Re-build the `ts` (epoch seconds) so list-mode `ORDER BY ts` keeps the
- * dragged row in order until the server round-trip lands. Mirrors the
- * salon-side helper in SalonDashboard.applyPendingMoves.
- */
-function applyPendingMoves(rows: any[] | undefined, pending: Pending): any[] {
-  if (!rows) return [];
-  const ids = Object.keys(pending);
-  if (ids.length === 0) return rows;
-  return rows.map((r) => {
-    const patch = pending[String(r.id)];
-    if (!patch) return r;
-    const [hh, mm] = patch.time.split(":").map(Number);
-    const [y, mo, d] = patch.date.split("-").map(Number);
-    const ts = Math.floor(Date.UTC(y!, mo! - 1, d!, hh!, mm!) / 1000);
-    return { ...r, date: patch.date, time: patch.time, ts };
-  });
-}
 
 export function ScheduleTab({
   tenantId,
@@ -100,7 +81,7 @@ export function ScheduleTab({
   const [aptViewMode, setAptViewMode] = useState<CalendarViewMode>("day");
   const [calViewDate, setCalViewDate] = useState<Date>(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [pendingMoves, setPendingMoves] = useState<Pending>({});
+  const [pendingMoves, setPendingMoves] = useState<PendingMoves>({});
 
   // Drag-to-reschedule wiring. The backend procedure already allows
   // `webRole === "master"` to move bookings on their own calendar — see

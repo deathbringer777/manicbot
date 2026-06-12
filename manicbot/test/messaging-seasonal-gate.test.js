@@ -53,4 +53,28 @@ describe('seasonal campaign gate', () => {
     expect(msgs.length).toBe(1);
     expect(msgs[0].body).toContain('Kurze Łapki');
   });
+
+  it('resolves a per-locale template body when the campaign has an empty body + template_key', async () => {
+    const ctx = makeCtx({ tenantId: 't_a' });
+    ctx.messagingSendEnabled = true;
+    run(ctx, 'INSERT INTO tenants (id, name, plan, billing_status, is_test) VALUES (?, ?, ?, ?, ?)',
+      't_a', 'Kurze Łapki', 'pro', 'active', 0);
+    run(ctx, `INSERT INTO web_users (id, email, tenant_id, role, lang, email_verified) VALUES (?, ?, ?, 'tenant_owner', ?, 1)`,
+      'wu1', 'o@s.com', 't_a', 'pl');
+    // content-plan-style campaign: empty body, links a template_key.
+    run(ctx,
+      `INSERT INTO platform_campaigns (id, kind, title, body, bodies_json, channels_json, schedule_kind, status, occasion_key, template_key, created_by, created_at, updated_at)
+       VALUES (?, 'announcement', 'X', '', '{"center":""}', ?, 'now', 'active', 'summer_start', 'seasonal_summer_start', 'op', 1, 1)`,
+      'pc_tpl', JSON.stringify(['center']));
+    // approved PL template for that key.
+    run(ctx,
+      `INSERT INTO platform_message_templates (id, name, status, template_key, locale, bodies_json, is_builtin, created_at, updated_at)
+       VALUES ('t_pl', 'Lato', 'approved', 'seasonal_summer_start', 'pl', ?, 0, 1, 1)`,
+      JSON.stringify({ center: 'Lato w {salon_name}! ☀️' }));
+
+    await phasePlatformCampaigns(ctx, Date.now());
+    const msgs = await all(ctx, 'SELECT * FROM platform_thread_messages');
+    expect(msgs.length).toBe(1);
+    expect(msgs[0].body).toContain('Lato w Kurze Łapki');
+  });
 });

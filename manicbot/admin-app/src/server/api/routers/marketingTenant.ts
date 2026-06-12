@@ -493,6 +493,16 @@ export const marketingTenantRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
+      // V-1 (post-fix verification 2026-06-12): scheduling a campaign is the
+      // ungated back door into the marketing-send gate — the cron dispatcher
+      // would later send it for a locked/unverified tenant. Gate the moment a
+      // campaign is created in a SENDABLE (scheduled) state; plain drafts stay
+      // open (they can't send until campaignSendNow, which is gated). The
+      // worker `runCampaignSend` carries the same check as the backstop.
+      if (input.scheduledAt) {
+        await assertTenantBillingActive(ctx, input.tenantId);
+        await assertEmailVerified(ctx);
+      }
 
       const id = rid("cmp");
       const t = now();

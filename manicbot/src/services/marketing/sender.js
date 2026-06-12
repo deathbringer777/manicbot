@@ -278,6 +278,20 @@ export async function runCampaignSend(ctx, tenantId, campaignId, opts = {}) {
     return { ok: false, error: `not_eligible_${c.status}`, total: 0, sent: 0, failed: 0, deferred: 0, status: c.status };
   }
 
+  // V-1 (post-fix verification 2026-06-12): universal billing chokepoint.
+  // The admin-app gates campaignSendNow/automationRunNow, but a locked tenant
+  // could SCHEDULE a campaign (ungated campaignCreate) or trigger an
+  // automation event — both reach this sender via the cron dispatcher /
+  // fireAutomationForEvent with no billing check, bypassing the marketing-send
+  // gate. Read billing_status by the CAMPAIGN's tenant_id (never a maybe-null
+  // ctx.tenant → no fail-open) and refuse for an inactive/canceled tenant.
+  // Mirrors the Worker `isInactive()` rule; comped grants are 'active' → pass.
+  const billing = await dbGet(ctx,
+    'SELECT billing_status FROM tenants WHERE id = ? LIMIT 1', c.tenant_id);
+  if (billing && (billing.billing_status === 'inactive' || billing.billing_status === 'canceled')) {
+    return { ok: false, error: 'billing_locked', total: 0, sent: 0, failed: 0, deferred: 0, status: c.status };
+  }
+
   const now = nowSec();
   if (c.status !== 'sending') {
     // tenant-scan-ignore: campaign c loaded by id + tenant verified above (c.tenant_id !== tenantId guard, line ~271) — authorize-then-act.

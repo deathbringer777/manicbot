@@ -72,6 +72,22 @@ describe("isChatAttachmentCdnUrl — unit", () => {
     expect(isChatAttachmentCdnUrl("https://worker.test/cdn/t/t_pin/chat_attachment-0123abcd4567.svg")).toBe(false);
     expect(isChatAttachmentCdnUrl("https://worker.test/x/../cdn/t/t_pin/chat_attachment-0123abcd4567.webp")).toBe(false);
   });
+
+  it("V-2: rejects an attacker host with a PATH-VALID URL (host must be pinned, not just the path)", () => {
+    // The regex shape alone is satisfied — the host is the only thing keeping
+    // this from rendering as a tracking pixel at the counterparty. WORKER_PUBLIC_URL
+    // is mocked to https://worker.test, so any other host must be rejected.
+    expect(
+      isChatAttachmentCdnUrl("https://evil.example/cdn/t/t_pin/chat_attachment-0123abcd4567.png"),
+    ).toBe(false);
+    expect(
+      isChatAttachmentCdnUrl("https://worker.test.evil.com/cdn/t/t_pin/chat_attachment-0123abcd4567.png"),
+    ).toBe(false);
+    // userinfo trick: real host is evil.com, worker.test is just credentials.
+    expect(
+      isChatAttachmentCdnUrl("https://worker.test@evil.com/cdn/t/t_pin/chat_attachment-0123abcd4567.png"),
+    ).toBe(false);
+  });
 });
 
 describe("messenger.sendMessage — attachment URL pin (IU-1)", () => {

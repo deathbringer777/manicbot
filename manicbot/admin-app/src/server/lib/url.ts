@@ -1,3 +1,5 @@
+import { env } from "~/env";
+
 /**
  * #U1/#U2 — URL scheme guard.
  *
@@ -13,22 +15,54 @@ export const isHttpsUrl = (u: string): boolean => /^https:\/\//i.test(u);
  * IU-1 (audit 2026-06-12) — chat/ticket attachment URL pin.
  *
  * Attachment URLs render in the counterparty's browser as inline `<img src>`
- * and click-through `<a target=_blank>`. A bare https check still let any
+ * and click-through `<a target=_blank>`. A bare https check let any
  * attacker-controlled host through (tracking pixel / phishing toward salon
  * owners and platform support staff). Pin to the exact shape our upload flow
- * mints (`uploadHttp.js`: `<origin>/cdn/t/<tid>/chat_attachment-<sha>.<ext>`),
- * mirroring AVATAR_URL_PATH_RE in clients.ts. The capture group exposes the
- * tenant segment so messenger can additionally require it to match the
- * message's tenant.
+ * mints (`uploadHttp.js`: `<origin>/cdn/t/<tid>/chat_attachment-<sha>.<ext>`).
+ *
+ * V-2 (post-fix verification 2026-06-12): the original pin matched only the
+ * PATH shape with an unconstrained `[^/]+` host, so an attacker could serve a
+ * path-matching URL from their OWN domain and still get it rendered. The host
+ * is now pinned too — it MUST equal the WORKER_PUBLIC_URL origin host (where
+ * the worker actually serves `/cdn/...`), with the production apex as a static
+ * fallback. The capture group exposes the tenant segment so messenger can
+ * additionally require it to match the message's tenant.
  */
 const CHAT_ATTACHMENT_URL_RE =
-  /^https:\/\/[^/]+\/cdn\/t\/([A-Za-z0-9_-]+)\/chat_attachment-[a-f0-9]{6,64}\.(?:webp|jpg|jpeg|png)$/i;
+  /^https:\/\/([^/@]+)\/cdn\/t\/([A-Za-z0-9_-]+)\/chat_attachment-[a-f0-9]{6,64}\.(?:webp|jpg|jpeg|png)$/i;
 
-export const isChatAttachmentCdnUrl = (u: string): boolean => CHAT_ATTACHMENT_URL_RE.test(u);
+/** Production CDN hosts (apex + www) — the worker serves `/cdn/...` from these. */
+const STATIC_ATTACHMENT_HOSTS = new Set(["manicbot.com", "www.manicbot.com"]);
 
-/** Tenant segment of a CDN attachment URL, or null when it doesn't match the pin. */
-export const chatAttachmentUrlTenant = (u: string): string | null =>
-  CHAT_ATTACHMENT_URL_RE.exec(u)?.[1] ?? null;
+/** True when `host` is an origin the worker mints/serves attachments on. */
+function isAllowedAttachmentHost(host: string): boolean {
+  const h = host.toLowerCase();
+  if (STATIC_ATTACHMENT_HOSTS.has(h)) return true;
+  const configured = env.WORKER_PUBLIC_URL;
+  if (configured) {
+    try {
+      if (new URL(configured).host.toLowerCase() === h) return true;
+    } catch {
+      /* malformed env — fall through to reject */
+    }
+  }
+  return false;
+}
+
+export const isChatAttachmentCdnUrl = (u: string): boolean => {
+  const m = CHAT_ATTACHMENT_URL_RE.exec(u);
+  return m !== null && isAllowedAttachmentHost(m[1]!);
+};
+
+/**
+ * Tenant segment of a valid CDN attachment URL, or null when it doesn't match
+ * the pin (host included).
+ */
+export const chatAttachmentUrlTenant = (u: string): string | null => {
+  const m = CHAT_ATTACHMENT_URL_RE.exec(u);
+  if (!m || !isAllowedAttachmentHost(m[1]!)) return null;
+  return m[2] ?? null;
+};
 
 /**
  * SEC-002 — Web Push endpoint SSRF guard.

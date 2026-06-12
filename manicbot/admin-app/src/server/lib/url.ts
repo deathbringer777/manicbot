@@ -10,6 +10,27 @@
 export const isHttpsUrl = (u: string): boolean => /^https:\/\//i.test(u);
 
 /**
+ * IU-1 (audit 2026-06-12) — chat/ticket attachment URL pin.
+ *
+ * Attachment URLs render in the counterparty's browser as inline `<img src>`
+ * and click-through `<a target=_blank>`. A bare https check still let any
+ * attacker-controlled host through (tracking pixel / phishing toward salon
+ * owners and platform support staff). Pin to the exact shape our upload flow
+ * mints (`uploadHttp.js`: `<origin>/cdn/t/<tid>/chat_attachment-<sha>.<ext>`),
+ * mirroring AVATAR_URL_PATH_RE in clients.ts. The capture group exposes the
+ * tenant segment so messenger can additionally require it to match the
+ * message's tenant.
+ */
+const CHAT_ATTACHMENT_URL_RE =
+  /^https:\/\/[^/]+\/cdn\/t\/([A-Za-z0-9_-]+)\/chat_attachment-[a-f0-9]{6,64}\.(?:webp|jpg|jpeg|png)$/i;
+
+export const isChatAttachmentCdnUrl = (u: string): boolean => CHAT_ATTACHMENT_URL_RE.test(u);
+
+/** Tenant segment of a CDN attachment URL, or null when it doesn't match the pin. */
+export const chatAttachmentUrlTenant = (u: string): string | null =>
+  CHAT_ATTACHMENT_URL_RE.exec(u)?.[1] ?? null;
+
+/**
  * SEC-002 — Web Push endpoint SSRF guard.
  *
  * A stored push `endpoint` is later `fetch()`-ed by the Worker (with VAPID

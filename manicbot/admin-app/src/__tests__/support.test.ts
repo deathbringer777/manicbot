@@ -186,13 +186,16 @@ describe("supportRouter", () => {
       const dbMock = createDbMock();
       const caller = createCaller(makeSupportCtx(dbMock.db) as never);
 
+      // IU-1 (audit 2026-06-12): attachment URLs are pinned to the CDN shape
+      // minted by mintTicketUploadToken — arbitrary hosts are rejected by zod.
+      const cdnUrl = "https://worker.test/cdn/t/t_a/chat_attachment-deadbeef.png";
       await caller.replyToTicket({
         ticketId: "tkt_1",
         text: "See attachment",
-        attachmentUrl: "https://cdn.example.com/file.pdf",
+        attachmentUrl: cdnUrl,
       });
 
-      expect(dbMock.insertCalls[0]?.values.attachmentUrl).toBe("https://cdn.example.com/file.pdf");
+      expect(dbMock.insertCalls[0]?.values.attachmentUrl).toBe(cdnUrl);
     });
 
     it("sets attachmentUrl=null when not provided", async () => {

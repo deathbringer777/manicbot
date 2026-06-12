@@ -33,6 +33,7 @@ vi.mock("~/server/auth/rateLimit", () => ({
 vi.mock("~/server/api/tenantAccess", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/server/api/tenantAccess")>()),
   assertTenantBillingActive: vi.fn(async () => {}),
+  assertEmailVerified: vi.fn(async () => {}),
 }));
 
 // The mock factory is wrapped in a function so a few tests can swap env
@@ -270,7 +271,7 @@ describe("messenger.sendMessage — attachments JSON persistence", () => {
       threadId: THREAD_ID,
       body: "look at this",
       attachments: [
-        { url: "https://worker.test.local/cdn/t/abc/chat_attachment-1.png", kind: "image" },
+        { url: "https://worker.test.local/cdn/t/t_attachments_test/chat_attachment-deadbeef.png", kind: "image" },
       ],
     });
 
@@ -282,7 +283,7 @@ describe("messenger.sendMessage — attachments JSON persistence", () => {
     };
     expect(parsed.attachments).toHaveLength(1);
     expect(parsed.attachments[0]!.url).toBe(
-      "https://worker.test.local/cdn/t/abc/chat_attachment-1.png",
+      "https://worker.test.local/cdn/t/t_attachments_test/chat_attachment-deadbeef.png",
     );
     expect(parsed.attachments[0]!.kind).toBe("image");
   });
@@ -315,7 +316,7 @@ describe("messenger.sendMessage — attachments JSON persistence", () => {
     } as never);
 
     const tooMany = Array.from({ length: 5 }, (_, i) => ({
-      url: `https://worker.test.local/cdn/t/abc/x-${i}.png`,
+      url: `https://worker.test.local/cdn/t/t_attachments_test/chat_attachment-deadbee${i}.png`,
       kind: "image" as const,
     }));
     await expect(

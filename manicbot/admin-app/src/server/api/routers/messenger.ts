@@ -38,12 +38,12 @@ import {
 import { ulid } from "~/lib/ulid";
 import { sanitizeText } from "~/server/security/sanitize";
 import { computeDmKey } from "~/server/api/messenger/dmKey";
-import { isHttpsUrl } from "~/server/lib/url";
+import { isChatAttachmentCdnUrl, chatAttachmentUrlTenant } from "~/server/lib/url";
 import {
   assertMessengerTenantAccess,
   assertThreadMember,
 } from "~/server/api/messenger/access";
-import { assertTenantBillingActive } from "~/server/api/tenantAccess";
+import { assertTenantBillingActive, assertEmailVerified } from "~/server/api/tenantAccess";
 import { checkRateLimit } from "~/server/auth/rateLimit";
 import { filterActiveRecipients, MUTE_FOREVER } from "~/server/api/messenger/mute";
 import { sanitizeFtsQuery, buildMessageSearchSql } from "~/server/api/messenger/ftsQuery";
@@ -561,13 +561,15 @@ export const messengerRouter = createTRPCRouter({
         body: z.string().min(1).max(MESSAGE_BODY_MAX),
         isInternalNote: z.boolean().default(false),
         replyToMessageId: z.string().optional(),
-        // Up to N image attachments. URLs must be CDN URLs minted via
-        // `mintAttachmentUploadToken` — we don't validate origin here
-        // (anti-SSRF lives in the read path: `<img src>` is browser-fetched),
-        // but the URL is bounded to keep the JSON blob small.
+        // Up to N image attachments. IU-1 (audit 2026-06-12): URLs are
+        // pinned to the exact CDN shape minted via mintAttachmentUploadToken
+        // (`/cdn/t/<tid>/chat_attachment-<sha>.<ext>`) — the read path is a
+        // browser `<img src>` at the counterparty, so an arbitrary https
+        // host was a tracking-pixel / phishing surface. The tenant segment
+        // is additionally matched against input.tenantId in the handler.
         attachments: z
           .array(z.object({
-            url: z.string().url().max(MAX_ATTACHMENT_URL_LEN).refine(isHttpsUrl, { message: "url_must_be_https" }),
+            url: z.string().url().max(MAX_ATTACHMENT_URL_LEN).refine(isChatAttachmentCdnUrl, { message: "url_must_be_cdn_attachment" }),
             kind: z.literal("image").default("image"),
           }))
           .max(MAX_ATTACHMENTS_PER_MESSAGE)
@@ -587,6 +589,16 @@ export const messengerRouter = createTRPCRouter({
       // Placed AFTER the membership assert so billing state is never an
       // oracle for tenants the caller doesn't belong to.
       await assertTenantBillingActive(ctx, input.tenantId);
+      // CS-2: outbound messaging also requires a verified email.
+      await assertEmailVerified(ctx);
+
+      // IU-1: the CDN tenant segment must belong to THIS message's tenant —
+      // the zod refine only pins the path shape.
+      for (const a of input.attachments ?? []) {
+        if (chatAttachmentUrlTenant(a.url) !== input.tenantId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "attachment_url_tenant_mismatch" });
+        }
+      }
       const webUserId = ctx.webUser!.id;
 
       // is_internal_note only makes sense on client_conv threads (it gates the

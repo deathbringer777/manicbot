@@ -28,6 +28,7 @@ vi.mock("~/env", () => ({
 vi.mock("~/server/api/tenantAccess", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/server/api/tenantAccess")>()),
   assertTenantBillingActive: vi.fn(async () => {}),
+  assertEmailVerified: vi.fn(async () => {}),
 }));
 
 const mockCheckRateLimit = vi.fn(async () => ({ allowed: true, remaining: 9, resetAt: 0 }));

@@ -15,7 +15,7 @@ import { z } from "zod";
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
-import { assertTenantOwner, assertTenantBillingActive } from "~/server/api/tenantAccess";
+import { assertTenantOwner, assertTenantBillingActive, assertEmailVerified } from "~/server/api/tenantAccess";
 import { sanitizeText, sanitizeHtml } from "~/server/security/sanitize";
 import {
   marketingContacts,
@@ -534,6 +534,8 @@ export const marketingTenantRouter = createTRPCRouter({
       // CS-1 (audit 2026-06-12): marketing sends are a high-value product
       // action — locked server-side for an expired-trial / churned tenant.
       await assertTenantBillingActive(ctx, input.tenantId);
+      // CS-2: marketing sends also require a verified email.
+      await assertEmailVerified(ctx);
 
       // Defense-in-depth: confirm the campaign row belongs to the caller's
       // tenant BEFORE delegating to the sender (which also checks).
@@ -880,6 +882,8 @@ export const marketingTenantRouter = createTRPCRouter({
       await assertTenantOwner(ctx, input.tenantId);
       // CS-1: server-side billing gate (see campaignSendNow).
       await assertTenantBillingActive(ctx, input.tenantId);
+      // CS-2: marketing sends also require a verified email.
+      await assertEmailVerified(ctx);
 
       const rows = await ctx.db.select().from(marketingAutomations)
         .where(and(eq(marketingAutomations.id, input.id), eq(marketingAutomations.tenantId, input.tenantId)))

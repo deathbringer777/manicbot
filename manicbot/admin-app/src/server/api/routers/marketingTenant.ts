@@ -15,7 +15,7 @@ import { z } from "zod";
 import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
-import { assertTenantOwner } from "~/server/api/tenantAccess";
+import { assertTenantOwner, assertTenantBillingActive } from "~/server/api/tenantAccess";
 import { sanitizeText, sanitizeHtml } from "~/server/security/sanitize";
 import {
   marketingContacts,
@@ -531,6 +531,9 @@ export const marketingTenantRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string().min(1), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
+      // CS-1 (audit 2026-06-12): marketing sends are a high-value product
+      // action — locked server-side for an expired-trial / churned tenant.
+      await assertTenantBillingActive(ctx, input.tenantId);
 
       // Defense-in-depth: confirm the campaign row belongs to the caller's
       // tenant BEFORE delegating to the sender (which also checks).
@@ -875,6 +878,8 @@ export const marketingTenantRouter = createTRPCRouter({
     .input(z.object({ tenantId: z.string().min(1), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
+      // CS-1: server-side billing gate (see campaignSendNow).
+      await assertTenantBillingActive(ctx, input.tenantId);
 
       const rows = await ctx.db.select().from(marketingAutomations)
         .where(and(eq(marketingAutomations.id, input.id), eq(marketingAutomations.tenantId, input.tenantId)))

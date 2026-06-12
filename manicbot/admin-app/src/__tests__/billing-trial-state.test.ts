@@ -146,9 +146,14 @@ describe("isBillingGatedRole", () => {
 });
 
 describe("isGateBypassPath", () => {
-  it("allows /billing (the only place to fix the gate)", () => {
-    expect(isGateBypassPath("/billing")).toBe(true);
-    expect(isGateBypassPath("/billing/invoices")).toBe(true);
+  it("blocks /billing — god-mode page, NOT the tenant resolve path (DC-14)", () => {
+    // The tenant-facing billing UI lives at /settings?section=billing (the
+    // BillingGate CTAs route there). /billing is not in
+    // FULL_PAGE_ROUTE_PREFIXES, so for a gated tenant role it swaps in
+    // SalonDashboard — listing it as a bypass rendered the FULL dashboard
+    // for a locked tenant who simply typed /billing in the URL bar.
+    expect(isGateBypassPath("/billing")).toBe(false);
+    expect(isGateBypassPath("/billing/invoices")).toBe(false);
   });
 
   it("allows /settings (account escape hatch)", () => {
@@ -178,10 +183,10 @@ describe("shouldShowBillingGate — integration of role + state + path", () => {
     ).toBe(true);
   });
 
-  it("hides gate: tenant_owner with expired trial on /billing", () => {
+  it("shows gate: tenant_owner with expired trial on /billing (DC-14 regression)", () => {
     expect(
       shouldShowBillingGate({ role: "tenant_owner", isTrialExpired: true, pathname: "/billing" }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("hides gate: tenant_owner with expired trial on /settings", () => {

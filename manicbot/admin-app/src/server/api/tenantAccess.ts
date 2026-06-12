@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { tenants } from "~/server/db/schema";
+import { evaluateTrialState } from "~/lib/billing/trialState";
 
 type DbInstance = ReturnType<typeof import("~/server/db").getDb>;
 
@@ -52,4 +53,54 @@ export async function assertTenantMember(ctx: TenantAccessCtx, tenantId: string)
     if (t?.isPersonal) return;
   }
   throw new TRPCError({ code: "FORBIDDEN", message: "Tenant member access required" });
+}
+
+/**
+ * Server-side billing enforcement (audit 2026-06-12, CS-1 / H8).
+ *
+ * The trial/billing gate used to exist ONLY as a client render-swap in
+ * (dashboard)/layout.tsx — a locked tenant could keep using the product by
+ * calling tRPC directly. This guard re-evaluates the tenant's billing state
+ * on the server via the SAME pure helper the UI gate uses
+ * (`evaluateTrialState`), so the two layers cannot drift.
+ *
+ * Call it AFTER the tenant-access assert (assertTenantOwner /
+ * assertTenantMember / assertThreadMember) so it never becomes a
+ * billing-status oracle for tenants the caller is not a member of.
+ *
+ * Enforcement policy: applied to high-value PRODUCT mutations (booking
+ * writes, outbound messaging, marketing sends). Reads and billing/settings
+ * procedures intentionally stay open so the owner can see their data and
+ * resolve the lock by paying.
+ */
+export async function assertTenantBillingActive(ctx: TenantAccessCtx, tenantId: string): Promise<void> {
+  if (!tenantId) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Tenant ID is required" });
+  }
+  if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+  // Platform staff operate on tenants regardless of their billing state.
+  if (ctx.webUser.webRole === "system_admin") return;
+
+  const [t] = await ctx.db
+    .select({
+      billingStatus: tenants.billingStatus,
+      trialEndsAt: tenants.trialEndsAt,
+      stripeCustomerId: tenants.stripeCustomerId,
+      stripeSubscriptionId: tenants.stripeSubscriptionId,
+    })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (!t) {
+    // Fail closed: a vanished tenant row must not grant a free pass.
+    throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found" });
+  }
+
+  const state = evaluateTrialState(t, Math.floor(Date.now() / 1000));
+  if (state.isTrialExpired) {
+    // `isTrialExpired` is the general "billing locked" signal (expired trial
+    // OR churned/cancelled customer); comped grants never lock — see
+    // evaluateTrialState / isCompedTenant.
+    throw new TRPCError({ code: "FORBIDDEN", message: "billing_locked" });
+  }
 }

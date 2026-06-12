@@ -160,7 +160,7 @@ describe("AppearanceSection — default-tab dropdown", () => {
     // new profile-scoped key on first mount.
     _mockLocalStorage.setItem(
       dashboardPrefsKey("t_test"),
-      JSON.stringify({ hiddenTabs: [], hiddenStatCards: [], showTodayApts: true, defaultTab: "billing" })
+      JSON.stringify({ hiddenTabs: [], showTodayApts: true, defaultTab: "billing" })
     );
     renderWith("t_test", "ru");
     fireEvent.click(screen.getByRole("button", { name: /Какая вкладка открывается при входе/ }));
@@ -174,7 +174,7 @@ describe("AppearanceSection — default-tab dropdown", () => {
   it("default-tab dropdown lists only currently-visible (non-hidden) tabs", () => {
     _mockLocalStorage.setItem(
       dashboardPrefsKey("t_test"),
-      JSON.stringify({ hiddenTabs: ["billing", "analytics"], hiddenStatCards: [], showTodayApts: true, defaultTab: "" })
+      JSON.stringify({ hiddenTabs: ["billing", "analytics"], showTodayApts: true, defaultTab: "" })
     );
     renderWith("t_test", "ru");
     fireEvent.click(screen.getByRole("button", { name: /Какая вкладка открывается при входе/ }));
@@ -191,7 +191,7 @@ describe("AppearanceSection — default-tab dropdown", () => {
   it("hiding the currently-selected default tab resets defaultTab to ''", () => {
     _mockLocalStorage.setItem(
       dashboardPrefsKey("t_test"),
-      JSON.stringify({ hiddenTabs: [], hiddenStatCards: [], showTodayApts: true, defaultTab: "billing" })
+      JSON.stringify({ hiddenTabs: [], showTodayApts: true, defaultTab: "billing" })
     );
     renderWith("t_test", "ru");
 

@@ -23,11 +23,17 @@ const BILLING_GATED_ROLES: ReadonlySet<AppRole> = new Set<AppRole>([
 
 /**
  * Routes that MUST remain reachable even when the trial-expired gate is active.
- * /billing: the only place a user can resolve the gate (start a subscription).
- * /settings: account-level escape hatch (password change, email change, logout).
+ * /settings: the resolve path (?section=billing — where BillingGate's CTA goes)
+ *            plus the account-level escape hatch (password change, logout).
  * /plugins, /plugin/*: allow unsubscribing from paid plugin add-ons without paying first.
+ *
+ * /billing is deliberately NOT here (DC-14, audit 2026-06-12): it is a
+ * god-mode page, not the tenant resolve path. Because it is also absent from
+ * FULL_PAGE_ROUTE_PREFIXES, a gated tenant role navigating to /billing gets
+ * the SalonDashboard swap — listing it as a bypass rendered the full
+ * dashboard for a locked tenant.
  */
-const GATE_BYPASS_PREFIXES = ["/billing", "/settings", "/plugins", "/plugin/"] as const;
+const GATE_BYPASS_PREFIXES = ["/settings", "/plugins", "/plugin/"] as const;
 
 export function isBillingGatedRole(role: AppRole): boolean {
   return BILLING_GATED_ROLES.has(role);

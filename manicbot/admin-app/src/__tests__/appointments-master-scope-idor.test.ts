@@ -27,6 +27,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("~/server/db", () => ({ getDb: () => null }));
+// CS-1 (audit 2026-06-12): high-value mutations now run a server-side billing
+// SELECT (assertTenantBillingActive). This file tests other concerns, so the
+// billing check is neutralized to keep the mock-db select queue stable.
+// Billing-gate behavior itself is pinned in billing-server-gate.test.ts.
+vi.mock("~/server/api/tenantAccess", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/server/api/tenantAccess")>()),
+  assertTenantBillingActive: vi.fn(async () => {}),
+}));
 vi.mock("~/env", () => ({
   env: {
     WORKER_PUBLIC_URL: "https://worker.test",

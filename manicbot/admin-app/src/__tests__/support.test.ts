@@ -186,9 +186,10 @@ describe("supportRouter", () => {
       const dbMock = createDbMock();
       const caller = createCaller(makeSupportCtx(dbMock.db) as never);
 
-      // IU-1 (audit 2026-06-12): attachment URLs are pinned to the CDN shape
-      // minted by mintTicketUploadToken — arbitrary hosts are rejected by zod.
-      const cdnUrl = "https://worker.test/cdn/t/t_a/chat_attachment-deadbeef.png";
+      // IU-1 + V-2 (audit 2026-06-12): attachment URLs are pinned to the CDN
+      // shape AND host minted by mintTicketUploadToken — arbitrary hosts are
+      // rejected by zod. manicbot.com is the env-independent prod CDN host.
+      const cdnUrl = "https://manicbot.com/cdn/t/t_a/chat_attachment-deadbeef.png";
       await caller.replyToTicket({
         ticketId: "tkt_1",
         text: "See attachment",

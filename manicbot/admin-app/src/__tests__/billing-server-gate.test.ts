@@ -250,6 +250,28 @@ describe("billing gate wired into high-value mutations", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN", message: "billing_locked" });
   });
 
+  it("V-1: marketingTenant.campaignCreate with scheduledAt → FORBIDDEN billing_locked (closes the scheduled-send bypass)", async () => {
+    const { db } = createDbMock([[lockedTenant()]]);
+    const caller = callMarketing(makeTenantOwnerCtx(db, TENANT) as never);
+    await expect(
+      caller.campaignCreate({
+        tenantId: TENANT,
+        name: "Promo",
+        channel: "email",
+        scheduledAt: NOW + 60,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", message: "billing_locked" });
+  });
+
+  it("V-1: marketingTenant.campaignCreate as a plain DRAFT (no scheduledAt) is NOT billing-gated", async () => {
+    // A draft can't send until campaignSendNow (gated) or a schedule is set,
+    // so creating one on a locked tenant is allowed — only scheduling sends.
+    const { db } = createDbMock([]); // no billing SELECT expected
+    const caller = callMarketing(makeTenantOwnerCtx(db, TENANT) as never);
+    const r = await caller.campaignCreate({ tenantId: TENANT, name: "Draft", channel: "email" });
+    expect(r.id).toBeTypeOf("string");
+  });
+
   it("messenger.sendMessage → FORBIDDEN billing_locked on a locked tenant", async () => {
     // select #1: thread; select #2: membership; select #3: billing check.
     const thread = {

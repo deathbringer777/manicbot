@@ -42,12 +42,10 @@ export function MasterDashboard({
   tenantId,
   masterId,
   isPersonal = false,
-  forceTab,
 }: {
   tenantId: string;
   masterId: number;
   isPersonal?: boolean;
-  forceTab?: Tab;
 }) {
   const { lang } = useLang();
   const utils = api.useUtils();
@@ -58,13 +56,12 @@ export function MasterDashboard({
   const urlTab = searchParams.get("tab");
   const resolvedTab: Tab = urlTab && VALID_TABS.includes(urlTab as Tab) ? (urlTab as Tab) : "today";
 
-  const [tab, setTab] = useState<Tab>(forceTab ?? resolvedTab);
+  const [tab, setTab] = useState<Tab>(resolvedTab);
 
-  // Sync tab when URL changes (sidebar click in WebShell) or forceTab changes
+  // Sync tab when URL changes (sidebar click in WebShell)
   useEffect(() => {
-    if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedTab);
-  }, [resolvedTab, inWeb, forceTab]);
+  }, [resolvedTab, inWeb]);
   const [period, setPeriod] = useState<Period>("month");
 
   const masterNavItems: NavItem[] = [

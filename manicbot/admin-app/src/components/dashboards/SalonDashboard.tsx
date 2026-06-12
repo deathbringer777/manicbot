@@ -1490,7 +1490,7 @@ function SalonBigCalendar({
 }
 
 
-export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; forceTab?: Tab }) {
+export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const { lang } = useLang();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -1521,13 +1521,12 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     }
   }, [urlTab, router]);
 
-  const [tab, setTab] = useState<Tab>(forceTab ?? resolvedSalonTab);
+  const [tab, setTab] = useState<Tab>(resolvedSalonTab);
 
-  // Sync tab when URL changes (sidebar click in WebShell) or forceTab changes
+  // Sync tab when URL changes (sidebar click in WebShell)
   useEffect(() => {
-    if (forceTab) { setTab(forceTab); return; }
     if (inWeb) setTab(resolvedSalonTab);
-  }, [resolvedSalonTab, inWeb, forceTab]);
+  }, [resolvedSalonTab, inWeb]);
   // Calendar overhaul (2026-05-16): default flipped from "day" → "week" to
   // match Google Calendar parity. The previous five-pill switcher (incl.
   // «Агенда») is replaced with CalendarViewSwitcher; the 5th mode is
@@ -2009,9 +2008,13 @@ export function SalonDashboard({ tenantId, forceTab }: { tenantId: string; force
     onSuccess: () => { utils.salon.getServices.invalidate(); void utils.onboarding.getStatus.invalidate({ tenantId }); },
   });
 
-  const role = useRole().role;
-  const perms = useRole().permissions;
-  const isOwnerLevel = role === "tenant_owner" || role === "system_admin" || (role === "master" && useRole().isPersonalTenant);
+  // Single useRole() read — the previous `role === "master" && useRole().…`
+  // short-circuit invoked the hook conditionally (rules-of-hooks violation).
+  // The system_admin / personal-master branches are defensively retained even
+  // though (dashboard)/layout.tsx currently mounts SalonDashboard only for
+  // tenant_owner / tenant_manager.
+  const { role, permissions: perms, isPersonalTenant } = useRole();
+  const isOwnerLevel = role === "tenant_owner" || role === "system_admin" || (role === "master" && isPersonalTenant);
   const canSee = (p: PermissionKey | null) => {
     if (isOwnerLevel) return true;
     if (role !== "tenant_manager") return false;

@@ -8,8 +8,9 @@
  * Public-surface audit (P2-7).
  *
  * Every procedure in this router calls `assertTenantOwner(ctx, input.tenantId)`
- * before reading or writing. The `publicProcedure` base is the admin-app
- * convention for tRPC scaffold; the guard is what enforces auth.
+ * before reading or writing. Since #259 closure (2026-06-12) the base is
+ * `protectedProcedure` — a typed session gate at the boundary; the in-handler
+ * assert remains the tenant-scope authority (personal masters pass it).
  *
  * Callers (verified):
  *   * `list`     — SalonDashboard / MasterDashboard promo-code tabs.
@@ -21,7 +22,7 @@
  */
 
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { promoCodes, promoCodeUses } from "~/server/db/schema";
 import { and, eq, gte, lte, desc, sql, isNull, or } from "drizzle-orm";
@@ -43,7 +44,7 @@ const createInput = z.object({
 });
 
 export const promoCodesRouter = createTRPCRouter({
-  list: publicProcedure
+  list: protectedProcedure
     .input(z.object({ tenantId: z.string(), activeOnly: z.boolean().default(false) }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -61,9 +62,7 @@ export const promoCodesRouter = createTRPCRouter({
         .limit(200);
       return rows;
     }),
-
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  create: publicProcedure
+  create: protectedProcedure
     .input(createInput)
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -87,9 +86,7 @@ export const promoCodesRouter = createTRPCRouter({
       });
       return { ok: true };
     }),
-
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  delete: publicProcedure
+  delete: protectedProcedure
     .input(z.object({ tenantId: z.string(), id: z.number().int() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -103,7 +100,7 @@ export const promoCodesRouter = createTRPCRouter({
    * Validate a code against current tenant state. Returns { valid, reason, discountType, discountValue }.
    * Called from the booking flow (manual booking modal + AI tag handler).
    */
-  validate: publicProcedure
+  validate: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       code: z.string().min(1),

@@ -22,7 +22,7 @@
  */
 
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, tenantOwnerProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { tenantOnboarding, services, bots, masters, tenants } from "~/server/db/schema";
 import { eq, sql, and, isNotNull, ne } from "drizzle-orm";
@@ -49,7 +49,7 @@ function nowSec(): number {
 }
 
 export const onboardingRouter = createTRPCRouter({
-  getStatus: publicProcedure
+  getStatus: protectedProcedure
     .input(z.object({ tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -125,9 +125,7 @@ export const onboardingRouter = createTRPCRouter({
         readyDismissed,
       };
     }),
-
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  markStep: publicProcedure
+  markStep: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       stepId: z.enum(STEP_IDS),

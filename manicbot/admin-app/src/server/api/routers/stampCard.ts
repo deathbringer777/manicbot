@@ -8,8 +8,9 @@
  * Public-surface audit (P2-7).
  *
  * Every procedure in this router calls `assertTenantOwner(ctx, input.tenantId)`
- * before reading or writing. The `publicProcedure` base is the admin-app
- * convention for tRPC scaffold; the guard is what enforces auth.
+ * before reading or writing. Since #259 closure (2026-06-12) the base is
+ * `protectedProcedure` — a typed session gate at the boundary; the in-handler
+ * assert remains the tenant-scope authority (personal masters pass it).
  *
  * Callers (verified):
  *   * `getConfig`    — SalonDashboard stamp-card panel.
@@ -19,7 +20,7 @@
  */
 
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { assertTenantOwner } from "~/server/api/tenantAccess";
 import { stampCardConfigs, stampCardProgress } from "~/server/db/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -27,7 +28,7 @@ import { eq, and, desc } from "drizzle-orm";
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 export const stampCardRouter = createTRPCRouter({
-  getConfig: publicProcedure
+  getConfig: protectedProcedure
     .input(z.object({ tenantId: z.string() }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -46,9 +47,7 @@ export const stampCardRouter = createTRPCRouter({
         updatedAt: 0,
       };
     }),
-
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  updateConfig: publicProcedure
+  updateConfig: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       enabled: z.boolean(),
@@ -85,7 +84,7 @@ export const stampCardRouter = createTRPCRouter({
     }),
 
   /** Top clients by visit count — for stamp card dashboards. */
-  topProgress: publicProcedure
+  topProgress: protectedProcedure
     .input(z.object({ tenantId: z.string(), limit: z.number().int().min(1).max(100).default(20) }))
     .query(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
@@ -96,9 +95,7 @@ export const stampCardRouter = createTRPCRouter({
         .orderBy(desc(stampCardProgress.visitsCompleted))
         .limit(input.limit);
     }),
-
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  resetClient: publicProcedure
+  resetClient: protectedProcedure
     .input(z.object({ tenantId: z.string(), clientId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);

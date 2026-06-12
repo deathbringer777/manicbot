@@ -170,8 +170,14 @@ export const tenantOwnerProcedure = t.procedure
   });
 
 /**
- * Allows tenant_owner, tenant_manager, master, or system_admin — use for shared dashboards
- * where finer-grained permissions are checked inside the procedure via assertPermission().
+ * Allows tenant_owner, tenant_manager, master, or system_admin — use for shared dashboards.
+ *
+ * ⚠️ CS-7 (audit 2026-06-12): this builder checks the ROLE only. The
+ * per-action permission layer (`assertPermission` in permissions.ts) is NOT
+ * wired into any production router yet — do NOT assume a managerProcedure
+ * endpoint is permission-scoped. Until it is, every managerProcedure handler
+ * must gate writes itself (e.g. plugins.ts assertCanWriteScope, messenger's
+ * assertThreadMember, appointments' role self-binding).
  */
 export const managerProcedure = t.procedure
   .use(timingMiddleware)

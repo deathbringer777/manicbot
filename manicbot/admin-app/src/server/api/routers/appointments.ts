@@ -1,4 +1,4 @@
-import { createTRPCRouter, adminProcedure, managerProcedure, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, adminProcedure, managerProcedure } from "~/server/api/trpc";
 import { TRPCError } from "@trpc/server";
 import { appointments, users, masters, services, masterClientBlocks } from "~/server/db/schema";
 import { eq, desc, sql, and, gte, lte, isNull, getTableColumns } from "drizzle-orm";
@@ -305,8 +305,7 @@ export const appointmentsRouter = createTRPCRouter({
    * Sprint 3: Manual booking from dashboard (owner → any master; master → self only).
    * Enforces slot-conflict check + auto-creates client if name+phone provided.
    */
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  createManual: publicProcedure
+  createManual: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       clientChatId: z.number().int().optional(),
@@ -651,8 +650,7 @@ export const appointmentsRouter = createTRPCRouter({
    *     the detail panel uses `appointments.update` (below) which DOES
    *     notify — separation by user intent.
    */
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  rescheduleAppointment: publicProcedure
+  rescheduleAppointment: protectedProcedure
     .input(z.object({
       tenantId: z.string(),
       appointmentId: z.string().min(1),
@@ -843,8 +841,7 @@ export const appointmentsRouter = createTRPCRouter({
    * Salon-employed masters land at FORBIDDEN — by design the owner
    * reshuffles bookings in a multi-master salon.
    */
-  // nosemgrep: trpc-public-procedure-mutation -- TODO(#259): auth via assertTenantOwner inside handler; migrate to tenantOwnerProcedure post-launch
-  update: publicProcedure
+  update: protectedProcedure
     .input(
       z.object({
         id: z.string().min(1),

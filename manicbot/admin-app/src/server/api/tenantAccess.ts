@@ -34,8 +34,11 @@ export async function assertTenantOwner(ctx: TenantAccessCtx, tenantId: string):
 
 /**
  * Verify caller is a tenant member (owner OR tenant_manager) for tenantId, or system_admin.
- * Use this where read access is shared across roles; write access is then gated per-permission
- * via assertPermission().
+ * Use this where read access is shared across roles.
+ *
+ * ⚠️ CS-7 (audit 2026-06-12): per-permission write gating via
+ * `assertPermission()` is NOT wired anywhere yet — handlers must gate writes
+ * themselves until the manager permission lane lands server-side.
  */
 export async function assertTenantMember(ctx: TenantAccessCtx, tenantId: string): Promise<void> {
   if (!tenantId) {

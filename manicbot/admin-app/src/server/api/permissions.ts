@@ -146,6 +146,14 @@ type Ctx = {
 /**
  * Throws FORBIDDEN when the caller lacks the named permission on `tenantId`.
  * Passes silently for tenant_owner / system_admin / masters on personal tenants.
+ *
+ * ⚠️ NOT WIRED (CS-7, audit 2026-06-12): this function has ZERO production
+ * call sites — the granular manager/master permission model is currently
+ * enforced client-side only (RoleContext.permissions → useHasPermission),
+ * while the sensitive server routers are simply owner-only
+ * (tenantOwnerProcedure + assertTenantOwner), i.e. STRICTER than the UI.
+ * When the manager lane gets real server procedures, wire this in there —
+ * and do not assume any existing managerProcedure endpoint calls it.
  */
 export async function assertPermission(
   ctx: Ctx,

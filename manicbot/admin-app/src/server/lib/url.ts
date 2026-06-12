@@ -32,12 +32,12 @@ const CHAT_ATTACHMENT_URL_RE =
   /^https:\/\/([^/@]+)\/cdn\/t\/([A-Za-z0-9_-]+)\/chat_attachment-[a-f0-9]{6,64}\.(?:webp|jpg|jpeg|png)$/i;
 
 /** Production CDN hosts (apex + www) — the worker serves `/cdn/...` from these. */
-const STATIC_ATTACHMENT_HOSTS = new Set(["manicbot.com", "www.manicbot.com"]);
+const STATIC_CDN_HOSTS = new Set(["manicbot.com", "www.manicbot.com"]);
 
-/** True when `host` is an origin the worker mints/serves attachments on. */
-function isAllowedAttachmentHost(host: string): boolean {
+/** True when `host` is an origin the worker mints/serves `/cdn/...` from. */
+function isAllowedCdnHost(host: string): boolean {
   const h = host.toLowerCase();
-  if (STATIC_ATTACHMENT_HOSTS.has(h)) return true;
+  if (STATIC_CDN_HOSTS.has(h)) return true;
   const configured = env.WORKER_PUBLIC_URL;
   if (configured) {
     try {
@@ -51,7 +51,7 @@ function isAllowedAttachmentHost(host: string): boolean {
 
 export const isChatAttachmentCdnUrl = (u: string): boolean => {
   const m = CHAT_ATTACHMENT_URL_RE.exec(u);
-  return m !== null && isAllowedAttachmentHost(m[1]!);
+  return m !== null && isAllowedCdnHost(m[1]!);
 };
 
 /**
@@ -60,9 +60,33 @@ export const isChatAttachmentCdnUrl = (u: string): boolean => {
  */
 export const chatAttachmentUrlTenant = (u: string): string | null => {
   const m = CHAT_ATTACHMENT_URL_RE.exec(u);
-  if (!m || !isAllowedAttachmentHost(m[1]!)) return null;
+  if (!m || !isAllowedCdnHost(m[1]!)) return null;
   return m[2] ?? null;
 };
+
+/**
+ * Generic host-pinned validator for minted CDN upload URLs (audit 2026-06-12,
+ * follow-up to V-2). Every upload mints
+ *   https://<worker-host>/cdn/t/<tenantId>/<kind>-<sha>.<webp|jpg|jpeg|png>
+ * (`uploadHttp.js`). Avatar / profile-photo / portfolio fields used to accept
+ * any `https://` URL (or a path shape with an unconstrained host), so a
+ * same-tenant owner could store an external tracking pixel that renders as
+ * `<img src>` in other staff's dashboards. This pins BOTH the host (to the
+ * worker origin / prod apex) AND the `kind` segment to the caller's allowlist.
+ *
+ * Note: `kind` is not a security boundary on its own (all kinds live under the
+ * tenant's own R2 prefix) — it's pinned only to keep each field's contract
+ * tight. The host + path + image-extension constraints are what block
+ * external injection.
+ */
+const CDN_UPLOAD_URL_RE =
+  /^https:\/\/([^/@]+)\/cdn\/t\/([A-Za-z0-9_-]+)\/([a-z_]+)-[a-f0-9]{6,64}\.(?:webp|jpg|jpeg|png)$/i;
+
+export function isCdnUploadUrl(u: string, kinds: readonly string[]): boolean {
+  const m = CDN_UPLOAD_URL_RE.exec(u);
+  if (!m || !isAllowedCdnHost(m[1]!)) return false;
+  return kinds.includes(m[3]!.toLowerCase());
+}
 
 /**
  * SEC-002 — Web Push endpoint SSRF guard.

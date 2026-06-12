@@ -18,7 +18,7 @@ import {
 } from "~/server/lib/stripe";
 import { referrals } from "~/server/db/schema";
 import { signUploadToken, type UploadKind } from "~/server/lib/uploadToken";
-import { isHttpsUrl } from "~/server/lib/url";
+import { isHttpsUrl, isCdnUploadUrl } from "~/server/lib/url";
 import { maskEmail } from "~/server/lib/maskEmail";
 import { eq, and, desc, sql, ne, like, or, gte, lte, isNull, gt, inArray, getTableColumns } from "drizzle-orm";
 import { appointmentNameColumns, foldAppointmentNames } from "~/server/api/appointmentNames";
@@ -2005,7 +2005,13 @@ export const salonRouter = createTRPCRouter({
       tenantId: z.string(),
       chatId: z.number(),
       avatarEmoji: z.string().max(10).nullable(),
-      avatarUrl: z.string().max(2000).nullable(),
+      // V-2 follow-up (2026-06-12): pin to a host-locked CDN URL minted via
+      // mintUploadToken(kind=master_avatar). Was unvalidated — any string was
+      // stored and rendered as <img src> in the masters tab.
+      avatarUrl: z.string().max(2000).nullable().refine(
+        (v) => v === null || isCdnUploadUrl(v, ["master_avatar"]),
+        { message: "avatarUrl must be a CDN URL minted by mintUploadToken (kind=master_avatar)" },
+      ),
       avatarR2Key: z.string().max(500).nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {

@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
-import { tenants } from "~/server/db/schema";
+import { tenants, webUsers } from "~/server/db/schema";
 import { evaluateTrialState } from "~/lib/billing/trialState";
 
 type DbInstance = ReturnType<typeof import("~/server/db").getDb>;
@@ -102,5 +102,31 @@ export async function assertTenantBillingActive(ctx: TenantAccessCtx, tenantId: 
     // OR churned/cancelled customer); comped grants never lock — see
     // evaluateTrialState / isCompedTenant.
     throw new TRPCError({ code: "FORBIDDEN", message: "billing_locked" });
+  }
+}
+
+/**
+ * Server-side email-verification enforcement (audit 2026-06-12, CS-2).
+ *
+ * The EmailVerificationGate in (dashboard)/layout.tsx is a client render-swap
+ * only — an unverified account could operate the product via direct tRPC.
+ * This guard re-checks web_users.email_verified on the server for the same
+ * high-value outbound/product mutations as the billing gate (CS-1).
+ *
+ * `email_verified` is NOT NULL DEFAULT 0, so a fresh row is unverified until
+ * the email flow (or a verified Google OAuth profile) flips it to 1. Platform
+ * staff (system_admin) skip the check; a missing row fails closed.
+ */
+export async function assertEmailVerified(ctx: TenantAccessCtx): Promise<void> {
+  if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+  if (ctx.webUser.webRole === "system_admin") return;
+
+  const [row] = await ctx.db
+    .select({ emailVerified: webUsers.emailVerified })
+    .from(webUsers)
+    .where(eq(webUsers.id, ctx.webUser.id))
+    .limit(1);
+  if (!row?.emailVerified) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "email_unverified" });
   }
 }

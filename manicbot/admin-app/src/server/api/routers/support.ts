@@ -6,8 +6,11 @@ import { TRPCError } from "@trpc/server";
 import { sendSupportReplyEmail } from "~/server/email/emailService";
 import { log } from "~/server/utils/logger";
 import { signUploadToken } from "~/server/lib/uploadToken";
-import { isHttpsUrl } from "~/server/lib/url";
+import { isChatAttachmentCdnUrl } from "~/server/lib/url";
 import { checkRateLimit } from "~/server/auth/rateLimit";
+import { env } from "~/env";
+import type { Lang } from "~/lib/i18n";
+import { notifyWebUser, notifyManyWebUsers } from "~/server/services/notifyWebUser";
 
 // ─── Rate limits (IU-6, audit 2026-06-12) — per-user (web_users.id) ──
 /** createTicket: 5 new tickets per hour per user. */
@@ -19,9 +22,6 @@ const RL_TICKET_REPLY_WINDOW_MS = 60 * 60_000;
 /** mintTicketUploadToken: 30 mints per 10 minutes per user. */
 const RL_TICKET_MINT_MAX = 30;
 const RL_TICKET_MINT_WINDOW_MS = 10 * 60_000;
-import { env } from "~/env";
-import type { Lang } from "~/lib/i18n";
-import { notifyWebUser, notifyManyWebUsers } from "~/server/services/notifyWebUser";
 
 const SUPPORT_STAFF_ROLES = ["system_admin", "support", "technical_support"] as const;
 const TICKET_SUBJECT_PREVIEW_RE = /^\[([^\]]{1,80})\]/;
@@ -120,7 +120,9 @@ export const supportRouter = createTRPCRouter({
     .input(z.object({
       ticketId: z.string(),
       text: z.string().min(1),
-      attachmentUrl: z.string().max(2000).refine(isHttpsUrl, { message: "url_must_be_https" }).optional(),
+      // IU-1 (audit 2026-06-12): pinned to the CDN shape minted by
+      // mintTicketUploadToken — renders as <img>/<a> at the counterparty.
+      attachmentUrl: z.string().max(2000).refine(isChatAttachmentCdnUrl, { message: "url_must_be_cdn_attachment" }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await assertSupport(ctx);
@@ -288,7 +290,9 @@ export const supportRouter = createTRPCRouter({
     .input(z.object({
       ticketId: z.string(),
       text: z.string().min(1).max(5000),
-      attachmentUrl: z.string().max(2000).refine(isHttpsUrl, { message: "url_must_be_https" }).optional(),
+      // IU-1 (audit 2026-06-12): pinned to the CDN shape minted by
+      // mintTicketUploadToken — renders as <img>/<a> at the counterparty.
+      attachmentUrl: z.string().max(2000).refine(isChatAttachmentCdnUrl, { message: "url_must_be_cdn_attachment" }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       // IU-6: per-user limiter before any work.

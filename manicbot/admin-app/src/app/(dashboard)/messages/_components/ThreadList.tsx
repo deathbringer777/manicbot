@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
-import { t, formatDate, type Lang } from "~/lib/i18n";
+import { t, formatRelativeShort, type Lang } from "~/lib/i18n";
 import { useMessengerSocketCtx } from "./socketContext";
 
 type ThreadKind = "staff_dm" | "staff_group" | "client_conv" | "system" | "requests";
@@ -28,14 +28,7 @@ const KIND_META: Record<ThreadKind, { icon: typeof DmIcon; tint: string }> = {
 
 function fmtTime(ts: number | null, lang: Lang): string {
   if (!ts) return "";
-  const ms = ts * 1000;
-  const now = Date.now();
-  const diff = now - ms;
-  if (diff < 60_000) return "now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
-  const d = new Date(ms);
-  return formatDate(d, lang);
+  return formatRelativeShort(ts, lang);
 }
 
 interface Props {

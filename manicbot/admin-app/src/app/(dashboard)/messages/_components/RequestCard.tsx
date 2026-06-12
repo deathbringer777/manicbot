@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { api } from "~/trpc/react";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 
 /** Snapshot persisted in thread_messages.meta_json by the Worker. */
 interface RequestMeta {
@@ -52,6 +54,7 @@ const CHANNEL_BADGE: Record<string, string> = {
 
 export function RequestCard({ tenantId, message }: RequestCardProps) {
   const utils = api.useUtils();
+  const { lang } = useLang();
   const [error, setError] = useState<string | null>(null);
 
   const meta = parseMeta(message.metaJson);
@@ -65,15 +68,17 @@ export function RequestCard({ tenantId, message }: RequestCardProps) {
 
   const claim = api.appointments.claimAndConfirm.useMutation({
     onSuccess: (res) => {
-      if (!res.ok) setError("Уже взято другим мастером");
+      if (!res.ok) setError(t("messenger.request.alreadyClaimed", lang));
       void utils.messenger.getThread.invalidate();
       void utils.messenger.listThreads.invalidate();
     },
-    onError: () => setError("Не удалось взять заявку"),
+    onError: () => setError(t("messenger.request.claimFailed", lang)),
   });
 
   const channelIcon = meta.channel ? CHANNEL_BADGE[meta.channel] ?? "" : "";
-  const header = isConfirmed ? "Запись подтверждена" : "Заявка на запись";
+  const header = isConfirmed
+    ? t("messenger.request.confirmed", lang)
+    : t("messenger.request.title", lang);
 
   return (
     <div className="mx-auto w-full max-w-md rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10">
@@ -107,17 +112,18 @@ export function RequestCard({ tenantId, message }: RequestCardProps) {
             disabled={claim.isPending}
             className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
           >
-            Взять и подтвердить
+            {t("messenger.request.claim", lang)}
           </button>
         )}
         {isConfirmed && (
           <span className="rounded-lg bg-emerald-100 px-3 py-1.5 text-sm font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-            ✅ Подтверждено{meta.autoConfirmed ? " · авто" : ""}
+            ✅ {t("messenger.request.confirmedBadge", lang)}
+            {meta.autoConfirmed ? ` · ${t("messenger.request.auto", lang)}` : ""}
           </span>
         )}
         {isTerminal && (
           <span className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-500 dark:bg-slate-800 dark:text-slate-400">
-            Отменено
+            {t("messenger.status.cancelled", lang)}
           </span>
         )}
         {message.refId && (
@@ -125,7 +131,7 @@ export function RequestCard({ tenantId, message }: RequestCardProps) {
             href={`/?tab=appointments&apt=${encodeURIComponent(message.refId)}`}
             className="text-xs font-medium text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400"
           >
-            Открыть в записях
+            {t("messenger.request.open", lang)}
           </a>
         )}
       </div>

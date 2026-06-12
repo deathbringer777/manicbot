@@ -315,6 +315,56 @@ export async function applyCouponToSubscription(secretKey, subscriptionId, coupo
 }
 
 /**
+ * Idempotent Stripe Promotion Code mint. A promotion_code is the customer-facing
+ * redeemable string (e.g. WIOSNA20) that wraps a coupon (the economics). Used by
+ * the seasonal-messaging promo module so a holiday template can render a real
+ * code the owner enters at checkout (allow_promotion_codes is already true).
+ *
+ * Contract:
+ *   1. GET /v1/promotion_codes?code=CODE first — Stripe enforces code uniqueness,
+ *      so a re-mint with the same code returns the existing one (idempotent).
+ *   2. Else POST /v1/promotion_codes {coupon, code, expires_at?, max_redemptions?}.
+ *
+ * @param {string} secretKey  Stripe API secret (TEST until go-live).
+ * @param {object} opts
+ * @param {string} opts.coupon          coupon id from ensureCoupon().
+ * @param {string} opts.code            customer-facing code (uppercased by Stripe).
+ * @param {number} [opts.expiresAt]     unix seconds; Stripe `expires_at`.
+ * @param {number} [opts.maxRedemptions]
+ * @returns {Promise<{id:string, code:string, coupon:object, livemode:boolean, expires_at?:number}>}
+ */
+export async function createPromotionCode(secretKey, opts) {
+  const { coupon, code, expiresAt, maxRedemptions } = opts || {};
+  if (!coupon || !code) throw new Error('createPromotionCode: coupon and code required');
+
+  // 1. Reuse an existing code (Stripe codes are unique per account).
+  const listRes = await fetch(
+    `${STRIPE_API}/promotion_codes?code=${encodeURIComponent(code)}&limit=1`,
+    { method: 'GET', headers: authHeader(secretKey), signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS) },
+  );
+  if (listRes.ok) {
+    const list = await listRes.json();
+    if (Array.isArray(list.data) && list.data.length > 0) return list.data[0];
+  }
+
+  // 2. Create.
+  const params = { coupon, code };
+  if (expiresAt != null) params.expires_at = String(expiresAt);
+  if (maxRedemptions != null) params.max_redemptions = String(maxRedemptions);
+  const postRes = await fetch(`${STRIPE_API}/promotion_codes`, {
+    method: 'POST',
+    headers: { ...authHeader(secretKey), 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formBody(params),
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+  });
+  const data = await postRes.json();
+  if (!postRes.ok) {
+    throw new Error(data?.error?.message || `Stripe promotion_code POST failed: ${postRes.status}`);
+  }
+  return data;
+}
+
+/**
  * Flip a subscription to cancel at the end of the current billing period.
  * The subscription stays `active` until `current_period_end`; Stripe then
  * fires `customer.subscription.deleted` which the worker webhook handler

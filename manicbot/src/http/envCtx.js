@@ -16,5 +16,10 @@ export function envCtx(env) {
     // (e.g. GET /v1/charges/{id} from a dispute) — the webhook signature
     // secret is separate and lives in STRIPE_WEBHOOK_SECRET.
     stripeSecretKey: env.STRIPE_SECRET_KEY || null,
+    // System & Seasonal Messaging real-send gate (default OFF). Gates the
+    // reactive engine + the seasonal (occasion-linked) campaign dispatch; when
+    // false those stage to the ledger ('skipped_flag') with zero external egress.
+    // Existing welcome/monthly_report/announcement campaigns are NOT gated.
+    messagingSendEnabled: env.MESSAGING_SEND_ENABLED === '1',
   };
 }

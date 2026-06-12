@@ -2513,6 +2513,16 @@ const translations = {
   "messenger.status.delivered":    { ru: "Доставлено", ua: "Доставлено", en: "Delivered", pl: "Dostarczono" },
   "messenger.status.failed":       { ru: "Не доставлено", ua: "Не доставлено", en: "Not delivered", pl: "Niedostarczone" },
   "messenger.status.retry":        { ru: "Повторить", ua: "Повторити", en: "Retry", pl: "Ponów" },
+  "messenger.status.cancelled":    { ru: "Отменено", ua: "Скасовано", en: "Cancelled", pl: "Anulowano" },
+  // Booking-request card (RequestCard.tsx)
+  "messenger.request.title":       { ru: "Заявка на запись", ua: "Заявка на запис", en: "Booking request", pl: "Prośba o rezerwację" },
+  "messenger.request.confirmed":   { ru: "Запись подтверждена", ua: "Запис підтверджено", en: "Booking confirmed", pl: "Rezerwacja potwierdzona" },
+  "messenger.request.claim":       { ru: "Взять и подтвердить", ua: "Взяти та підтвердити", en: "Claim & confirm", pl: "Przejmij i potwierdź" },
+  "messenger.request.confirmedBadge": { ru: "Подтверждено", ua: "Підтверджено", en: "Confirmed", pl: "Potwierdzono" },
+  "messenger.request.auto":        { ru: "авто", ua: "авто", en: "auto", pl: "auto" },
+  "messenger.request.open":        { ru: "Открыть в записях", ua: "Відкрити в записах", en: "Open in appointments", pl: "Otwórz w rezerwacjach" },
+  "messenger.request.alreadyClaimed": { ru: "Уже взято другим мастером", ua: "Вже взято іншим майстром", en: "Already claimed by another master", pl: "Już przejęte przez innego pracownika" },
+  "messenger.request.claimFailed": { ru: "Не удалось взять заявку", ua: "Не вдалося взяти заявку", en: "Failed to claim the request", pl: "Nie udało się przejąć prośby" },
   "messenger.seen":                { ru: "Прочитано", ua: "Прочитано", en: "Seen", pl: "Przeczytano" },
   // Edit / delete (migration 0067 columns, wired in Phase 3)
   "messenger.msg.edit":            { ru: "Изменить", ua: "Змінити", en: "Edit", pl: "Edytuj" },

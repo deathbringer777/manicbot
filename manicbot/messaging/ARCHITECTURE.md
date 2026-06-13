@@ -98,6 +98,7 @@ the admin-app Drizzle writes). Endpoints:
 | POST | `/admin/messaging/campaign-draft` | `{occasion_key,template_key,title,bodies,channels,audience,scheduled_at}` | upsert draft seasonal campaign (idempotent on occasion_key+year) |
 | POST | `/admin/messaging/approve` | `{id,status:'active'\|'scheduled'\|'skipped'}` | flip campaign status (shared with UI) |
 | POST | `/admin/messaging/template-status` | `{template_key\|id,status:'approved'\|'draft'\|'archived'}` | approve/archive draft templates; `template_key` flips ALL non-builtin locales of an occasion at once (tg-bot per-occasion ✅/⏭) |
+| POST | `/admin/messaging/backfill-welcomes` | — | one-off: deliver the sys_welcome message BACKDATED to registration to every owner missing it (idempotent via the delivery ledger; in-app center only, no bell) |
 | GET | `/admin/messaging/drafts` | — | list draft campaigns + templates (for tg-bot) |
 | GET | `/admin/messaging/stats` | — | counts by status, deliveries by channel, send_enabled (env) + send_paused (D1), next_scheduled |
 | GET | `/admin/messaging/plan?days=N` | — | upcoming scheduled campaigns (any status but done) within the window |

@@ -295,3 +295,112 @@ describe('flag (operator send pause)', () => {
     expect(s2.send_paused).toBe(false);
   });
 });
+
+// ── message-retract (purge a broadcast/message + recompute thread headers) ──
+
+function seedThread(id, lastAt, preview, sender) {
+  return db.prepare(
+    'INSERT INTO platform_threads (id, recipient_web_user_id, recipient_tenant_id, last_message_at, last_message_preview, last_sender_kind, archived, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, 1)',
+  ).bind(id, `wu_${id}`, `t_${id}`, lastAt, preview, sender).run();
+}
+function seedMsg(id, threadId, body, broadcastId, createdAt, sender = 'platform') {
+  return db.prepare(
+    "INSERT INTO platform_thread_messages (id, thread_id, sender_kind, sender_web_user_id, body, broadcast_id, created_at) VALUES (?, ?, ?, 'system', ?, ?, ?)",
+  ).bind(id, threadId, sender, body, broadcastId, createdAt).run();
+}
+function seedBroadcastAudit(id) {
+  return db.prepare(
+    "INSERT INTO platform_broadcasts (id, sender_web_user_id, title, body, audience_filter_json, recipients_count, created_at) VALUES (?, 'admin', NULL, 'тест', '{\"scope\":\"all\"}', 2, 100)",
+  ).bind(id).run();
+}
+const threadRow = async (id) =>
+  (await db.prepare(`SELECT * FROM platform_threads WHERE id = '${id}'`).bind().all()).results[0];
+const retract = (body) =>
+  tryMessagingRoutes(req('POST', '/admin/messaging/message-retract', { token: 'mtok', body }), makeEnv(), u('/admin/messaging/message-retract'));
+
+describe('message-retract', () => {
+  it('403 without a valid token', async () => {
+    const res = await tryMessagingRoutes(req('POST', '/admin/messaging/message-retract', { token: 'wrong', body: { broadcast_id: 'bcX' } }), makeEnv(), u('/admin/messaging/message-retract'));
+    expect(res.status).toBe(403);
+  });
+
+  it('400 when neither broadcast_id nor message_id is given', async () => {
+    const res = await retract({});
+    expect(res.status).toBe(400);
+  });
+
+  it('removes every copy of a broadcast and deletes its audit row', async () => {
+    // Thread A keeps a newer non-broadcast message; thread B is "тест"-only.
+    seedThread('pt_A', 100, 'тест', 'platform');
+    seedThread('pt_B', 100, 'тест', 'platform');
+    seedMsg('m_a_old', 'pt_A', 'тест', 'bcX', 100);
+    seedMsg('m_a_new', 'pt_A', 'новое', null, 200);
+    seedMsg('m_b', 'pt_B', 'тест', 'bcX', 100);
+    seedBroadcastAudit('bcX');
+
+    const j = await (await retract({ broadcast_id: 'bcX' })).json();
+    expect(j.ok).toBe(true);
+    expect(j.removed).toBe(2);
+    expect(j.threads_touched).toBe(2);
+
+    const remaining = (await db.prepare("SELECT id FROM platform_thread_messages WHERE broadcast_id = 'bcX'").bind().all()).results;
+    expect(remaining.length).toBe(0);
+    const audit = (await db.prepare("SELECT id FROM platform_broadcasts WHERE id = 'bcX'").bind().all()).results;
+    expect(audit.length).toBe(0);
+  });
+
+  it('recomputes the header to the newest remaining message (newer-message case)', async () => {
+    seedThread('pt_A', 100, 'тест', 'platform');
+    seedMsg('m_a_old', 'pt_A', 'тест', 'bcX', 100);
+    seedMsg('m_a_new', 'pt_A', 'новое объявление', null, 200, 'platform');
+    await retract({ broadcast_id: 'bcX' });
+    const a = await threadRow('pt_A');
+    expect(a.last_message_at).toBe(200);
+    expect(a.last_message_preview).toBe('новое объявление');
+    expect(a.last_sender_kind).toBe('platform');
+  });
+
+  it('nulls the header when no message remains (empty case)', async () => {
+    seedThread('pt_B', 100, 'тест', 'platform');
+    seedMsg('m_b', 'pt_B', 'тест', 'bcX', 100);
+    await retract({ broadcast_id: 'bcX' });
+    const b = await threadRow('pt_B');
+    expect(b.last_message_at).toBe(null);
+    expect(b.last_message_preview).toBe(null);
+    expect(b.last_sender_kind).toBe(null);
+  });
+
+  it('is idempotent — a second retract removes nothing and does not throw', async () => {
+    seedThread('pt_B', 100, 'тест', 'platform');
+    seedMsg('m_b', 'pt_B', 'тест', 'bcX', 100);
+    seedBroadcastAudit('bcX');
+    const j1 = await (await retract({ broadcast_id: 'bcX' })).json();
+    expect(j1.removed).toBe(1);
+    const j2 = await (await retract({ broadcast_id: 'bcX' })).json();
+    expect(j2.ok).toBe(true);
+    expect(j2.removed).toBe(0);
+    expect(j2.threads_touched).toBe(0);
+  });
+
+  it('unknown broadcast_id → 0 removed, no throw', async () => {
+    const j = await (await retract({ broadcast_id: 'nope' })).json();
+    expect(j.ok).toBe(true);
+    expect(j.removed).toBe(0);
+    expect(j.threads_touched).toBe(0);
+  });
+
+  it('retract by message_id removes one copy and recomputes its thread', async () => {
+    seedThread('pt_C', 200, 'newer', 'platform');
+    seedMsg('m_c1', 'pt_C', 'older', null, 100, 'platform');
+    seedMsg('m_c2', 'pt_C', 'newer', null, 200, 'platform');
+    const j = await (await retract({ message_id: 'm_c2' })).json();
+    expect(j.ok).toBe(true);
+    expect(j.removed).toBe(1);
+    expect(j.threads_touched).toBe(1);
+    const c = await threadRow('pt_C');
+    expect(c.last_message_at).toBe(100);
+    expect(c.last_message_preview).toBe('older');
+    const left = (await db.prepare('SELECT id FROM platform_thread_messages WHERE thread_id = ?').bind('pt_C').all()).results;
+    expect(left.map((r) => r.id)).toEqual(['m_c1']);
+  });
+});

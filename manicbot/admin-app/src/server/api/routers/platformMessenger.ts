@@ -243,6 +243,38 @@ async function ensureThread(
   }
 }
 
+/**
+ * Recompute one thread's denormalized `last_message_*` header from its newest
+ * remaining message, or null all three when the thread is now empty. Used by
+ * retractBroadcast after deleting message copies. Mirrors the Worker seam's
+ * recompute (src/services/platformRetract.js) so both retract surfaces leave a
+ * thread in the same state.
+ */
+async function recomputeThreadHeader(db: any, threadId: string): Promise<void> {
+  const [newest] = await db
+    .select({
+      body: platformThreadMessages.body,
+      senderKind: platformThreadMessages.senderKind,
+      createdAt: platformThreadMessages.createdAt,
+    })
+    .from(platformThreadMessages)
+    .where(eq(platformThreadMessages.threadId, threadId))
+    .orderBy(desc(platformThreadMessages.createdAt), desc(platformThreadMessages.id))
+    .limit(1);
+  await db
+    .update(platformThreads)
+    .set(
+      newest
+        ? {
+            lastMessageAt: newest.createdAt as number,
+            lastMessagePreview: makePreview(String(newest.body ?? "")),
+            lastSenderKind: newest.senderKind as string,
+          }
+        : { lastMessageAt: null, lastMessagePreview: null, lastSenderKind: null },
+    )
+    .where(eq(platformThreads.id, threadId));
+}
+
 // ─── Router ─────────────────────────────────────────────────────────────
 
 export const platformMessengerRouter = createTRPCRouter({
@@ -827,6 +859,53 @@ export const platformMessengerRouter = createTRPCRouter({
         rows.length === input.limit ? rows[rows.length - 1]?.createdAt ?? undefined : undefined;
 
       return { items: rows, nextCursor };
+    }),
+
+  /**
+   * Retract (purge) a broadcast: hard-delete every `platform_thread_messages`
+   * copy stamped with `broadcastId`, delete the `platform_broadcasts` audit row,
+   * then recompute each affected thread's `last_message_*` header from the newest
+   * remaining message (or null when empty). The cross-thread reach is the point —
+   * a broadcast fanned one copy into every recipient's thread. Idempotent: a
+   * second call finds no copies and returns `{ removed: 0 }`. God-Mode only.
+   *
+   * Note: does NOT re-welcome emptied channels — that is a separate operational
+   * step (the Worker `backfill-welcomes` seam). It also does not unclaim any
+   * delivery-ledger rows (the admin-app broadcast path writes none).
+   */
+  retractBroadcast: systemAdminProcedure
+    .input(z.object({ broadcastId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const { broadcastId } = input;
+
+      // 1. Collect affected threads BEFORE deleting (dedupe in JS).
+      const copies = await ctx.db
+        .select({ threadId: platformThreadMessages.threadId })
+        .from(platformThreadMessages)
+        .where(eq(platformThreadMessages.broadcastId, broadcastId));
+      const threadIds = [
+        ...new Set(
+          copies
+            .map((c: { threadId: string }) => c.threadId)
+            .filter((id: string | null): id is string => !!id),
+        ),
+      ];
+      const removed = copies.length;
+
+      // 2. Hard-delete the copies + the audit row.
+      await ctx.db
+        .delete(platformThreadMessages)
+        .where(eq(platformThreadMessages.broadcastId, broadcastId));
+      await ctx.db
+        .delete(platformBroadcasts)
+        .where(eq(platformBroadcasts.id, broadcastId));
+
+      // 3. Recompute each affected thread's denormalized header.
+      for (const threadId of threadIds) {
+        await recomputeThreadHeader(ctx.db, threadId);
+      }
+
+      return { removed, threadsTouched: threadIds.length };
     }),
 
   /**

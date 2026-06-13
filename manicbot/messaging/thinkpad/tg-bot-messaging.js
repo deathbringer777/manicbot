@@ -272,8 +272,27 @@ function edit(cq, view) {
   return tg.editMessageText(cq.message.chat.id, cq.message.message_id, view.text, { reply_markup: view.keyboard });
 }
 
+// Console screens (menu/stats/plan/calendar/settings/cron) live in msgconsole.js
+// but share this single msg: callback prefix; delegate them there.
+const CONSOLE_ACTIONS = new Set(["menu", "stats", "plan", "cal", "set", "setpause", "setpauseY", "cron"]);
+
+// Idempotency: Telegram redelivers callback updates on network hiccups. Drop a
+// repeated callback_query id (small ring) so a redelivery can't double-act. The
+// actions are also re-fetch based + server-idempotent — this is defence in depth.
+const SEEN_CB = [];
+const SEEN_CB_MAX = 256;
+function isDuplicateCallback(id) {
+  if (!id) return false;
+  if (SEEN_CB.includes(id)) return true;
+  SEEN_CB.push(id);
+  if (SEEN_CB.length > SEEN_CB_MAX) SEEN_CB.shift();
+  return false;
+}
+
 async function handleCallback(cq) {
   const [, action, ...rest] = (cq.data || "").split(":");
+  if (isDuplicateCallback(cq.id)) return tg.answerCallbackQuery(cq.id); // redelivered → ack only
+  if (CONSOLE_ACTIONS.has(action)) return require("./msgconsole.js").handleConsoleCallback(cq);
   await tg.answerCallbackQuery(cq.id);
   if (action === "noop") return;
 
@@ -319,9 +338,31 @@ async function handleCallback(cq) {
 
 // ── Slash commands ───────────────────────────────────────────────────────────
 
-async function draftsCommand() {
+/** Filter occasion groups by a query: `cat:<category>`, `missing:<locale>`, or a name/occasion substring. */
+function filterGroups(groups, q) {
+  if (q.startsWith("missing:")) {
+    const loc = q.slice(8);
+    return groups.filter((g) => !g.locales[loc === "uk" ? "ua" : loc]);
+  }
+  if (q.startsWith("cat:")) {
+    const c = q.slice(4);
+    return groups.filter((g) => String(g.category || "").toLowerCase().includes(c));
+  }
+  return groups.filter((g) => g.name.toLowerCase().includes(q) || g.occasion.includes(q) || g.key.includes(q));
+}
+
+function filteredView(groups, q) {
+  if (!groups.length) return { text: `🔍 Ничего не найдено по ${render.code(q)}.`, keyboard: render.keyboard([[["📋 Все черновики", "msg:list:0"]]]) };
+  const rows = groups.slice(0, 12).map((g) => [[`${g.emoji} ${g.name} · ${haveLocales(g).length}🌐`.slice(0, 60), `msg:card:${g.key}:0`]]);
+  rows.push([["📋 Все черновики", "msg:list:0"]]);
+  return { text: `🔍 ${render.b("Поиск")}: ${render.code(q)} — найдено ${groups.length}`, keyboard: render.keyboard(rows) };
+}
+
+async function draftsCommand(_chatId, arg) {
   const { error, groups } = await fetchGroups();
-  return error ? errorView(error) : listView(groups, 0);
+  if (error) return errorView(error);
+  const q = (arg || "").trim().toLowerCase();
+  return q ? filteredView(filterGroups(groups, q), q) : listView(groups, 0);
 }
 
 module.exports = {
@@ -329,7 +370,7 @@ module.exports = {
     "/drafts": {
       group: "📨 Рассылки",
       menu: true,
-      description: "Черновики системных/сезонных рассылок",
+      description: "Черновики рассылок (поиск: /drafts <повод|cat:..|missing:pl>)",
       handler: draftsCommand,
     },
     "/preview": {
@@ -347,5 +388,5 @@ module.exports = {
   },
   handleCallback,
   // exported for unit tests
-  _internal: { occasionOf, occasionName, groupDrafts, localeReadiness, fillVars, previewBody, paginate, listView, cardView, confirmView, applyOccasionStatus, fetchGroups, findGroup, seam, PAGE_SIZE, OCCASION },
+  _internal: { occasionOf, occasionName, occasionEmoji, groupDrafts, localeReadiness, fillVars, previewBody, paginate, listView, cardView, confirmView, applyOccasionStatus, fetchGroups, findGroup, seam, fmtDate, filterGroups, filteredView, PAGE_SIZE, OCCASION },
 };

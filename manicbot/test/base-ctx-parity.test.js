@@ -28,6 +28,8 @@ function mockEnv() {
     ADMIN_APP_URL: 'https://admin-app-3nc.pages.dev',
     BOT_TOKEN: '123:fake',
     WEBHOOK_SECRET: 'wh',
+    MESSAGING_SEND_ENABLED: '1',
+    STRIPE_SECRET_KEY: 'sk_test_x',
   };
 }
 
@@ -51,6 +53,8 @@ const REQUIRED_BASE_KEYS = [
   'APP_BASE_URL',
   'baseUrl',
   'ADMIN_APP_URL',
+  'messagingSendEnabled',
+  'stripeSecretKey',
 ];
 
 describe('baseCtx parity (P2-4)', () => {
@@ -70,6 +74,21 @@ describe('baseCtx parity (P2-4)', () => {
     expect(ctx.prefix).toBe('t:t_test:');
     expect(ctx.WEBHOOK_SECRET).toBe('w');
     expect(typeof ctx.channel).toBe('object');
+    // Messaging gate must reach the bot-tenant cron ctx as a boolean (regression:
+    // baseCtx spread ...env but never set the camelCase boolean, so seasonal
+    // dispatch + reactive engine always staged even with the var "1").
+    expect(ctx.messagingSendEnabled).toBe(true);
+  });
+
+  it('messagingSendEnabled defaults to false when the var is not "1"', () => {
+    const env = mockEnv();
+    env.MESSAGING_SEND_ENABLED = '0';
+    const ctx = buildTenantCtx(env, {
+      tenantId: 't_test', tenant: { id: 't_test', name: 'Test' },
+      bot: { botId: 'b1', botToken: 'x', webhookSecret: 'w', active: 1 },
+      TG: 'https://api.telegram.org/botx',
+    });
+    expect(ctx.messagingSendEnabled).toBe(false);
   });
 
   it('buildChannelCtx exposes every required base key', async () => {

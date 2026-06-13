@@ -116,3 +116,101 @@ describe('promo-mint', () => {
     expect(j.promo.code).toBe('WIOSNA20');
   });
 });
+
+// ── tg-bot control-panel read/mutation endpoints (stats / plan / calendar /
+//    reschedule / operator send-pause flag) ──
+
+function seedCampaign(id, status, occasion, scheduledAt) {
+  return db.prepare(
+    "INSERT INTO platform_campaigns (id, kind, title, status, occasion_key, scheduled_at, next_run_at, created_at, updated_at) VALUES (?, 'announcement', ?, ?, ?, ?, ?, 1, 1)",
+  ).bind(id, id, status, occasion, scheduledAt, scheduledAt).run();
+}
+function seedDelivery(id, channel, status) {
+  return db.prepare(
+    "INSERT INTO platform_campaign_deliveries (id, campaign_id, occurrence_key, recipient_web_user_id, tenant_id, channel, status, created_at) VALUES (?, 'pc', 'once', 'wu', 't', ?, ?, 1)",
+  ).bind(id, channel, status).run();
+}
+const days = (n) => Math.floor(Date.now() / 1000) + n * 86400;
+const isoDay = (n) => new Date((Math.floor(Date.now() / 1000) + n * 86400) * 1000).toISOString().slice(0, 10);
+
+describe('stats', () => {
+  it('aggregates campaign + delivery counts and the env send flag', async () => {
+    seedCampaign('c1', 'draft', null, null);
+    seedCampaign('c2', 'active', 'womens_day', days(30));
+    seedCampaign('c3', 'scheduled', 'easter', days(60));
+    seedDelivery('d1', 'center', 'sent');
+    seedDelivery('d2', 'center', 'skipped_flag');
+    seedDelivery('d3', 'bell', 'sent');
+    await tryMessagingRoutes(req('POST', '/admin/messaging/template-draft', {
+      token: 'mtok', body: { template_key: 'seasonal_x', locale: 'pl', name: 'X', bodies: { center: 'y' } },
+    }), makeEnv(), u('/admin/messaging/template-draft'));
+
+    const j = await (await tryMessagingRoutes(req('GET', '/admin/messaging/stats', { token: 'mtok' }), makeEnv(), u('/admin/messaging/stats'))).json();
+    expect(j.ok).toBe(true);
+    expect(j.send_enabled).toBe(false);
+    expect(j.send_paused).toBe(false);
+    expect(j.counts.draft).toBe(1);
+    expect(j.counts.active).toBe(1);
+    expect(j.counts.scheduled).toBe(1);
+    expect(j.templates.draft).toBe(1);
+    expect(j.deliveries_by_channel.center).toBe(2);
+    expect(j.deliveries_by_channel.bell).toBe(1);
+    expect(j.next_scheduled).toBe(days(30));
+  });
+
+  it('reports send_enabled true when MESSAGING_SEND_ENABLED=1', async () => {
+    const j = await (await tryMessagingRoutes(req('GET', '/admin/messaging/stats', { token: 'mtok' }), makeEnv({ MESSAGING_SEND_ENABLED: '1' }), u('/admin/messaging/stats'))).json();
+    expect(j.send_enabled).toBe(true);
+  });
+});
+
+describe('plan', () => {
+  it('lists scheduled campaigns ordered ascending within the day window', async () => {
+    seedCampaign('p2', 'scheduled', 'b', days(5));
+    seedCampaign('p1', 'active', 'a', days(1));
+    seedCampaign('p3', 'draft', 'c', days(400)); // outside a 60-day window
+    const j = await (await tryMessagingRoutes(req('GET', '/admin/messaging/plan?days=60', { token: 'mtok' }), makeEnv(), u('/admin/messaging/plan?days=60'))).json();
+    expect(j.ok).toBe(true);
+    expect(j.items.map((i) => i.id)).toEqual(['p1', 'p2']);
+  });
+});
+
+describe('calendar', () => {
+  it('lists upcoming holiday occasions within the window ordered by date', async () => {
+    db.prepare("INSERT INTO holiday_calendar (id, date, country, occasion_key, name_pl, type, created_at, updated_at) VALUES ('h1', ?, 'PL', 'soon', 'Soon', 'commercial', 1, 1)").bind(isoDay(10)).run();
+    db.prepare("INSERT INTO holiday_calendar (id, date, country, occasion_key, name_pl, type, created_at, updated_at) VALUES ('h2', ?, 'PL', 'later', 'Later', 'commercial', 1, 1)").bind(isoDay(200)).run();
+    db.prepare("INSERT INTO holiday_calendar (id, date, country, occasion_key, name_pl, type, created_at, updated_at) VALUES ('h3', ?, 'PL', 'past', 'Past', 'commercial', 1, 1)").bind(isoDay(-10)).run();
+    const j = await (await tryMessagingRoutes(req('GET', '/admin/messaging/calendar?days=120', { token: 'mtok' }), makeEnv(), u('/admin/messaging/calendar?days=120'))).json();
+    expect(j.ok).toBe(true);
+    expect(j.occasions.map((o) => o.occasion_key)).toEqual(['soon']);
+  });
+});
+
+describe('reschedule', () => {
+  it('updates scheduled_at and next_run_at for an active campaign', async () => {
+    seedCampaign('rc', 'active', 'r', 100);
+    const newAt = days(45);
+    const j = await (await tryMessagingRoutes(req('POST', '/admin/messaging/reschedule', { token: 'mtok', body: { id: 'rc', scheduled_at: newAt } }), makeEnv(), u('/admin/messaging/reschedule'))).json();
+    expect(j.ok).toBe(true);
+    const row = (await db.prepare("SELECT scheduled_at, next_run_at FROM platform_campaigns WHERE id = 'rc'").bind().all()).results[0];
+    expect(row.scheduled_at).toBe(newAt);
+    expect(row.next_run_at).toBe(newAt);
+  });
+
+  it('rejects an invalid scheduled_at', async () => {
+    const res = await tryMessagingRoutes(req('POST', '/admin/messaging/reschedule', { token: 'mtok', body: { id: 'x', scheduled_at: -1 } }), makeEnv(), u('/admin/messaging/reschedule'));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('flag (operator send pause)', () => {
+  it('persists the pause flag and reflects it in stats', async () => {
+    const env = makeEnv();
+    await tryMessagingRoutes(req('POST', '/admin/messaging/flag', { token: 'mtok', body: { paused: true } }), env, u('/admin/messaging/flag'));
+    const s1 = await (await tryMessagingRoutes(req('GET', '/admin/messaging/stats', { token: 'mtok' }), env, u('/admin/messaging/stats'))).json();
+    expect(s1.send_paused).toBe(true);
+    await tryMessagingRoutes(req('POST', '/admin/messaging/flag', { token: 'mtok', body: { paused: false } }), env, u('/admin/messaging/flag'));
+    const s2 = await (await tryMessagingRoutes(req('GET', '/admin/messaging/stats', { token: 'mtok' }), env, u('/admin/messaging/stats'))).json();
+    expect(s2.send_paused).toBe(false);
+  });
+});

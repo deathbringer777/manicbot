@@ -54,6 +54,17 @@ describe('seasonal campaign gate', () => {
     expect(msgs[0].body).toContain('Kurze Łapki');
   });
 
+  it('stages (skipped_flag) when the operator pause flag is set, even with the env flag on', async () => {
+    const ctx = makeCtx({ tenantId: 't_a' });
+    seed(ctx, { sendEnabled: true });
+    run(ctx, "INSERT INTO platform_settings (key, value, updated_at) VALUES ('messaging_send_paused', '1', 1)");
+    await phasePlatformCampaigns(ctx, Date.now());
+    const ledger = await all(ctx, 'SELECT * FROM platform_campaign_deliveries');
+    expect(ledger[0].status).toBe('skipped_flag');
+    const msgs = await all(ctx, 'SELECT * FROM platform_thread_messages');
+    expect(msgs.length).toBe(0);
+  });
+
   it('resolves a per-locale template body when the campaign has an empty body + template_key', async () => {
     const ctx = makeCtx({ tenantId: 't_a' });
     ctx.messagingSendEnabled = true;

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useRole } from "~/components/RoleContext";
 import { useLang } from "~/components/LangContext";
+import { api } from "~/trpc/react";
 import { useDashboardPrefs } from "~/lib/useDashboardPrefs";
 import { t, LANGS } from "~/lib/i18n";
 import { tNav } from "~/lib/nav/navLabels";
@@ -57,6 +58,15 @@ function getAdminInfo() {
 export function LangPickerInline({ placement = "toolbar" }: { placement?: "toolbar" | "settings" }) {
   const { lang, setLang } = useLang();
   const [open, setOpen] = useState(false);
+  const persistLang = api.webUsers.setMyLang.useMutation();
+  // The picker drives the client UI (setLang → localStorage) AND persists to
+  // web_users.lang so SERVER-rendered content (platform messages, welcome,
+  // emails) follows the selection. mutate is fire-and-forget; failures (e.g. a
+  // not-yet-authenticated paint) are harmless and don't surface to the UI.
+  const changeLang = (code: Parameters<typeof setLang>[0]) => {
+    setLang(code);
+    persistLang.mutate({ lang: code });
+  };
 
   if (placement === "settings") {
     return (
@@ -65,7 +75,7 @@ export function LangPickerInline({ placement = "toolbar" }: { placement?: "toolb
           <button
             key={code}
             type="button"
-            onClick={() => setLang(code)}
+            onClick={() => changeLang(code)}
             className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-xs font-medium transition-all ${
               lang === code
                 ? "bg-brand-100 border-brand-300 text-brand-800 dark:bg-brand-500/20 dark:border-brand-500/40 dark:text-brand-300"
@@ -99,7 +109,7 @@ export function LangPickerInline({ placement = "toolbar" }: { placement?: "toolb
                 <button
                   key={code}
                   type="button"
-                  onClick={() => { setLang(code); setOpen(false); }}
+                  onClick={() => { changeLang(code); setOpen(false); }}
                   className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all ${
                     lang === code
                       ? "bg-brand-100 border border-brand-300 text-brand-800 dark:bg-brand-500/20 dark:border-brand-500/40 dark:text-brand-300"

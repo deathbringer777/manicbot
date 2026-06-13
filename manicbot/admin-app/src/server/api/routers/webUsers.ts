@@ -1256,6 +1256,24 @@ export const webUsersRouter = createTRPCRouter({
       return { ok: true as const };
     }),
 
+  /**
+   * Persist the caller's UI language to `web_users.lang` so SERVER-rendered
+   * content (platform messages, welcome, emails) follows the language picker.
+   * The picker otherwise only writes localStorage (client UI), so message
+   * rendering — which reads web_users.lang at delivery time — would stay on the
+   * old language. Global on web_users (one preferred language per person).
+   */
+  setMyLang: protectedProcedure
+    .input(z.object({ lang: z.enum(["ru", "ua", "en", "pl"]) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.webUser) throw new TRPCError({ code: "UNAUTHORIZED" });
+      await ctx.db
+        .update(webUsers)
+        .set({ lang: input.lang })
+        .where(eq(webUsers.id, ctx.webUser.id));
+      return { ok: true as const };
+    }),
+
   // ─── Master invitations (migration 0063) ────────────────────────────────
 
   /**

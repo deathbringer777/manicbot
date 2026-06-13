@@ -21,6 +21,7 @@ import { dbGet, dbAll, dbRun } from '../utils/db.js';
 import { ulid } from '../utils/ulid.js';
 import { mintSeasonalPromo } from '../billing/promoCodes.js';
 import { isSendPaused } from '../services/platformSettings.js';
+import { retractBroadcast } from '../services/platformRetract.js';
 
 const MAX_BODY_LEN = 8000;
 const MAX_ROWS = 500;
@@ -456,6 +457,23 @@ async function handleFlag(ctx, body) {
   return json({ ok: true, send_paused: paused });
 }
 
+/**
+ * Retract (purge) a bad/test broadcast or a single message copy and recompute
+ * the affected threads' last_message_* headers. God-Mode: deletes the matching
+ * platform_thread_messages copies (+ the platform_broadcasts audit row for a
+ * broadcast_id) across threads — the cross-thread reach is the point. Idempotent;
+ * unknown ids return removed:0. Body: { broadcast_id } OR { message_id }.
+ */
+async function handleMessageRetract(ctx, body) {
+  const broadcastId = body?.broadcast_id || null;
+  const messageId = body?.message_id || null;
+  if (!broadcastId && !messageId) {
+    return json({ ok: false, error: 'broadcast_id_or_message_id_required' }, 400);
+  }
+  const { removed, threadsTouched } = await retractBroadcast(ctx, { broadcastId, messageId });
+  return json({ ok: true, removed, threads_touched: threadsTouched });
+}
+
 async function handlePromoMint(ctx, body) {
   const { campaign_id, code, percent_off, duration, duration_months, expires_days, max_redemptions, created_by } = body || {};
   const expiresAt = Number.isInteger(expires_days) && expires_days > 0
@@ -511,6 +529,7 @@ export async function tryMessagingRoutes(request, env, url) {
       case 'template-status': return await handleTemplateStatus(ctx, body);
       case 'template-approve': return await handleTemplateApprove(ctx, body);
       case 'backfill-welcomes': return await handleBackfillWelcomes(ctx);
+      case 'message-retract': return await handleMessageRetract(ctx, body);
       case 'reschedule': return await handleReschedule(ctx, body);
       case 'flag': return await handleFlag(ctx, body);
       case 'promo-mint': return await handlePromoMint(ctx, body);

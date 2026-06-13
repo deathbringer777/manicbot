@@ -74,9 +74,11 @@ async function routeCommand(chatId, cmd, arg) {
 async function handleText(chatId, text) {
   // Images just sent? A following free-text line is their instruction — flush
   // the batch now with this text instead of routing it on its own. (A slash
-  // command is left alone; the batch flushes on its own timer.)
+  // command is left alone; the batch flushes on its own timer.) Fire-and-forget
+  // so the long vision call doesn't block the poll loop, like the LLM path below.
   if (pendingImages.has(chatId) && !text.startsWith("/")) {
-    return flushImages(chatId, text);
+    flushImages(chatId, text).catch((e) => console.error("[vision flush]", e.message));
+    return;
   }
 
   const [cmdRaw, ...argParts] = text.split(/\s+/);

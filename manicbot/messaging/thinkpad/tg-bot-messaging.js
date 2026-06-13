@@ -242,6 +242,33 @@ function errorView(error) {
   return { text: `⚠️ ${render.b("Не удалось получить данные.")}\n${render.code(error)}`, keyboard: render.keyboard([[["🔄 Повторить", "msg:list:0"]]]) };
 }
 
+// ── Retract (purge a bad/test broadcast or a single message copy) ─────────────
+
+/** Admin-app broadcast id (`bc_…`) vs a raw message_id (bare ULID). */
+function retractKind(id) {
+  return String(id || "").startsWith("bc_") ? "broadcast" : "message";
+}
+
+/** Confirm step before a destructive retract (mirrors the pause-confirm pattern). */
+function retractConfirmView(id) {
+  const what = retractKind(id) === "message" ? "сообщение" : "рассылку (все копии у получателей)";
+  return {
+    text: `🗑 Откатить ${render.b(what)}?\n${render.code(id)}\n${render.i("Копии удаляются у всех получателей, превью тредов пересчитывается. Необратимо.")}`,
+    keyboard: render.keyboard([[["🗑 Да, откатить", `msg:retrY:${id}`], ["❌ Отмена", "msg:menu"]]]),
+  };
+}
+
+/** Execute the retract via the Worker seam and render the result. */
+async function runRetract(id) {
+  const body = retractKind(id) === "message" ? { message_id: id } : { broadcast_id: id };
+  const r = await seam("POST", "message-retract", body);
+  if (!r.ok) return errorView(r.error);
+  return {
+    text: `✅ ${render.b("Откат выполнен")}\n${render.kv("Удалено копий", String(r.removed ?? 0))}\n${render.kv("Тредов затронуто", String(r.threads_touched ?? 0))}`,
+    keyboard: render.keyboard([[["⬅️ Меню", "msg:menu"]]]),
+  };
+}
+
 // ── Data (re-fetch every action → stateless, restart-safe) ───────────────────
 
 async function fetchGroups() {
@@ -299,6 +326,14 @@ async function handleCallback(cq) {
   if (action === "list") {
     const { error, groups } = await fetchGroups();
     return edit(cq, error ? errorView(error) : listView(groups, parseInt(rest[0], 10) || 0));
+  }
+
+  // Retract is id-driven (no draft group) — handle before the group fetch below.
+  // The id (bc_… / ULID) carries no ':' so it survives the callback-data split.
+  if (action === "retr") return edit(cq, retractConfirmView(rest[0] || ""));
+  if (action === "retrY") {
+    if (!rest[0]) return edit(cq, errorView("empty_id"));
+    return edit(cq, await runRetract(rest[0]));
   }
 
   const key = rest[0];
@@ -385,8 +420,20 @@ module.exports = {
         return group ? cardView(group, 0, "ru") : `Не найдено в черновиках: ${render.code(q)}`;
       },
     },
+    "/retract": {
+      group: "📨 Рассылки",
+      description: "Откатить рассылку/сообщение: /retract <bc_… | message_id>",
+      handler: async (_chatId, arg) => {
+        const id = (arg || "").trim();
+        if (!id) return "Укажи id: /retract bc_… (вся рассылка) или /retract <ULID> (одно сообщение).";
+        // A ':' id is a campaign broadcast_id — unsafe in callback data; route it
+        // through the admin UI / curl instead of the button flow.
+        if (id.includes(":")) return `id с двоеточием (кампания) откатывай через админку/curl: ${render.code(id)}`;
+        return retractConfirmView(id);
+      },
+    },
   },
   handleCallback,
   // exported for unit tests
-  _internal: { occasionOf, occasionName, occasionEmoji, groupDrafts, localeReadiness, fillVars, previewBody, paginate, listView, cardView, confirmView, applyOccasionStatus, fetchGroups, findGroup, seam, fmtDate, filterGroups, filteredView, PAGE_SIZE, OCCASION },
+  _internal: { occasionOf, occasionName, occasionEmoji, groupDrafts, localeReadiness, fillVars, previewBody, paginate, listView, cardView, confirmView, applyOccasionStatus, fetchGroups, findGroup, seam, fmtDate, filterGroups, filteredView, retractKind, retractConfirmView, runRetract, PAGE_SIZE, OCCASION },
 };

@@ -83,7 +83,8 @@ directly**. Reuses `_shared/PRODUCT.md` + `BRAND.md` (scp'd, never committed) as
 
 **tg-bot approval** (`~/automation/tg-bot/`, ALLOWED_USER_ID-only): `/drafts` (list), `/preview <id>`,
 `/approve <id>` (→ `POST /admin/messaging/approve` flips draft→active/scheduled), `/skip <id>`, `/send <id>`
-(still requires `MESSAGING_SEND_ENABLED=1`). New `.env`: `MESSAGING_TOKEN`, `WORKER_URL`.
+(still requires `MESSAGING_SEND_ENABLED=1`), `/retract <bc_…|message_id>` (confirm-gated →
+`POST /admin/messaging/message-retract`). New `.env`: `MESSAGING_TOKEN`, `WORKER_URL`.
 
 ## Integration seam — `src/http/messagingHttp.js`
 
@@ -99,6 +100,7 @@ the admin-app Drizzle writes). Endpoints:
 | POST | `/admin/messaging/approve` | `{id,status:'active'\|'scheduled'\|'skipped'}` | flip campaign status (shared with UI) |
 | POST | `/admin/messaging/template-status` | `{template_key\|id,status:'approved'\|'draft'\|'archived'}` | approve/archive draft templates; `template_key` flips ALL non-builtin locales of an occasion at once (tg-bot per-occasion ✅/⏭) |
 | POST | `/admin/messaging/backfill-welcomes` | — | one-off: deliver the sys_welcome message BACKDATED to registration to every owner missing it (idempotent via the delivery ledger; in-app center only, no bell) |
+| POST | `/admin/messaging/message-retract` | `{broadcast_id}` \| `{message_id}` | God-Mode retract: hard-delete the matching `platform_thread_messages` copies (+ the `platform_broadcasts` audit row for a `broadcast_id`) across ALL recipient threads, then RECOMPUTE each affected thread's `last_message_*` from the newest remaining message (or null when empty). Idempotent (re-run → 0); unknown id → 0. Returns `{removed, threads_touched}`. Shared `retractBroadcast()` lives in `src/services/platformRetract.js`; the admin-app `platformMessenger.retractBroadcast` mutation mirrors the same recompute semantics. No FTS (that index covers `thread_messages`, not the platform table). Does NOT re-welcome emptied channels — that is a separate `backfill-welcomes` step. |
 | GET | `/admin/messaging/drafts` | — | list draft campaigns + templates (for tg-bot) |
 | GET | `/admin/messaging/stats` | — | counts by status, deliveries by channel, send_enabled (env) + send_paused (D1), next_scheduled |
 | GET | `/admin/messaging/plan?days=N` | — | upcoming scheduled campaigns (any status but done) within the window |

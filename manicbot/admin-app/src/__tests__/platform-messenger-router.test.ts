@@ -462,6 +462,84 @@ describe("platformMessengerRouter audience excludes fake + master recipients", (
   });
 });
 
+// ─── retractBroadcast (purge a broadcast + recompute thread headers) ─────
+//
+// Mirrors the Worker seam retract (src/services/platformRetract.js). The mock
+// DB records delete/update calls and serves a FIFO of select results: the
+// procedure first selects the affected thread ids, then (per distinct thread)
+// selects the newest remaining message to recompute the denormalized header.
+
+describe("platformMessengerRouter.retractBroadcast", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("rejects tenant_owner (sysadmin-only)", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(
+      caller.retractBroadcast({ broadcastId: "bc_x" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("deletes message copies + the audit row and reports deduped counts", async () => {
+    const { db, deleteCalls } = createDbMock([
+      // 1. affected threads (pt_a appears twice → deduped)
+      [{ threadId: "pt_a" }, { threadId: "pt_b" }, { threadId: "pt_a" }],
+      // 2. recompute pt_a → newest remaining
+      [{ body: "новое", senderKind: "platform", createdAt: 200 }],
+      // 3. recompute pt_b → empty
+      [],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const out = await caller.retractBroadcast({ broadcastId: "bc_x" });
+    expect(out.removed).toBe(3);
+    expect(out.threadsTouched).toBe(2);
+    // two deletes: platform_thread_messages copies + the platform_broadcasts row
+    expect(deleteCalls.length).toBe(2);
+    expect(deleteCalls.every((d) => d.whereCalled)).toBe(true);
+  });
+
+  it("recomputes the header to the newest remaining message (newer-message case)", async () => {
+    const { db, updateCalls } = createDbMock([
+      [{ threadId: "pt_a" }],
+      [{ body: "новое объявление", senderKind: "platform", createdAt: 200 }],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await caller.retractBroadcast({ broadcastId: "bc_x" });
+    expect(updateCalls.length).toBe(1);
+    expect(updateCalls[0]?.values).toMatchObject({
+      lastMessageAt: 200,
+      lastMessagePreview: "новое объявление",
+      lastSenderKind: "platform",
+    });
+  });
+
+  it("nulls the header when no message remains (empty case)", async () => {
+    const { db, updateCalls } = createDbMock([
+      [{ threadId: "pt_b" }],
+      [],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await caller.retractBroadcast({ broadcastId: "bc_x" });
+    expect(updateCalls.length).toBe(1);
+    expect(updateCalls[0]?.values).toMatchObject({
+      lastMessageAt: null,
+      lastMessagePreview: null,
+      lastSenderKind: null,
+    });
+  });
+
+  it("unknown broadcast → 0 removed, no recompute", async () => {
+    const { db, updateCalls } = createDbMock([
+      [], // no copies
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const out = await caller.retractBroadcast({ broadcastId: "bc_none" });
+    expect(out.removed).toBe(0);
+    expect(out.threadsTouched).toBe(0);
+    expect(updateCalls.length).toBe(0);
+  });
+});
+
 describe("platformMessengerRouter.listThreads excludes fake recipients", () => {
   beforeEach(() => vi.clearAllMocks());
 

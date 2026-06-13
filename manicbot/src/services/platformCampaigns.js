@@ -247,7 +247,8 @@ function parseChannels(channelsJson) {
   }
 }
 
-function makePreview(body) {
+/** One-line, 200-char-capped thread preview. Shared with the retract recompute. */
+export function makePreview(body) {
   const oneLine = String(body || '').replace(/\s+/g, ' ').trim();
   return oneLine.length > 200 ? oneLine.slice(0, 200) : oneLine;
 }

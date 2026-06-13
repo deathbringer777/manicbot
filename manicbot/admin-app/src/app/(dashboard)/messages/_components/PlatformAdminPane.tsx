@@ -310,6 +310,11 @@ function PlatformAdminThreadView({
                       }`}
                     >
                       {t("messenger.platform.fromBroadcast", lang)}
+                      <BroadcastRetractAction
+                        broadcastId={m.broadcastId}
+                        threadId={threadId}
+                        isPlatform={isPlatform}
+                      />
                     </div>
                   )}
                 </div>
@@ -349,5 +354,80 @@ function PlatformAdminThreadView({
         )}
       </div>
     </div>
+  );
+}
+
+// ── Inline broadcast-retract action (shown under a broadcast message) ─────
+//
+// God-Mode: retracting one broadcast message removes EVERY copy across all
+// recipient threads and recomputes their inbox previews. Confirm-gated. Calls
+// the same systemAdminProcedure the Worker seam wraps (one shared semantics).
+function BroadcastRetractAction({
+  broadcastId,
+  threadId,
+  isPlatform,
+}: {
+  broadcastId: string;
+  threadId: string;
+  isPlatform: boolean;
+}) {
+  const { lang } = useLang();
+  const utils = api.useUtils();
+  const [confirming, setConfirming] = useState(false);
+  const retractMutation = api.platformMessenger.retractBroadcast.useMutation({
+    onSuccess: async () => {
+      setConfirming(false);
+      await utils.platformMessenger.getThread.invalidate({ threadId });
+      await utils.platformMessenger.listThreads.invalidate();
+      await utils.platformMessenger.listBroadcasts.invalidate();
+    },
+  });
+
+  if (retractMutation.isSuccess) {
+    return (
+      <span className={`ml-2 ${isPlatform ? "text-fuchsia-100" : "text-slate-500"}`}>
+        · {t("messenger.platform.retractDone", lang)} ({retractMutation.data.removed})
+      </span>
+    );
+  }
+
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className={`ml-2 underline-offset-2 hover:underline ${
+          isPlatform ? "text-fuchsia-100" : "text-slate-500"
+        }`}
+      >
+        {t("messenger.platform.retract", lang)}
+      </button>
+    );
+  }
+
+  return (
+    <span className="ml-2 inline-flex flex-wrap items-center gap-1">
+      <span className={isPlatform ? "text-fuchsia-100" : "text-slate-500"}>
+        {t("messenger.platform.retractConfirm", lang)}
+      </span>
+      <button
+        type="button"
+        disabled={retractMutation.isPending}
+        onClick={() => retractMutation.mutate({ broadcastId })}
+        className="rounded bg-rose-500 px-1.5 py-0.5 font-medium text-white hover:bg-rose-600 disabled:opacity-50"
+      >
+        {retractMutation.isPending ? "…" : t("messenger.platform.retractYes", lang)}
+      </button>
+      <button
+        type="button"
+        onClick={() => setConfirming(false)}
+        className="px-1 underline"
+      >
+        {t("messenger.platform.retractCancel", lang)}
+      </button>
+      {retractMutation.error && (
+        <span className="text-rose-400">{retractMutation.error.message}</span>
+      )}
+    </span>
   );
 }

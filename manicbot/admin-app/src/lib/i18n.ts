@@ -2485,6 +2485,11 @@ const translations = {
   "messenger.platform.selectSalonHint": { ru: "Или отправьте рассылку всем владельцам", ua: "Або надішліть розсилку всім власникам", en: "Or send a broadcast to all owners", pl: "Lub wyślij wysyłkę do wszystkich właścicieli" },
   "messenger.platform.threadEmpty": { ru: "Пусто. Напишите первым.", ua: "Порожньо. Напишіть першим.", en: "Empty. Be the first to write.", pl: "Pusto. Napisz pierwszy." },
   "messenger.platform.fromBroadcast": { ru: "из рассылки", ua: "з розсилки", en: "from a broadcast", pl: "z wysyłki" },
+  "messenger.platform.retract":    { ru: "Откатить рассылку", ua: "Відкликати розсилку", en: "Retract broadcast", pl: "Wycofaj wysyłkę" },
+  "messenger.platform.retractConfirm": { ru: "Удалить все копии этой рассылки у всех получателей? Необратимо.", ua: "Видалити всі копії цієї розсилки в усіх отримувачів? Незворотно.", en: "Delete every copy of this broadcast for all recipients? Irreversible.", pl: "Usunąć wszystkie kopie tej wysyłki u wszystkich odbiorców? Nieodwracalne." },
+  "messenger.platform.retractYes": { ru: "Да, откатить", ua: "Так, відкликати", en: "Yes, retract", pl: "Tak, wycofaj" },
+  "messenger.platform.retractCancel": { ru: "Отмена", ua: "Скасувати", en: "Cancel", pl: "Anuluj" },
+  "messenger.platform.retractDone": { ru: "Откат выполнен", ua: "Відкликано", en: "Retracted", pl: "Wycofano" },
   "messenger.platform.replyPlaceholder": { ru: "Ответить владельцу…", ua: "Відповісти власнику…", en: "Reply to the owner…", pl: "Odpowiedz właścicielowi…" },
   // BroadcastComposer
   "messenger.broadcast.title":     { ru: "Рассылка от ManicBot", ua: "Розсилка від ManicBot", en: "Broadcast from ManicBot", pl: "Wysyłka od ManicBot" },

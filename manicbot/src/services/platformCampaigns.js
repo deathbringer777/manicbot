@@ -34,6 +34,7 @@ import {
 import { buildCampaignVars } from './platformCampaignVars.js';
 import { deliverEmail } from './platformCampaignEmail.js';
 import { getPromoForCampaign } from '../billing/promoCodes.js';
+import { isSendPaused } from './platformSettings.js';
 
 const NOT_DUE = Object.freeze({ due: false, occurrenceKey: null });
 
@@ -569,6 +570,9 @@ export async function phasePlatformCampaigns(ctx, nowMs) {
   const campaigns = (scanned || []).filter((c) => c.status === 'active' || c.status === 'scheduled');
   if (campaigns.length === 0) return;
 
+  // Operator secondary send-pause (D1). Effective seasonal egress requires BOTH
+  // the env master flag AND not-paused — pausing can only restrict, never enable.
+  const sendPaused = await isSendPaused(ctx);
   const now = { ...warsawNow(), epochSec: nowSec };
   const recipients = await resolveTenantRecipients(ctx);
 
@@ -590,7 +594,7 @@ export async function phasePlatformCampaigns(ctx, nowMs) {
       // 'skipped_flag' (no center/bell/TG/email egress) so the dry-run is
       // observable but inert. Welcome/monthly_report/announcement (no occasion_key)
       // are NOT gated — existing behavior is preserved.
-      const seasonalGated = !!c.occasion_key && ctx.messagingSendEnabled !== true;
+      const seasonalGated = !!c.occasion_key && !(ctx.messagingSendEnabled === true && !sendPaused);
       let delivered = false;
       for (const r of recipients) {
         // Welcome backfill fills only EMPTY channels — never late-welcome an

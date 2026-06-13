@@ -20,7 +20,7 @@ What already exists vs. what the new service adds. Anchored to migration **0117*
 - **Migration 0120** — `platform_campaigns.occasion_key TEXT`, `template_key TEXT` (content-plan linkage); `promo_codes` table (Stripe promo code persistence + render source).
 - **Reactive engine** `src/services/reactiveMessaging.js` — `fireReactiveMessage()` event-driven delivery through the existing ledger; locale-resolving template loader (tenant lang → EN fallback); `MESSAGING_SEND_ENABLED` gate (off → ledger row `skipped_flag`, zero egress). New cron-due kinds (`onboarding_incomplete`, `inactivity`, `usage_milestone`, `trial_ending`).
 - **Promo module** `src/billing/promoCodes.js` — `createPromotionCode()` (wraps `ensureCoupon`), persist to `promo_codes`, render `{promoCode}/{expiresAt}`. TEST-mode Stripe only until go-live.
-- **Worker integration endpoints** `src/http/messagingHttp.js` — `/admin/messaging/*` (Bearer `MESSAGING_TOKEN`): holidays-upsert, template-draft, campaign-draft, approve, drafts (GET), promo-mint. Server-to-server seam for the ThinkPad.
+- **Worker integration endpoints** `src/http/messagingHttp.js` — `/admin/messaging/*` (Bearer `MESSAGING_TOKEN`): holidays-upsert, template-draft, campaign-draft, approve, drafts (GET), stats (GET), plan (GET), calendar (GET), reschedule, flag (operator send-pause), promo-mint. Server-to-server seam for the ThinkPad + tg-bot control panel.
 - **ThinkPad tier** `~/automation/messaging/` — holidays-sync, content-plan-builder, preset-generator (`claude -p` Sonnet), scheduler health crons; PM2. tg-bot extended with `/drafts /preview /approve /skip /send`.
 - **Admin UI delta** — template status chips (DRAFT/APPROVED), per-locale preview, approve/archive; content-plan list (campaigns with occasion_key).
 

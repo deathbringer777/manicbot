@@ -97,7 +97,13 @@ the admin-app Drizzle writes). Endpoints:
 | POST | `/admin/messaging/template-draft` | `{template_key,locale,name,category,channels,bodies,variables}` | upsert draft template by (template_key,locale) |
 | POST | `/admin/messaging/campaign-draft` | `{occasion_key,template_key,title,bodies,channels,audience,scheduled_at}` | upsert draft seasonal campaign (idempotent on occasion_key+year) |
 | POST | `/admin/messaging/approve` | `{id,status:'active'\|'scheduled'\|'skipped'}` | flip campaign status (shared with UI) |
+| POST | `/admin/messaging/template-status` | `{template_key\|id,status:'approved'\|'draft'\|'archived'}` | approve/archive draft templates; `template_key` flips ALL non-builtin locales of an occasion at once (tg-bot per-occasion ✅/⏭) |
 | GET | `/admin/messaging/drafts` | — | list draft campaigns + templates (for tg-bot) |
+| GET | `/admin/messaging/stats` | — | counts by status, deliveries by channel, send_enabled (env) + send_paused (D1), next_scheduled |
+| GET | `/admin/messaging/plan?days=N` | — | upcoming scheduled campaigns (any status but done) within the window |
+| GET | `/admin/messaging/calendar?days=N` | — | upcoming holiday_calendar occasions within the window |
+| POST | `/admin/messaging/reschedule` | `{id,scheduled_at}` | move a campaign's scheduled_at (keeps next_run_at in sync for live statuses) |
+| POST | `/admin/messaging/flag` | `{paused:boolean}` | operator secondary send-pause (D1 `platform_settings.messaging_send_paused`); env stays master |
 | POST | `/admin/messaging/promo-mint` | `{campaign_id,percent_off,duration,expires_days}` | mint Stripe promo (TEST), persist promo_codes |
 
 ## Promo module — `src/billing/promoCodes.js`

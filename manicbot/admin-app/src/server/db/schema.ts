@@ -1793,6 +1793,14 @@ export const holidayCalendar = sqliteTable("holiday_calendar", {
   index("idx_holiday_date").on(t.date),
 ]);
 
+// 0122: platform_settings — operator-controlled platform-global key/value switches
+// (first use: messaging_send_paused, the secondary seasonal-send gate). No tenant_id.
+export const platformSettings = sqliteTable("platform_settings", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 // 0120: subscription_promo_codes — owner-facing SUBSCRIPTION discount codes for
 // seasonal offers. DISTINCT from the tenant-level loyalty `promo_codes` (0029,
 // salon→client). Minted as Stripe coupon + promotion_code by promoCodes.js.

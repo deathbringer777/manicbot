@@ -1783,6 +1783,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_holiday_occasion_date
 CREATE INDEX IF NOT EXISTS idx_holiday_date
   ON holiday_calendar(date);
 
+-- 0122: platform_settings — operator-controlled platform-global key/value switches
+-- (first use: messaging_send_paused, the secondary seasonal-send gate). No tenant_id.
+CREATE TABLE IF NOT EXISTS platform_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT,
+  updated_at INTEGER NOT NULL
+);
+
 -- 0120: subscription_promo_codes — owner-facing SUBSCRIPTION discount codes for
 -- seasonal offers (distinct from tenant-level loyalty promo_codes, 0029). Minted
 -- as Stripe coupon + promotion_code by src/billing/promoCodes.js. livemode marks

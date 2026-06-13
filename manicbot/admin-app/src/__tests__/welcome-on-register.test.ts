@@ -50,22 +50,25 @@ CREATE TABLE platform_campaign_deliveries (
 );
 CREATE UNIQUE INDEX idx_pcd_claim ON platform_campaign_deliveries(campaign_id, occurrence_key, recipient_web_user_id, channel);
 CREATE TABLE tenants (id TEXT PRIMARY KEY, name TEXT, plan TEXT);
-CREATE TABLE web_users (id TEXT PRIMARY KEY, name TEXT);
+CREATE TABLE web_users (id TEXT PRIMARY KEY, name TEXT, lang TEXT);
 `;
 
 const WELCOME_BODY = JSON.stringify({ center: "Здравствуйте, {salon_name}! Тариф: {plan}. {first_name}, рады вам." });
 
-async function makeDb(opts?: { status?: string; channels?: string }) {
+async function makeDb(opts?: { status?: string; channels?: string; body?: string; lang?: string }) {
   const client = createClient({ url: ":memory:" });
   await client.executeMultiple(BOOTSTRAP_SQL);
   const db = drizzle(client, { schema });
   await client.execute({
     sql: `INSERT INTO platform_campaigns (id, kind, title, body, bodies_json, channels_json, schedule_kind, status, created_at, updated_at)
           VALUES ('sys_welcome','welcome','Добро пожаловать в ManicBot','Здравствуйте, {salon_name}!', ?, ?, 'now', ?, 0, 0)`,
-    args: [WELCOME_BODY, opts?.channels ?? '["center","bell"]', opts?.status ?? "active"],
+    args: [opts?.body ?? WELCOME_BODY, opts?.channels ?? '["center","bell"]', opts?.status ?? "active"],
   });
   await client.execute("INSERT INTO tenants (id, name, plan) VALUES ('t_glow','Glow Studio','pro')");
-  await client.execute("INSERT INTO web_users (id, name) VALUES ('w_owner','Anna Petrova')");
+  await client.execute({
+    sql: "INSERT INTO web_users (id, name, lang) VALUES ('w_owner','Anna Petrova', ?)",
+    args: [opts?.lang ?? "ru"],
+  });
   return { db, client };
 }
 
@@ -130,6 +133,17 @@ describe("deliverWelcomeFireAndForget", () => {
     expect(r.delivered).toBe(true);
     expect(notifySpy).not.toHaveBeenCalled();
     expect(await rows(client, "SELECT id FROM platform_thread_messages")).toHaveLength(1);
+  });
+
+  it("renders the welcome in the recipient's locale when the body is per-locale", async () => {
+    const perLocale = JSON.stringify({ center: { ru: "Здравствуйте, {salon_name}!", pl: "Witaj, {salon_name}!" } });
+    const { db, client } = await makeDb({ body: perLocale, lang: "pl" });
+    const r = await deliverWelcomeFireAndForget(db, { webUserId: "w_owner", tenantId: "t_glow" });
+    expect(r.delivered).toBe(true);
+    const body = String((await rows(client, "SELECT body FROM platform_thread_messages"))[0]!.body);
+    expect(body).toContain("Witaj"); // PL picked from web_users.lang
+    expect(body).toContain("Glow Studio"); // personalized
+    expect(body).not.toContain("Здравствуйте"); // not the RU body
   });
 
   it("returns missing_input without touching the db when ids are absent", async () => {

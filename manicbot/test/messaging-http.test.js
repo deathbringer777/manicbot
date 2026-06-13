@@ -105,6 +105,28 @@ describe('template-draft + campaign-draft + approve + drafts', () => {
   });
 });
 
+describe('template-approve', () => {
+  it('approves every draft locale of a key in one call', async () => {
+    const env = makeEnv();
+    for (const loc of ['ru', 'en', 'pl']) {
+      await db.prepare(
+        `INSERT INTO platform_message_templates (id, name, template_key, locale, status, is_builtin, bodies_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+      ).bind(`t_${loc}`, loc, 'seasonal_xmas', loc, 'draft', 0, '{"center":"hi"}', 1, 1).run();
+    }
+    const res = await tryMessagingRoutes(req('POST', '/admin/messaging/template-approve', { token: 'mtok', body: { template_key: 'seasonal_xmas' } }), env, u('/admin/messaging/template-approve'));
+    const j = await res.json();
+    expect(j.ok).toBe(true);
+    expect(j.approved).toBe(3);
+    const rows = (await db.prepare("SELECT status FROM platform_message_templates WHERE template_key='seasonal_xmas'").bind().all()).results;
+    expect(rows.every((r) => r.status === 'approved')).toBe(true);
+  });
+
+  it('rejects without template_key', async () => {
+    const res = await tryMessagingRoutes(req('POST', '/admin/messaging/template-approve', { token: 'mtok', body: {} }), makeEnv(), u('/admin/messaging/template-approve'));
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('promo-mint', () => {
   it('delegates to mintSeasonalPromo and returns the code', async () => {
     const env = makeEnv({ STRIPE_SECRET_KEY: 'sk_test_x' });

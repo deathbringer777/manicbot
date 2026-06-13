@@ -168,7 +168,31 @@ async function handleApprove(ctx, body) {
     'UPDATE platform_campaigns SET status = ?, next_run_at = ?, updated_at = ? WHERE id = ?',
     dbStatus, nextRun, nowSec, id,
   ).catch(() => {});
-  return json({ ok: true, id, status: dbStatus });
+  return json({ ok: true, status: dbStatus, id });
+}
+
+/**
+ * Approve every locale of a keyed template (draft → approved) in one call, so the
+ * operator can green-light a whole occasion from the tg-bot. Builtins are already
+ * 'approved' and untouched. Returns how many rows flipped.
+ */
+async function handleTemplateApprove(ctx, body) {
+  const { template_key } = body || {};
+  if (!template_key) return json({ ok: false, error: 'template_key_required' }, 400);
+  const nowSec = Math.floor(Date.now() / 1000);
+  // tenant-scan-ignore: platform_message_templates is PLATFORM-scoped (no tenant_id by design, migration 0100).
+  const before = await dbGet(
+    ctx,
+    "SELECT count(*) AS n FROM platform_message_templates WHERE template_key = ? AND status = 'draft' AND is_builtin = 0",
+    template_key,
+  ).catch(() => ({ n: 0 }));
+  await dbRun(
+    ctx,
+    // tenant-scan-ignore: platform_message_templates is PLATFORM-scoped (no tenant_id by design, migration 0100).
+    "UPDATE platform_message_templates SET status = ?, updated_at = ? WHERE template_key = ? AND status = 'draft' AND is_builtin = 0",
+    'approved', nowSec, template_key,
+  ).catch(() => {});
+  return json({ ok: true, template_key, approved: before?.n ?? 0 });
 }
 
 async function handleListDrafts(ctx) {
@@ -230,6 +254,7 @@ export async function tryMessagingRoutes(request, env, url) {
       case 'template-draft': return await handleTemplateDraft(ctx, body);
       case 'campaign-draft': return await handleCampaignDraft(ctx, body);
       case 'approve': return await handleApprove(ctx, body);
+      case 'template-approve': return await handleTemplateApprove(ctx, body);
       case 'promo-mint': return await handlePromoMint(ctx, body);
       default: return new Response('Not Found', { status: 404 });
     }

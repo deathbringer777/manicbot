@@ -177,23 +177,12 @@ async function handleApprove(ctx, body) {
  * operator can green-light a whole occasion from the tg-bot. Builtins are already
  * 'approved' and untouched. Returns how many rows flipped.
  */
+/** Approve-only alias of template-status (kept for back-compat; returns an `approved` count). */
 async function handleTemplateApprove(ctx, body) {
   const { template_key } = body || {};
   if (!template_key) return json({ ok: false, error: 'template_key_required' }, 400);
-  const nowSec = Math.floor(Date.now() / 1000);
-  // tenant-scan-ignore: platform_message_templates is PLATFORM-scoped (no tenant_id by design, migration 0100).
-  const before = await dbGet(
-    ctx,
-    "SELECT count(*) AS n FROM platform_message_templates WHERE template_key = ? AND status = 'draft' AND is_builtin = 0",
-    template_key,
-  ).catch(() => ({ n: 0 }));
-  await dbRun(
-    ctx,
-    // tenant-scan-ignore: platform_message_templates is PLATFORM-scoped (no tenant_id by design, migration 0100).
-    "UPDATE platform_message_templates SET status = ?, updated_at = ? WHERE template_key = ? AND status = 'draft' AND is_builtin = 0",
-    'approved', nowSec, template_key,
-  ).catch(() => {});
-  return json({ ok: true, template_key, approved: before?.n ?? 0 });
+  const approved = await setTemplateStatus(ctx, { template_key, status: 'approved' });
+  return json({ ok: true, template_key, approved });
 }
 
 async function handleListDrafts(ctx) {
@@ -223,6 +212,16 @@ async function handleTemplateStatus(ctx, body) {
     return json({ ok: false, error: 'invalid_status' }, 400);
   }
   if (!id && !template_key) return json({ ok: false, error: 'id_or_template_key_required' }, 400);
+  const updated = await setTemplateStatus(ctx, { id, template_key, status });
+  return json({ ok: true, updated, status });
+}
+
+/**
+ * Set the status of draft templates by `template_key` (all non-builtin locales of
+ * an occasion) or a single `id`. Returns the number of rows touched. Shared by the
+ * general template-status endpoint and the approve-only template-approve alias.
+ */
+async function setTemplateStatus(ctx, { id, template_key, status }) {
   const nowSec = Math.floor(Date.now() / 1000);
   let ids = [];
   if (template_key) {
@@ -231,7 +230,7 @@ async function handleTemplateStatus(ctx, body) {
       ctx, 'SELECT id FROM platform_message_templates WHERE template_key = ? AND is_builtin = 0', template_key,
     ).catch(() => []);
     ids = (rows || []).map((r) => r.id);
-  } else {
+  } else if (id) {
     ids = [id];
   }
   let updated = 0;
@@ -243,7 +242,7 @@ async function handleTemplateStatus(ctx, body) {
     ).catch(() => {});
     updated += 1;
   }
-  return json({ ok: true, updated, status });
+  return updated;
 }
 
 const CAMPAIGN_STATUSES = ['draft', 'active', 'scheduled', 'paused', 'done'];

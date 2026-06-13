@@ -25,6 +25,7 @@ import {
 } from "~/server/db/schema";
 import { ulid } from "~/lib/ulid";
 import { sanitizeText, sanitizeMessageBody, sanitizeHtml } from "~/server/security/sanitize";
+import { pickLocaleBody } from "~/server/messenger/welcomeOnRegister";
 import {
   AUDIENCE_FILTER,
   resolveAudience,
@@ -493,11 +494,13 @@ export const platformBroadcastsRouter = createTRPCRouter({
       .where(eq(platformCampaigns.id, SYS_WELCOME))
       .limit(1);
     const bodies = parseJsonObj(row?.bodiesJson ?? null);
+    // center is a string (legacy) or a per-locale map {ru,ua,pl,en}; the editor
+    // edits the RU canonical (translations live alongside it, set out-of-band).
     return {
       enabled: row?.status === "active",
       channels: parseJsonArray(row?.channelsJson ?? null),
       title: row?.title ?? WELCOME_DEFAULT_TITLE,
-      body: typeof bodies.center === "string" ? bodies.center : (row?.body ?? ""),
+      body: pickLocaleBody(bodies.center, "ru") || (row?.body ?? ""),
     };
   }),
 
@@ -518,7 +521,18 @@ export const platformBroadcastsRouter = createTRPCRouter({
       // welcomeOnRegister. Paragraph breaks are preserved so the welcome renders
       // as structured copy (it is the canonical multi-paragraph model).
       const body = sanitizeMessageBody(input.body, 4000);
-      const bodiesJson = JSON.stringify(sanitizeBodies({ center: input.body }));
+      // Preserve per-locale translations: if center is already a per-locale map,
+      // update only the RU canonical and keep the other languages; otherwise write
+      // the plain-string (legacy) shape via the standard sanitiser.
+      const [existingRow] = await ctx.db
+        .select({ bodiesJson: platformCampaigns.bodiesJson })
+        .from(platformCampaigns)
+        .where(eq(platformCampaigns.id, SYS_WELCOME))
+        .limit(1);
+      const existingCenter = parseJsonObj(existingRow?.bodiesJson ?? null).center;
+      const bodiesJson = existingCenter && typeof existingCenter === "object"
+        ? JSON.stringify({ center: { ...(existingCenter as Record<string, string>), ru: body } })
+        : JSON.stringify(sanitizeBodies({ center: input.body }));
       await ctx.db
         .insert(platformCampaigns)
         .values({

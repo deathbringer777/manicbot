@@ -57,6 +57,20 @@ function cleanBodies(bodies) {
   return out;
 }
 
+/**
+ * A body field is either a single string (legacy) or a per-locale map {ru,ua,pl,en}.
+ * Pick the recipient's locale, falling back EN → RU → first available. Worker twin of
+ * pickLocaleBody in admin-app/src/server/messenger/welcomeOnRegister.ts — keep in lockstep.
+ */
+function pickLocaleBody(field, locale) {
+  if (typeof field === 'string') return field;
+  if (field && typeof field === 'object') {
+    const pick = field[locale] ?? field.en ?? field.ru ?? Object.values(field)[0];
+    return typeof pick === 'string' ? pick : '';
+  }
+  return '';
+}
+
 // ── Endpoint handlers ────────────────────────────────────────────────────────
 
 async function handleHolidaysUpsert(ctx, body) {
@@ -191,18 +205,17 @@ async function handleBackfillWelcomes(ctx) {
     ctx, "SELECT title, body, bodies_json, status FROM platform_campaigns WHERE id = 'sys_welcome' LIMIT 1",
   ).catch(() => null);
   if (!camp || camp.status !== 'active') return json({ ok: false, error: 'welcome_inactive' }, 400);
-  let template = '';
-  try {
-    const bj = JSON.parse(camp.bodies_json || '{}');
-    template = (bj && typeof bj.center === 'string' ? bj.center : '') || camp.body || '';
-  } catch { template = camp.body || ''; }
-  if (!template.trim()) return json({ ok: false, error: 'empty_welcome' }, 400);
+  // `center` is either a single string (legacy) or a per-locale map {ru,ua,pl,en}.
+  let center;
+  try { center = JSON.parse(camp.bodies_json || '{}').center; } catch { center = null; }
+  const fallbackBody = camp.body || '';
+  if (!pickLocaleBody(center, 'en') && !fallbackBody.trim()) return json({ ok: false, error: 'empty_welcome' }, 400);
 
   // Single-table read + JS filter (the test D1 mock drops `IN (...)` and JOINs).
   const allUsers = await dbAll(
     ctx,
     // tenant-scan-ignore: operator-wide welcome backfill across all owners — intentional cross-tenant read.
-    'SELECT id, tenant_id, role FROM web_users',
+    'SELECT id, tenant_id, role, lang FROM web_users',
   ).catch(() => []);
   const owners = (allUsers || []).filter((u) => u.role === 'tenant_owner' || u.role === 'tenant_manager');
 
@@ -230,6 +243,7 @@ async function handleBackfillWelcomes(ctx) {
       );
     } catch { skipped += 1; continue; }
 
+    const template = pickLocaleBody(center, o.lang || 'en') || fallbackBody;
     const body = String(template).replace(/\{salon_name\}/g, salonName);
     let thread = await dbGet(
       ctx, 'SELECT id, last_message_at FROM platform_threads WHERE recipient_web_user_id = ? LIMIT 1', o.id,

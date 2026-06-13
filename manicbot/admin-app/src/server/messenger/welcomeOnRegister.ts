@@ -66,6 +66,21 @@ function firstWord(name: unknown): string {
   return s.split(/\s+/)[0] ?? "";
 }
 
+/**
+ * A platform-message body field is either a single string (legacy) or a per-locale
+ * map `{ru,ua,pl,en}`. Pick the recipient's locale, falling back EN → RU → first.
+ * Keep in lockstep with the Worker twin in src/http/messagingHttp.js.
+ */
+export function pickLocaleBody(field: unknown, locale: string): string {
+  if (typeof field === "string") return field;
+  if (field && typeof field === "object") {
+    const m = field as Record<string, unknown>;
+    const pick = m[locale] ?? m.en ?? m.ru ?? Object.values(m)[0];
+    return typeof pick === "string" ? pick : "";
+  }
+  return "";
+}
+
 export function buildCampaignVars(
   tenant: { name?: string | null; plan?: string | null } | null,
   recipient: { name?: string | null } | null,
@@ -195,13 +210,14 @@ export async function deliverWelcomeFireAndForget(db: Db, input: WelcomeInput): 
 
     // 3. Personalize from the tenant + owner rows.
     const tenant = (await db.select({ id: tenants.id, name: tenants.name, plan: tenants.plan }).from(tenants).where(eq(tenants.id, tenantId)).limit(1))[0] ?? null;
-    const recipient = (await db.select({ id: webUsers.id, name: webUsers.name }).from(webUsers).where(eq(webUsers.id, webUserId)).limit(1))[0] ?? null;
+    const recipient = (await db.select({ id: webUsers.id, name: webUsers.name, lang: webUsers.lang }).from(webUsers).where(eq(webUsers.id, webUserId)).limit(1))[0] ?? null;
     const vars = buildCampaignVars(tenant, recipient);
+    const locale = (recipient?.lang as string | null) ?? "en";
 
     let centerTemplate = "";
     try {
       const bj = camp.bodiesJson ? JSON.parse(camp.bodiesJson) : {};
-      centerTemplate = (bj && typeof bj === "object" && typeof bj.center === "string" ? bj.center : "") || camp.body || "";
+      centerTemplate = pickLocaleBody(bj?.center, locale) || camp.body || "";
     } catch {
       centerTemplate = camp.body || "";
     }

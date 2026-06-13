@@ -23,7 +23,7 @@ Before writing any code, Claude must:
 
 1. **Pause and reason step-by-step.** Never jump to a solution. Lay out the problem, constraints, and approach first.
 2. **Output a plan in 3–5 bullet points BEFORE any code.** The plan must include: what will change, what could break, what tests will verify it.
-3. **Wait for implicit or explicit approval** before executing large changes (>50 lines or touching >2 files). For small fixes, proceed but state assumptions clearly.
+3. **Size the caution to the risk, not the line count.** A large mechanical change with green tests is low-risk; a three-line change to an auth guard, a tenant-isolation WHERE clause, or a billing webhook is high-risk. Gate on reversibility and blast radius — verify before destructive or irreversible actions — rather than on an arbitrary diff size. Follow whatever permission mode the session is configured with; this skill neither grants nor expands permissions.
 
 ---
 
@@ -147,7 +147,7 @@ Code is NOT done until ALL of these pass, IN THIS ORDER:
 - [ ] Any AI-input-handling code calls `sanitizeUserInput` before reaching the LLM
 - [ ] Tenant-scoped queries include `tenant_id` in WHERE clause
 - [ ] Secrets are NOT committed
-- [ ] Migrations follow next sequential number (last is `0089`; the gap at `0040/0041` is known and we continue forward)
+- [ ] Migrations follow the next sequential number. Verify the real latest with `ls manicbot/migrations | tail -1` right before writing (past `0117` as of 2026-06; the gap at `0040/0041` is known — continue forward). CI auto-applies migrations on deploy; re-check `origin/main`'s highest number right before merging to avoid a collision.
 
 Skipping any stage means the task is not complete.
 
@@ -170,6 +170,8 @@ db.select().from(appointments).where(eq(appointments.id, input.id))
 ```
 
 When using guards, always use the existing `assertTenantOwner / assertMaster / assertPersonalMaster` helpers from `server/api/tenantAccess.ts`. Never roll your own.
+
+A gating tenant-isolation scanner runs in CI for both the admin-app (#322) and the Worker (#337). A query that legitimately spans tenants (God Mode) must carry a `// tenant-scan-ignore: <reason>` annotation on the line — do NOT silence it any other way (the old line-number allowlist is gone; don't reintroduce one).
 
 ### God Mode (system_admin) Isolation
 
@@ -261,14 +263,17 @@ Otherwise, just implement and move on.
 
 ## Output Format
 
-When delivering code changes to the user:
+Claude Code edits files directly with the Edit/Write tools — do NOT paste whole
+file contents into the chat (that was the old copy-into-editor workflow and is
+now pure noise). When reporting a completed change to the user:
 
-1. **Brief Russian summary** of what was done (2–4 sentences).
-2. **Full file contents** in markdown code blocks. The user copies whole files, not diffs. Always provide the complete file even if only a few lines changed.
-3. **List of test files touched or created.**
-4. **List of next steps** if any (Russian).
+1. **Brief Russian summary** of what was done (2–4 sentences), leading with the outcome.
+2. **Reference files as clickable links** (`[file.ts:42](path)`) rather than dumping their contents.
+3. **List of test files touched or created** and the test result (e.g. "178/178 green").
+4. **`Documentation Updated:` section** (see protocol above).
+5. **List of next steps**, if any (Russian).
 
-Never output partial files or "..." placeholders. The user pastes whole files into the editor.
+Keep the chat for decisions, findings, and outcomes; the diff lives in the files and the commit.
 
 ---
 
@@ -278,7 +283,8 @@ Never output partial files or "..." placeholders. The user pastes whole files in
 
 - **Worker:** Cloudflare Workers + JS (ESM) + D1 + KV + Workers AI + Queue + Stripe REST
 - **Admin-app:** Next.js 15 (edge) + React 19 + Tailwind 4 + tRPC 11 + Drizzle ORM + NextAuth v5 (beta) + Resend
-- **Shared D1:** `manicbot-db`, 91 tables, migrations in `manicbot/migrations/NNNN_*.sql`
+- **Shared D1:** `manicbot-db`, ~100 tables (the authoritative list is the `CREATE TABLE` set in `schema.sql`; don't hardcode a count), migrations in `manicbot/migrations/NNNN_*.sql` (latest past `0117`)
+- **ThinkPad sidecar:** a home Ubuntu box (`thinkpad` Tailscale alias) runs the off-platform automation that Cloudflare's 30 s limit can't host — PM2 cron fleet in `~/manicbot-backend` (nightly D1 backup, lead parsers, blog autopilot) plus the Telegram ops-bot in `~/automation/tg-bot`. Source is versioned on the `thinkpad` branch (`thinkpad-backend/`, `thinkpad-bot/`). See the ThinkPad section below before touching it.
 - **Channels:** Telegram (primary), WhatsApp Cloud, Instagram Messenger, Web widget
 - **Roles:** `system_admin`, `technical_support`, `support`, `tenant_owner`, `tenant_manager`, `master`, `client`
 - **Plans:** `start`, `pro`, `max` (gated in `src/billing/features.js`)
@@ -309,6 +315,44 @@ If the user asks Claude to write a plan, prompt, or instructions for another AI 
 - Output the plan/prompt in **English**.
 - Wrap it in a clear code block.
 - Add a brief Russian-language explanation BEFORE the code block of what the prompt does and how to use it.
+
+---
+
+## ThinkPad Sidecar (off-platform automation)
+
+A home Ubuntu ThinkPad runs the long-running automation Cloudflare Workers can't
+host. Two units, both versioned on the `thinkpad` branch (public repo — **no
+secrets in source**; runtime credentials live only in each unit's server-side
+`.env`):
+
+- **`thinkpad-backend/`** (`~/manicbot-backend`) — PM2 one-shot crons via
+  `cron_restart` (`autorestart: false`): nightly D1 backup + tenant sync,
+  `lead-scout`/`booksy-full` parsers, `blog-autopilot`. Shared `lib/`:
+  `runner` (lockfile + structured logs + Telegram alert on failure + exit 1),
+  `claude` (headless `claude -p` adapter), `tg`, `d1`, `http`.
+- **`thinkpad-bot/`** (`~/automation/tg-bot`) — Telegram ops-bot, owner-gated by
+  `ALLOWED_USER_ID`.
+
+Rules when touching ThinkPad code:
+
+1. **LLM = the `claude` CLI on the Max subscription, never an API key.** All text
+   generation goes through `claude -p` (model `sonnet`, effort `medium`); the
+   adapter strips `ANTHROPIC_API_KEY` from the child env so usage bills the
+   subscription. No Groq/OpenCode/other fallbacks — on failure, alert and fail
+   loudly. The sole exception is **voice transcription**, which stays on Groq
+   Whisper (Claude has no STT).
+2. **TDD with `node:test`.** `npm test` (`node --test`) must be green before deploy;
+   `deploy.sh` also runs the suite on the server. Inject side-effecting deps
+   (`execFile`, transports) as test seams — never hit the network or spawn real
+   processes in a unit test.
+3. **Spawn the CLI without a shell** (`execFile`, argv array) — the prompt is one
+   argv element, so there is no injection surface. Keep the CLI permission
+   system ON (explicit `--allowedTools`); never use `--dangerously-skip-permissions`.
+4. **Deploy via each unit's `deploy.sh`** (rsync with state-protecting excludes →
+   server tests → `pm2 startOrReload` + `pm2 save`). `.env` and runtime state
+   (`logs/`, `locks/`, `backups/`, `marketing/`) are never synced or backed up.
+5. **Never `pm2 restart/stop` the `tg-bot` process from inside the bot** — it would
+   kill the process serving the request.
 
 ---
 

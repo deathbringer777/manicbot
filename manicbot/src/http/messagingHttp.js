@@ -180,9 +180,46 @@ async function handleListDrafts(ctx) {
   const templates = await dbAll(
     ctx,
     // tenant-scan-ignore: platform_message_templates is PLATFORM-scoped (no tenant_id by design, migration 0100).
-    "SELECT id, name, template_key, locale, category, status FROM platform_message_templates WHERE status = 'draft' ORDER BY created_at DESC LIMIT 100",
+    // bodies_json/variables_json included so the tg-bot can render a per-locale preview without a second round-trip.
+    "SELECT id, name, template_key, locale, category, status, bodies_json, variables_json FROM platform_message_templates WHERE status = 'draft' ORDER BY created_at DESC LIMIT 100",
   ).catch(() => []);
   return json({ ok: true, campaigns: campaigns || [], templates: templates || [] });
+}
+
+/**
+ * Approve/archive draft templates. `template_key` flips ALL non-builtin locales of
+ * an occasion at once (the operator approves the whole occasion); `id` flips one.
+ * Builtin templates are never touched. The tg-bot's draft list is mostly templates
+ * (preset-generator output), so this is what its per-occasion ✅/⏭ buttons call —
+ * `/approve` on the campaign-only seam would be a no-op for them.
+ */
+async function handleTemplateStatus(ctx, body) {
+  const { id, template_key, status } = body || {};
+  if (!new Set(['approved', 'draft', 'archived']).has(status)) {
+    return json({ ok: false, error: 'invalid_status' }, 400);
+  }
+  if (!id && !template_key) return json({ ok: false, error: 'id_or_template_key_required' }, 400);
+  const nowSec = Math.floor(Date.now() / 1000);
+  let ids = [];
+  if (template_key) {
+    const rows = await dbAll(
+      // tenant-scan-ignore: platform_message_templates is PLATFORM-scoped (no tenant_id by design, migration 0100).
+      ctx, 'SELECT id FROM platform_message_templates WHERE template_key = ? AND is_builtin = 0', template_key,
+    ).catch(() => []);
+    ids = (rows || []).map((r) => r.id);
+  } else {
+    ids = [id];
+  }
+  let updated = 0;
+  for (const tid of ids) {
+    await dbRun(
+      // tenant-scan-ignore: platform_message_templates is PLATFORM-scoped (no tenant_id by design, migration 0100).
+      ctx, 'UPDATE platform_message_templates SET status = ?, updated_at = ? WHERE id = ? AND is_builtin = 0',
+      status, nowSec, tid,
+    ).catch(() => {});
+    updated += 1;
+  }
+  return json({ ok: true, updated, status });
 }
 
 const CAMPAIGN_STATUSES = ['draft', 'active', 'scheduled', 'paused', 'done'];
@@ -356,6 +393,7 @@ export async function tryMessagingRoutes(request, env, url) {
       case 'template-draft': return await handleTemplateDraft(ctx, body);
       case 'campaign-draft': return await handleCampaignDraft(ctx, body);
       case 'approve': return await handleApprove(ctx, body);
+      case 'template-status': return await handleTemplateStatus(ctx, body);
       case 'reschedule': return await handleReschedule(ctx, body);
       case 'flag': return await handleFlag(ctx, body);
       case 'promo-mint': return await handlePromoMint(ctx, body);

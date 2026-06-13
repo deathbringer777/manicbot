@@ -203,6 +203,32 @@ describe('reschedule', () => {
   });
 });
 
+describe('template-status', () => {
+  it('approves all locales of an occasion by template_key and they leave the draft list', async () => {
+    const env = makeEnv();
+    for (const loc of ['ru', 'pl']) {
+      await tryMessagingRoutes(req('POST', '/admin/messaging/template-draft', {
+        token: 'mtok', body: { template_key: 'seasonal_xmas', locale: loc, name: `Xmas ${loc}`, bodies: { center: 'hi {salon_name}' } },
+      }), env, u('/admin/messaging/template-draft'));
+    }
+    let drafts = await (await tryMessagingRoutes(req('GET', '/admin/messaging/drafts', { token: 'mtok' }), env, u('/admin/messaging/drafts'))).json();
+    expect(drafts.templates.length).toBe(2);
+    expect(drafts.templates[0].bodies_json).toBeTruthy(); // body now travels for preview
+
+    const r = await (await tryMessagingRoutes(req('POST', '/admin/messaging/template-status', { token: 'mtok', body: { template_key: 'seasonal_xmas', status: 'approved' } }), env, u('/admin/messaging/template-status'))).json();
+    expect(r.ok).toBe(true);
+    expect(r.updated).toBe(2);
+
+    drafts = await (await tryMessagingRoutes(req('GET', '/admin/messaging/drafts', { token: 'mtok' }), env, u('/admin/messaging/drafts'))).json();
+    expect(drafts.templates.length).toBe(0);
+  });
+
+  it('rejects an invalid status', async () => {
+    const res = await tryMessagingRoutes(req('POST', '/admin/messaging/template-status', { token: 'mtok', body: { template_key: 'x', status: 'bogus' } }), makeEnv(), u('/admin/messaging/template-status'));
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('flag (operator send pause)', () => {
   it('persists the pause flag and reflects it in stats', async () => {
     const env = makeEnv();

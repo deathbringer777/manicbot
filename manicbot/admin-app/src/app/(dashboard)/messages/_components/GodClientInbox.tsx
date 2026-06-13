@@ -90,7 +90,7 @@ export function GodClientInbox() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto" data-testid="god-client-list">
+        <div className="flex-1 min-h-0 overflow-y-auto" data-testid="god-client-list">
           {listQ.isLoading ? (
             <div className="p-6 text-center text-xs text-slate-500">
               {t("messenger.platform.loading", lang)}

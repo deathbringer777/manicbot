@@ -156,7 +156,7 @@ export function ThreadList({ tenantId, selectedThreadId, onSelect, onNewThread }
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {threadsQ.isLoading ? (
           <div className="space-y-1 p-2">
             {[0, 1, 2].map((i) => (

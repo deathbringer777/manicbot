@@ -93,7 +93,7 @@ export function PlatformAdminPane({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto" data-testid="platform-thread-list">
+          <div className="flex-1 min-h-0 overflow-y-auto" data-testid="platform-thread-list">
             {listQ.isLoading && (
               <div className="p-6 text-center text-xs text-slate-500">
                 {t("messenger.platform.loading", lang)}
@@ -274,7 +274,7 @@ function PlatformAdminThreadView({
 
       <div
         ref={scrollRef}
-        className="flex-1 space-y-2 overflow-y-auto bg-slate-50/40 p-4 dark:bg-slate-950/40"
+        className="flex-1 min-h-0 space-y-2 overflow-y-auto bg-slate-50/40 p-4 dark:bg-slate-950/40"
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center text-xs text-slate-500">

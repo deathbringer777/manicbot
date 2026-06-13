@@ -75,7 +75,7 @@ export function PlatformOwnerView() {
 
       <div
         ref={scrollRef}
-        className="flex-1 space-y-2 overflow-y-auto bg-slate-50/40 p-4 dark:bg-slate-950/40"
+        className="flex-1 min-h-0 space-y-2 overflow-y-auto bg-slate-50/40 p-4 dark:bg-slate-950/40"
         data-testid="platform-owner-messages"
       >
         {messages.length === 0 ? (

@@ -41,7 +41,7 @@ import {
   tenants,
 } from "~/server/db/schema";
 import { ulid } from "~/lib/ulid";
-import { sanitizeText } from "~/server/security/sanitize";
+import { sanitizeMessageBody } from "~/server/security/sanitize";
 import {
   notifyWebUser,
   notifyManyWebUsers,
@@ -528,7 +528,7 @@ export const platformMessengerRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const body = sanitizeText(input.body).trim();
+      const body = sanitizeMessageBody(input.body);
       if (!body) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Empty message" });
       }
@@ -644,7 +644,7 @@ export const platformMessengerRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const body = sanitizeText(input.body).trim();
+      const body = sanitizeMessageBody(input.body);
       if (!body) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Empty message" });
       }

@@ -79,7 +79,18 @@ directly**. Reuses `_shared/PRODUCT.md` + `BRAND.md` (scp'd, never committed) as
   Warsaw) via `POST /admin/messaging/campaign-draft`. Idempotent on `(occasion_key, YYYY)`.
 - **preset-generator** (weekly / on-demand): `claude -p` Sonnet generates the preset library (all categories ×
   RU/UK/PL/EN) → `POST /admin/messaging/template-draft` (status `draft`). Facts ONLY from PRODUCT/BRAND md.
+- **reflow-templates** (one-shot / on-demand, `npm run reflow`): re-paragraphs the EXISTING `seasonal_*` draft
+  templates (legacy single-paragraph copy → `\n\n` blocks) without re-running the LLM. Seam-only: `GET drafts`
+  → `reflowToParagraphs` (`lib/format.js`) → `POST template-draft`. Idempotent (skips already-paragraphed);
+  `REFLOW_DRY_RUN=1` previews. Re-sends `channels` (the upsert defaults a missing `channels` to `['center']`,
+  which would drop `bell`).
 - **scheduler health** (hourly): `GET /admin/messaging/drafts`, reports counts + cron health to TG.
+
+**Seasonal copy structure (convention):** every generated/authored body is **2–3 short, scannable paragraphs
+separated by a blank line (`\n\n`)** — greeting / value / call-to-action — so the `whitespace-pre-wrap`
+announcement renderer shows paragraphs, not a wall of text. The preset-generator prompt asks the model for
+this; `normalizeBody` tidies the output and `reflowToParagraphs` is the fallback if the model returns a single
+block. Unit-tested via `node --test` (`format.test.js`, `preset-generator.test.js`; runner injected — no real CLI).
 
 **tg-bot approval** (`~/automation/tg-bot/`, ALLOWED_USER_ID-only): `/drafts` (list), `/preview <id>`,
 `/approve <id>` (→ `POST /admin/messaging/approve` flips draft→active/scheduled), `/skip <id>`, `/send <id>`
@@ -122,4 +133,7 @@ the admin-app Drizzle writes). Endpoints:
 - Quiet hours: seasonal/behavioral gated to 10:00–20:00 Warsaw; billing transactional exempt.
 - Rate limits: delivery rides the existing per-tenant cron fan-out (queue `manicbot-tenant-cron`), not a loop.
 - Secrets: `MESSAGING_TOKEN` via `wrangler secret put`; Stripe test key only; nothing logged.
-- Sanitization: generated bodies pass `sanitizeText`/`sanitizeHtml` on the write seam (same as broadcasts).
+- Sanitization: the Worker seam's `clean()` strips control chars but KEEPS `\n`/`\t` (paragraph structure
+  survives to D1). Operator-authored bodies in admin-app use `sanitizeMessageBody` (newline-preserving) at the
+  DM/broadcast/campaign/welcome write sites (`platformMessenger`, `platformBroadcasts`); one-line fields
+  (titles, names, email subjects) stay on `sanitizeText`, and rich email HTML stays on `sanitizeHtml`.

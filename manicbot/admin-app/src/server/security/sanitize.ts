@@ -180,6 +180,50 @@ export function sanitizeText(input: string, maxLen = 5000): string {
 }
 
 /**
+ * Sanitise an operator-composed MESSAGE BODY (platform broadcasts / direct
+ * messages) for storage in `platform_thread_messages` / `platform_broadcasts`.
+ *
+ * Unlike {@link sanitizeText}, this PRESERVES line structure — single `\n`
+ * (line break) and `\n\n` (paragraph break) survive — so the
+ * `whitespace-pre-wrap` renderer in PlatformOwnerView / PlatformAdminPane shows
+ * paragraphs instead of a collapsed wall of text. `sanitizeText`'s
+ * `\s{2,}` → " " collapse is correct for names/subjects but destroys body
+ * formatting; this is the dedicated body sanitiser used at the two write sites
+ * in `platformMessenger.ts` (`sendDirectMessage`, `broadcast`).
+ *
+ * Pipeline (XSS posture identical to {@link stripHtml} — tags + control chars
+ * stripped; bodies render as escaped React text, never innerHTML):
+ *   1. Normalise CRLF / lone CR → `\n`.
+ *   2. Strip control chars EXCEPT `\n` (0x0A) and `\t` (0x09).
+ *   3. Strip HTML tags (replace with a space, same vector as stripHtml).
+ *   4. Collapse runs of 2+ HORIZONTAL whitespace to one space (newlines kept).
+ *   5. Trim trailing horizontal whitespace per line.
+ *   6. Collapse 3+ consecutive newlines to exactly 2 (max one blank line).
+ *   7. Trim leading/trailing blank lines, then cap length.
+ *
+ * @param input  raw operator text (may be null/undefined → "")
+ * @param maxLen length cap backstop (default 5000; callers zod-cap input first)
+ * @returns plain text with paragraph structure preserved; "" if blank/non-string
+ */
+export function sanitizeMessageBody(input: string, maxLen = 5000): string {
+  if (typeof input !== "string") return "";
+  return (
+    input
+      .replace(/\r\n?/g, "\n")
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+      .replace(/<[^>]*>/g, " ")
+      // `[^\S\n]` = whitespace that is NOT a newline → collapse horizontal runs
+      // only, leaving `\n` / `\n\n` intact.
+      .replace(/[^\S\n]{2,}/g, " ")
+      .replace(/[^\S\n]+$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+      .slice(0, maxLen)
+  );
+}
+
+/**
  * Sanitise a user-controlled string that will be interpolated into the
  * HTML body of an outbound email. Defends against:
  *

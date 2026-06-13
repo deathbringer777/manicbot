@@ -24,7 +24,7 @@ import {
   platformMessageTemplates,
 } from "~/server/db/schema";
 import { ulid } from "~/lib/ulid";
-import { sanitizeText, sanitizeHtml } from "~/server/security/sanitize";
+import { sanitizeText, sanitizeMessageBody, sanitizeHtml } from "~/server/security/sanitize";
 import {
   AUDIENCE_FILTER,
   resolveAudience,
@@ -110,9 +110,13 @@ interface SanitizedBodies {
 
 function sanitizeBodies(bodies: BodiesInput): SanitizedBodies {
   const out: SanitizedBodies = {};
-  if (bodies.center != null) out.center = sanitizeText(bodies.center, 4000);
-  if (bodies.bell != null) out.bell = sanitizeText(bodies.bell, 2000);
-  if (bodies.telegram != null) out.telegram = sanitizeText(bodies.telegram, 4000);
+  // center / bell / telegram are announcement bodies rendered with
+  // `whitespace-pre-wrap` (PlatformOwnerView / PlatformAdminPane) — use the
+  // newline-preserving sanitiser so operator-authored paragraph breaks survive.
+  // subject stays one-line (sanitizeText); email html stays rich (sanitizeHtml).
+  if (bodies.center != null) out.center = sanitizeMessageBody(bodies.center, 4000);
+  if (bodies.bell != null) out.bell = sanitizeMessageBody(bodies.bell, 2000);
+  if (bodies.telegram != null) out.telegram = sanitizeMessageBody(bodies.telegram, 4000);
   if (bodies.email) {
     out.email = {
       subject: sanitizeText(bodies.email.subject, 300),
@@ -509,9 +513,11 @@ export const platformBroadcastsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const t = now();
       const title = (input.title ?? "").trim() || WELCOME_DEFAULT_TITLE;
-      // Tokens ({salon_name} etc.) survive sanitizeText (stripHtml only); they
-      // are substituted at delivery by platformCampaignVars / welcomeOnRegister.
-      const body = sanitizeText(input.body, 4000);
+      // Tokens ({salon_name} etc.) survive sanitizeMessageBody (tag-strip only);
+      // they are substituted at delivery by platformCampaignVars /
+      // welcomeOnRegister. Paragraph breaks are preserved so the welcome renders
+      // as structured copy (it is the canonical multi-paragraph model).
+      const body = sanitizeMessageBody(input.body, 4000);
       const bodiesJson = JSON.stringify(sanitizeBodies({ center: input.body }));
       await ctx.db
         .insert(platformCampaigns)

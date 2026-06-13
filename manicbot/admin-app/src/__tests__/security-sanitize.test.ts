@@ -7,6 +7,7 @@ import { describe, it, expect } from "vitest";
 import {
   sanitizeHtml,
   sanitizeText,
+  sanitizeMessageBody,
   sanitizeAiOutput,
   escapeHtml,
   stripHtml,
@@ -120,6 +121,77 @@ describe("sanitizeText", () => {
   it("strips HTML and respects maxLen", () => {
     const long = "a".repeat(6000);
     expect(sanitizeText(long, 100).length).toBe(100);
+  });
+});
+
+// ─── sanitizeMessageBody — newline-preserving variant ────────────────────────
+//
+// Unlike sanitizeText (which collapses ALL whitespace including newlines for
+// names / one-liners), message bodies must keep paragraph structure so the
+// `whitespace-pre-wrap` renderer shows line breaks. This is the fix for the
+// "wall of text" announcement bug.
+describe("sanitizeMessageBody", () => {
+  it("preserves a single newline (line break)", () => {
+    expect(sanitizeMessageBody("line1\nline2")).toBe("line1\nline2");
+  });
+
+  it("preserves a paragraph break (\\n\\n)", () => {
+    expect(sanitizeMessageBody("para1\n\npara2")).toBe("para1\n\npara2");
+  });
+
+  it("collapses 3+ consecutive newlines to exactly 2", () => {
+    expect(sanitizeMessageBody("a\n\n\n\nb")).toBe("a\n\nb");
+  });
+
+  it("trims trailing horizontal whitespace per line but keeps the break", () => {
+    expect(sanitizeMessageBody("a   \nb\t\nc  ")).toBe("a\nb\nc");
+  });
+
+  it("normalizes CRLF and lone CR to \\n", () => {
+    expect(sanitizeMessageBody("a\r\nb\rc")).toBe("a\nb\nc");
+  });
+
+  it("collapses runs of 2+ horizontal spaces to one (within a line)", () => {
+    expect(sanitizeMessageBody("hello    world")).toBe("hello world");
+  });
+
+  it("strips HTML tags (no angle brackets survive) while keeping newlines", () => {
+    const out = sanitizeMessageBody("<b>Hello</b>\n\n<i>world</i>");
+    expect(out).not.toContain("<");
+    expect(out).toContain("Hello");
+    expect(out).toContain("world");
+    expect(out).toContain("\n\n");
+  });
+
+  it("strips <script> tags (XSS posture preserved)", () => {
+    const out = sanitizeMessageBody('<script>alert("xss")</script>\n\nhi');
+    expect(out).not.toContain("<script");
+    expect(out).not.toContain("<");
+    expect(out).toContain("hi");
+    expect(out).toContain("\n\n");
+  });
+
+  it("strips control chars but keeps \\n and a lone \\t", () => {
+    // \x00 + \x07 dropped; \t (single, mid-line) and \n kept.
+    expect(sanitizeMessageBody("a\x00\x07b\tc\nd")).toBe("ab\tc\nd");
+  });
+
+  it("respects maxLen as a backstop", () => {
+    const long = "a".repeat(6000);
+    expect(sanitizeMessageBody(long, 100).length).toBe(100);
+  });
+
+  it("returns empty string for whitespace-only / non-string input", () => {
+    expect(sanitizeMessageBody("   \n\n  ")).toBe("");
+    // @ts-expect-error — exercising the runtime guard
+    expect(sanitizeMessageBody(null)).toBe("");
+    // @ts-expect-error — exercising the runtime guard
+    expect(sanitizeMessageBody(undefined)).toBe("");
+  });
+
+  it("keeps emoji and Cyrillic content intact", () => {
+    const out = sanitizeMessageBody("Привіт 👋\n\nЯк справи?");
+    expect(out).toBe("Привіт 👋\n\nЯк справи?");
   });
 });
 

@@ -20,8 +20,17 @@ function classify(text) {
   const s = String(text || "").toLowerCase().trim();
   if (!s) return null;
 
-  if (/(^|[^а-яё])(скрин|скриншот|screenshot|снимок экрана|сфоткай экран|что на экране|покажи экран)/.test(s)) {
+  // Screenshot of the LOCAL screen. The explicit phrases always fire; a bare
+  // «скрин/скриншот» fires only for a short request or with an imperative verb,
+  // so a sentence ABOUT screenshots ("проанализируй эти скриншоты") falls
+  // through to the LLM/vision path instead of snapping the bot's own screen.
+  if (/что.{0,8}на экране|покажи экран|сфоткай экран|снимок экрана/.test(s)) {
     return { kind: "screenshot" };
+  }
+  if (/(^|[^а-яё])(скрин|скриншот|screenshot)/.test(s)) {
+    const words = s.split(/\s+/).filter(Boolean).length;
+    const hasShotVerb = /сделай|сними|дай|покажи|кинь|скинь|сфоткай|запили|нужен|хочу/.test(s);
+    if (words <= 3 || hasShotVerb) return { kind: "screenshot" };
   }
 
   // now-playing first, so "что играет" beats the play/stop rules

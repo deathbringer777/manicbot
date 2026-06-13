@@ -3,11 +3,16 @@ const render = require("./render.js");
 
 const TG = config.TG_API_BASE;
 
+// Telegram API timeout. getUpdates uses its own long-poll budget in bot.js;
+// every other call (send/edit/answer) must not hang the loop if Telegram stalls.
+const API_TIMEOUT_MS = 15000;
+
 async function api(method, body) {
   const r = await fetch(`${TG}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
   return r.json();
 }
@@ -99,26 +104,13 @@ function isAllowedUser(userId) {
   return userId === config.ALLOWED_USER_ID;
 }
 
-// Curated "/" menu. Internal/expert commands (exec, ssh, proc control) are kept
-// out of the menu to reduce clutter — they still work when typed.
-const MENU_COMMANDS = [
-  { command: "start", description: "🏠 Главное меню" },
-  { command: "help", description: "❓ Все команды" },
-  { command: "status", description: "📊 Система: CPU, память, диск, PM2" },
-  { command: "ps", description: "🔄 Процессы PM2" },
-  { command: "screenshot", description: "📸 Скриншот экрана" },
-  { command: "play", description: "🎵 Музыка / радио" },
-  { command: "np", description: "🎶 Что сейчас играет" },
-  { command: "cron", description: "🕐 Запланированные задачи" },
-  { command: "disk", description: "💾 Диски" },
-  { command: "leads", description: "📋 Прогресс по лидам" },
-  { command: "groq", description: "🤖 Лимиты Groq" },
-  { command: "reset", description: "🧹 Очистить историю чата" },
-];
-
+// Menu built from registry metadata — single source of truth.
+// Populated lazily on first registerCommands() call (registry loads at bot start).
 async function registerCommands() {
-  const result = await api("setMyCommands", { commands: MENU_COMMANDS });
-  console.log(`[telegram] ${MENU_COMMANDS.length} menu commands registered`);
+  const cmdRegistry = require("./commands/index.js");
+  const menuCommands = cmdRegistry.getMenuCommands();
+  const result = await api("setMyCommands", { commands: menuCommands });
+  console.log(`[telegram] ${menuCommands.length} menu commands registered`);
   return result;
 }
 
@@ -134,5 +126,4 @@ module.exports = {
   keepTyping,
   isAllowedUser,
   registerCommands,
-  MENU_COMMANDS,
 };

@@ -13,15 +13,18 @@ const SCREENS = {
   cron: "/cron",
   disk: "/disk",
   groq: "/groq",
+  ai: "/ai",
   help: "/help",
   shot: "/screenshot",
 };
 
 const ACTION_LABEL = { stop: "остановить", restart: "перезапустить", start: "запустить" };
 
-// Lazy to avoid a load-time cycle (commands.js → keyboards.js, not callbacks.js).
-function getCommands() {
-  return require("./commands.js").COMMANDS;
+// Lazy to avoid a load-time cycle.
+function getHandler(cmd) {
+  const registry = require("./commands/index.js");
+  const entry = registry.get(cmd);
+  return entry ? entry.handler : null;
 }
 
 async function editOrSend(cq, out) {
@@ -36,7 +39,9 @@ async function nav(cq, screen) {
   const key = SCREENS[screen];
   if (!key) return tg.answerCallbackQuery(cq.id, "—");
   await tg.answerCallbackQuery(cq.id);
-  const out = await getCommands()[key](cq.message.chat.id);
+  const handler = getHandler(key);
+  if (!handler) return tg.answerCallbackQuery(cq.id, "—");
+  const out = await handler(cq.message.chat.id);
   return editOrSend(cq, out);
 }
 
@@ -94,7 +99,10 @@ async function handle(cq) {
     if (data.startsWith("do:")) return await doAction(cq, data.slice(3));
     if (data.startsWith("mus:")) {
       const music = require("./tools/music.js");
-      return await music.handleCallback(cq); // wired in Phase 4
+      return await music.handleCallback(cq);
+    }
+    if (data.startsWith("msg:")) {
+      return await require("./commands/messaging.js").handleCallback(cq);
     }
     return await tg.answerCallbackQuery(cq.id, "—");
   } catch (e) {

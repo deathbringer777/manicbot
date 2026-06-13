@@ -4,7 +4,8 @@ A single-owner Telegram bot that turns a Telegram chat into a remote control for
 a Linux machine (a Lenovo ThinkPad running Ubuntu / GNOME-Wayland). It answers
 slash-commands, runs free-text requests through an LLM with computer-control
 tools, takes screenshots, controls input, manages PM2 processes, plays music,
-transcribes voice notes, and more.
+transcribes voice notes, **looks at screenshots/photos you send it** (the agent
+views them with its Read tool — see `vision.js`), and more.
 
 > Lives in the ManicBot repo on the long-lived **`thinkpad`** branch. Runtime
 > secrets and infra details are gitignored — see [Security](#security).
@@ -13,8 +14,10 @@ transcribes voice notes, and more.
 
 - **Runtime:** vanilla Node.js (CommonJS), no web framework. Telegram long-polling
   via `fetch`. Managed by **PM2** (`ecosystem.config.js`).
-- **Brain:** Groq Chat Completions (`llama-3.3-70b-versatile`) with a tool-calling
-  loop (`llm.js` + `tools.js`).
+- **Brain:** the **Claude Code CLI** (`claude -p`) on the owner's Max
+  subscription (`llm.js`). The agent's own tools (Bash, Read, …) replace the old
+  homegrown tool loop; there are no fallback models. Groq is used **only** for
+  voice transcription (Whisper, `stt.js`) — Claude has no speech-to-text.
 - **Computer control (GNOME Wayland):** `ydotool` (mouse/keys, needs `ydotoold`),
   `wtype` (typing). Screenshots go through the bundled GNOME Shell extension
   (`gnome-extension/`) — on Mutter no external screenshot tool works (grim lacks
@@ -24,13 +27,15 @@ transcribes voice notes, and more.
 ## Layout
 
 ```
-bot.js              Long-poll loop + command router + callback/voice handling
+bot.js              Long-poll loop + command router + callback/voice/image handling
 telegram.js         Telegram Bot API wrapper (send, chunking, keyboards, setMyCommands)
-llm.js              Groq client + agentic tool loop + token/rate-limit accounting
-tools.js            Tool definitions + tool runner + system prompt
+llm.js              Claude Code CLI adapter (`claude -p`, per-chat sessions, subscription)
+vision.js           Incoming images → download to /tmp → Claude reads them via Read
+stt.js              Voice notes → Groq Whisper transcript → text pipeline
+tools.js            Machine context + stats + cron registry for the system prompt
 config.js           Env loading + graphical-session ENV for child processes
-commands.js         Built-in slash commands (/status, /screenshot, /cron, …)
-commands/*.js       Dynamic command modules (auto-registered)
+commands/index.js   Command registry (auto-loads commands/*.js)
+commands/*.js       Slash-command modules (auto-registered)
 tools/*.js          Computer-control primitives (screenshot, input, clipboard, window…)
 context/*.md        System-prompt context (machine.md is local-only — see below)
 test/*.test.js      Unit tests
@@ -42,10 +47,12 @@ deploy.sh           Backup → rsync → pm2 restart (reads .deploy.local)
 1. `npm install`
 2. Create `.env` (see `.env.example`):
    - `TELEGRAM_TOKEN` — bot token from @BotFather
-   - `GROQ_KEY` — Groq API key (`gsk_…`)
-   - `GROQ_KEY` — Groq Whisper for voice notes; text LLM is the `claude` CLI on the Max subscription (no API key)
+   - `GROQ_KEY` — Groq API key (`gsk_…`), used **only** for Whisper voice transcription
    - `ALLOWED_USER_ID` — the single Telegram user id allowed to use the bot
    - `CHAT_ID` — optional, defaults to `ALLOWED_USER_ID`
+   - `CLAUDE_*` — optional CLI tuning (`CLAUDE_MODEL`, `CLAUDE_EFFORT`,
+     `CLAUDE_ALLOWED_TOOLS`, …); the text brain authenticates via the `claude`
+     CLI's own OAuth (Max subscription) — no Anthropic API key is used.
 3. (Optional) create `context/machine.md` to give the LLM context about the box
    (hardware, directory layout, useful commands). Kept local — see Security.
 4. `pm2 start ecosystem.config.js` (or `pm2 restart tg-bot`).

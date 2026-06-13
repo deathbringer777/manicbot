@@ -78,6 +78,9 @@ describe("telegram.js", () => {
 
   it("registerCommands должен зарегистрировать команды", async () => {
     fetchCalls = [];
+    // Commands registry must be populated before building the menu.
+    const cmdRegistry = require("../commands/index.js");
+    cmdRegistry.loadBuiltin();
     await telegram.registerCommands();
     const call = fetchCalls.find(c => c.url.includes("setMyCommands"));
     assert.ok(call);

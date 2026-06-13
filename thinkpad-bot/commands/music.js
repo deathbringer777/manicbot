@@ -9,15 +9,19 @@ module.exports = {
         const r = await music.playQuery(arg || "radio");
         return { text: `🎵 Играю: <b>${esc(r.title)}</b>`, keyboard: kb.musicTransport() };
       },
-      description: "Музыка/радио: /play ambient | lofi | jazz | news",
+      description: "🎵 Музыка/радио: /play ambient | lofi | jazz | news",
+      group: "🎵 Музыка",
+      menu: true,
     },
     "/pause": {
       handler: async () => { await music.pause(); return { text: "⏹ Музыка остановлена" }; },
       description: "Остановить музыку",
+      group: "🎵 Музыка",
     },
     "/stop": {
       handler: async () => { await music.stop(); return { text: "⏹ Музыка остановлена" }; },
       description: "Остановить музыку",
+      group: "🎵 Музыка",
     },
     "/np": {
       handler: async () => {
@@ -26,7 +30,9 @@ module.exports = {
           ? { text: `🎶 <b>${esc(r.title)}</b>`, keyboard: kb.musicTransport() }
           : { text: "⏹ Ничего не играет" };
       },
-      description: "Что сейчас играет",
+      description: "🎶 Что сейчас играет",
+      group: "🎵 Музыка",
+      menu: true,
     },
     "/vol": {
       handler: async (chatId, arg) => {
@@ -36,6 +42,7 @@ module.exports = {
         return { text: `🔊 Громкость: ${r.pct}%` };
       },
       description: "Громкость 0–100: /vol 40",
+      group: "🎵 Музыка",
     },
   },
 };

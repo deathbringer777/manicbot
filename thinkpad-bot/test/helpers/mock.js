@@ -10,7 +10,6 @@ const TOOL_MODULES = [
   "tools/screenshot.js",
   "tools/window.js",
   "tools.js",
-  "commands.js",
 ];
 
 function clearToolCache() {

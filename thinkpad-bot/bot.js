@@ -2,17 +2,20 @@ const config = require("./config.js");
 const tg = require("./telegram.js");
 const llm = require("./llm.js");
 const tools = require("./tools.js");
-const { COMMANDS } = require("./commands.js");
 const cmdRegistry = require("./commands/index.js");
 const callbacks = require("./callbacks.js");
 const intents = require("./intents.js");
 const stt = require("./stt.js");
+const vision = require("./vision.js");
 const render = require("./render.js");
 
 let offset = 0;
 let pollRunning = true;
 let backoff = 1000;
-const OFFSET_FILE = "/tmp/tg-bot-offset.json";
+// Persist the poll offset OUTSIDE /tmp (cleared on reboot → would replay updates)
+// and outside the deploy tree (~/automation/tg-bot is rsynced on deploy), so it
+// survives both a reboot and a deploy.
+const OFFSET_FILE = require("path").join(require("os").homedir(), "automation", ".tg-bot-offset.json");
 
 // ── State persistence ─────────────────────────────────────────────────────────
 function saveOffset() {
@@ -21,10 +24,12 @@ function saveOffset() {
   } catch {}
 }
 function loadOffset() {
-  try {
-    const d = JSON.parse(require("fs").readFileSync(OFFSET_FILE, "utf8"));
-    if (d.offset) offset = d.offset;
-  } catch {}
+  for (const file of [OFFSET_FILE, "/tmp/tg-bot-offset.json"]) { // new path, then legacy /tmp fallback (one-time migration)
+    try {
+      const d = JSON.parse(require("fs").readFileSync(file, "utf8"));
+      if (d.offset) { offset = d.offset; return; }
+    } catch {}
+  }
 }
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
@@ -43,18 +48,17 @@ process.on("uncaughtException", (err) => {
   saveOffset();
 });
 process.on("unhandledRejection", (err) => {
-  console.error("[bot] unhandled rejection:", err.message);
+  console.error("[bot] unhandled rejection:", err?.message || err);
 });
 
 // ── Command router ────────────────────────────────────────────────────────────
 async function routeCommand(chatId, cmd, arg) {
-  const dyn = cmdRegistry.get(cmd);
-  const fn = dyn ? (c, a) => dyn.handler(c, a) : COMMANDS[cmd];
-  if (!fn) return false;
+  const entry = cmdRegistry.get(cmd);
+  if (!entry) return false;
 
   const stopTyping = tg.keepTyping(chatId);
   try {
-    const out = await fn(chatId, arg);
+    const out = await entry.handler(chatId, arg);
     stopTyping();
     await tg.sendReply(chatId, out);
   } catch (e) {
@@ -68,6 +72,13 @@ async function routeCommand(chatId, cmd, arg) {
 // Shared text pipeline: slash command → fast intent → LLM. Used by both typed
 // messages and transcribed voice notes.
 async function handleText(chatId, text) {
+  // Images just sent? A following free-text line is their instruction — flush
+  // the batch now with this text instead of routing it on its own. (A slash
+  // command is left alone; the batch flushes on its own timer.)
+  if (pendingImages.has(chatId) && !text.startsWith("/")) {
+    return flushImages(chatId, text);
+  }
+
   const [cmdRaw, ...argParts] = text.split(/\s+/);
   const cmd = cmdRaw.toLowerCase().split("@")[0];
   const arg = argParts.join(" ");
@@ -97,7 +108,8 @@ async function handleText(chatId, text) {
     .catch(async (e) => {
       stopTyping();
       console.error("[llm error]", e.message);
-      await tg.sendMessage(chatId, `❌ Ошибка: ${e.message}`);
+      // Swallow errors from the error-reply itself to avoid unhandledRejection.
+      await tg.sendMessage(chatId, `❌ Ошибка: ${e.message}`).catch(() => {});
     });
 }
 
@@ -120,7 +132,83 @@ async function handleVoice(chatId, media) {
   }
 }
 
+// ── Image / vision pipeline ─────────────────────────────────────────────────────
+// The bot has no native image model: each photo is downloaded to disk and the
+// claude agent VIEWS it with its Read tool (see vision.js). Telegram delivers
+// each photo as its own update (an album as a burst), so we debounce — collect
+// the images sent in a short window, then send ALL of them in one request. A
+// free-text line typed right after becomes their instruction (see handleText);
+// otherwise the batch flushes on the timer with a default prompt.
+const IMAGE_BATCH_MS = 2500;
+const pendingImages = new Map(); // chatId → { items: [{ path, caption }], timer }
+
+async function bufferImage(chatId, msg) {
+  const ref = vision.imageRefFromMessage(msg);
+  if (!ref) return;
+
+  let dl;
+  try {
+    dl = await vision.download(ref.fileId);
+  } catch (e) {
+    console.error("[image download error]", e.message);
+    await tg.sendMessage(chatId, `❌ Не смог скачать изображение: ${e.message}`).catch(() => {});
+    return;
+  }
+
+  const batch = pendingImages.get(chatId) || { items: [], timer: null };
+  batch.items.push({ path: dl.path, caption: (msg.caption || "").trim() });
+  if (batch.timer) clearTimeout(batch.timer);
+  batch.timer = setTimeout(() => {
+    flushImages(chatId).catch((e) => console.error("[vision flush]", e.message));
+  }, IMAGE_BATCH_MS);
+  pendingImages.set(chatId, batch);
+}
+
+async function flushImages(chatId, extraInstruction = "") {
+  const batch = pendingImages.get(chatId);
+  if (!batch || !batch.items.length) return;
+  if (batch.timer) clearTimeout(batch.timer);
+  pendingImages.delete(chatId);
+
+  const captions = batch.items.map((i) => i.caption);
+  const instruction = [extraInstruction, ...captions].map((s) => (s || "").trim()).filter(Boolean).join("\n");
+  const prompt = vision.buildVisionPrompt({
+    instruction,
+    imagePaths: batch.items.map((i) => i.path),
+  });
+
+  const stopTyping = tg.keepTyping(chatId);
+  try {
+    const reply = await llm.ask(chatId, prompt);
+    stopTyping();
+    await tg.sendLongMessage(chatId, reply);
+  } catch (e) {
+    stopTyping();
+    console.error("[vision error]", e.message);
+    await tg.sendMessage(chatId, `❌ Ошибка анализа изображения: ${e.message}`).catch(() => {});
+  }
+}
+
 // ── Poll loop ─────────────────────────────────────────────────────────────────
+// Collapse repeated identical network errors so real errors aren't buried.
+let _lastPollErr = null;
+let _pollErrCount = 0;
+
+function logPollError(msg) {
+  if (msg === _lastPollErr) {
+    _pollErrCount++;
+    // Log at 3 and every 10 thereafter.
+    if (_pollErrCount === 3 || _pollErrCount % 10 === 0) {
+      console.error(`[poll error] ${msg} ×${_pollErrCount}`);
+    }
+  } else {
+    if (_pollErrCount > 2) console.error(`[poll error] предыдущая повторялась ×${_pollErrCount}`);
+    _lastPollErr = msg;
+    _pollErrCount = 1;
+    console.error("[poll error]", msg);
+  }
+}
+
 async function poll() {
   cmdRegistry.loadBuiltin();
   loadOffset();
@@ -138,6 +226,8 @@ async function poll() {
         continue;
       }
 
+      _lastPollErr = null;
+      _pollErrCount = 0;
       backoff = 1000;
 
       for (const update of result) {
@@ -161,16 +251,40 @@ async function poll() {
           continue;
         }
 
+        // Photo (or an image sent as a document) → vision pipeline.
+        if (msg.photo || (msg.document && vision.isImageDocument(msg.document))) {
+          await bufferImage(chatId, msg);
+          continue;
+        }
+
         if (!msg.text) continue;
         await handleText(chatId, msg.text.trim());
       }
     } catch (e) {
-      console.error("[poll error]", e.message);
+      logPollError(e.message);
       backoff = Math.min(backoff * 2, 60000);
       await new Promise(r => setTimeout(r, backoff));
     }
   }
 }
 
+// ── Scheduled-post publisher ──────────────────────────────────────────────────
+// Checks scheduled-posts.json every 10 minutes and publishes due drafts.
+async function checkScheduledPosts() {
+  const blog = require("./commands/blog.js");
+  const due = blog.dueScheduled();
+  if (!due.length) return;
+  for (const post of due) {
+    try {
+      await blog.publishScheduledPost(config.CHAT_ID, post.slug);
+    } catch (e) {
+      console.error("[scheduled-post error]", post.slug, e.message);
+      await tg.sendMessage(config.CHAT_ID, `❌ Scheduled publish failed (${post.slug}): ${e.message}`).catch(() => {});
+    }
+  }
+  blog.removeScheduledPosts(due.map((p) => p.slug));
+}
+
 console.log("ThinkPad ops-bot v5 starting...");
 poll();
+setInterval(() => checkScheduledPosts().catch((e) => console.error("[scheduler]", e.message)), 10 * 60 * 1000);

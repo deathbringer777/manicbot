@@ -32,11 +32,6 @@ describe("tools.js (registry)", () => {
     assert.strictEqual(tools.runTool, undefined);
   });
 
-  it("getSystemPrompt должен возвращать промпт с контекстом", () => {
-    const prompt = tools.getSystemPrompt();
-    assert.ok(prompt.length > 0);
-  });
-
   it("getContextText отдаёт сырой контекст из context/*.md", () => {
     const ctx = tools.getContextText();
     assert.strictEqual(typeof ctx, "string");

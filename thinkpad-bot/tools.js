@@ -3,14 +3,8 @@ const path = require("path");
 
 const config = require("./config.js");
 const helpers = require("./tools/helpers.js");
-const mouse = require("./tools/mouse.js");
-const keyboard = require("./tools/keyboard.js");
-const screenshot = require("./tools/screenshot.js");
-const windowManager = require("./tools/window.js");
-const clipboard = require("./tools/clipboard.js");
 
 const sh = helpers.sh;
-const execAsync = helpers.execAsync;
 
 // ── Stats formatter ───────────────────────────────────────────────────────────
 async function getStats() {
@@ -48,62 +42,6 @@ async function getStats() {
   return `🧠 Память: ${memLine}\n💾 Диск: ${diskLine}\n⚡ Нагрузка: ${loadLine}\n🌡 Темп: ${temp}\n⏱ Аптайм: ${uptime}`;
 }
 
-// ── Context ───────────────────────────────────────────────────────────────────
-const BASE_PROMPT = `Ты личный AI-ассистент и оператор Кирилла. Запущен на ThinkPad E470 (Ubuntu 26.04, Node 22, PM2).
-LLM: Claude Sonnet 4.6 (Anthropic) — основной; Groq/OpenCode — резерв.
-
-ТЫ МОЖЕШЬ:
-- Выполнять shell-команды (run_shell)
-- Делать скриншоты (screenshot) и описывать что на экране
-- Управлять мышью (mouse_move, mouse_click, mouse_drag)
-- Печатать текст и нажимать клавиши (keyboard_type, keyboard_hotkey)
-- Работать с буфером обмена (clipboard)
-- Управлять окнами (window_manage - список, фокус, свернуть, закрыть)
-- Включать музыку/радио (music_control: ambient, lofi, jazz, electronic, news)
-- Запускать приложения (open_app: браузер, файлы, терминал, и др.)
-- Менять громкость (set_volume) и яркость экрана (set_brightness)
-- Управлять PM2 процессами (pm2_control)
-- Читать/писать файлы (read_file, write_file)
-- Выполнять SQLite запросы (sqlite_query)
-- Управлять cron задачами (cron_manage)
-- Смотреть статистику системы (system_stats)
-- Делать скриншоты веб-страниц (browser_screenshot)
-- Выполнять команды на удалённых хостах по SSH (ssh_exec)
-- Управлять Docker (docker_*), systemd (systemctl)
-- Управлять файлами: поиск, бэкап, загрузка
-- Делать снимки с веб-камеры, записывать звук с микрофона
-- Создавать и управлять todo-списком
-
-ПРАВИЛА:
-1. Для ЛЮБОГО действия на компьютере используй инструменты. Не давай инструкции — делай сам.
-2. Если что-то не сработало — попробуй другой способ или объясни почему невозможно.
-3. Если пользователь спрашивает "что на экране?" — сделай скриншот и опиши.
-4. Отвечай на языке пользователя, кратко и по делу.
-5. Ты можешь выполнять цепочки действий: например, скриншот → анализ → следующий шаг.
-6. Для длинных задач используй инструменты последовательно, отчитываясь о прогрессе.
-7. Если задача неоднозначна — уточни одним вопросом.`;
-
-let _cachedPrompt = null;
-let _contextMtime = 0;
-
-function getSystemPrompt() {
-  let latestMtime = 0;
-  try {
-    for (const f of fs.readdirSync(config.CONTEXT_DIR).filter(f => f.endsWith(".md"))) {
-      const m = fs.statSync(path.join(config.CONTEXT_DIR, f)).mtimeMs;
-      if (m > latestMtime) latestMtime = m;
-    }
-  } catch {}
-
-  if (_cachedPrompt && latestMtime === _contextMtime) return _cachedPrompt;
-
-  const ctx = getContextText();
-
-  _cachedPrompt = ctx ? `${BASE_PROMPT}\n\n## Контекст:\n${ctx}` : BASE_PROMPT;
-  _contextMtime = latestMtime;
-  return _cachedPrompt;
-}
-
 // Raw context/*.md text — llm.js appends it to the claude CLI system prompt.
 function getContextText() {
   try {
@@ -132,9 +70,7 @@ function writeRegistry(reg) {
   );
 }
 
-
 module.exports = {
-  getSystemPrompt,
   getContextText,
   getStats,
   readRegistry,

@@ -9,7 +9,7 @@ function mainMenu() {
   return keyboard([
     [["📊 Статус", "nav:status"], ["🔄 Процессы", "nav:ps"]],
     [["🕐 Задачи", "nav:cron"], ["💾 Диск", "nav:disk"]],
-    [["📸 Скриншот", "nav:shot"], ["🤖 Groq", "nav:groq"]],
+    [["📸 Скриншот", "nav:shot"], ["🤖 Claude", "nav:groq"]],
     [["❓ Все команды", "nav:help"]],
   ]);
 }

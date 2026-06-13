@@ -251,6 +251,37 @@ describe('template-status', () => {
   });
 });
 
+describe('backfill-welcomes', () => {
+  it('backdates a welcome to registration for owners missing one, idempotently', async () => {
+    const env = makeEnv();
+    db.prepare("INSERT INTO platform_campaigns (id, kind, title, body, bodies_json, channels_json, status, created_at, updated_at) VALUES ('sys_welcome','welcome','Welcome','',?,?,'active',1,1)")
+      .bind(JSON.stringify({ center: 'Здравствуйте, {salon_name}!' }), JSON.stringify(['center', 'bell'])).run();
+    db.prepare("INSERT INTO tenants (id, name, created_at, is_test) VALUES ('t1','Salon A',1000,0)").bind().run();
+    db.prepare("INSERT INTO tenants (id, name, created_at, is_test) VALUES ('t2','Salon B',2000,0)").bind().run();
+    db.prepare("INSERT INTO web_users (id, tenant_id, role, email) VALUES ('wu1','t1','tenant_owner','a@x.com')").bind().run();
+    db.prepare("INSERT INTO web_users (id, tenant_id, role, email) VALUES ('wu2','t2','tenant_owner','b@x.com')").bind().run();
+    // wu2 was already welcomed (ledger claim exists) → must be skipped.
+    db.prepare("INSERT INTO platform_campaign_deliveries (id, campaign_id, occurrence_key, recipient_web_user_id, tenant_id, channel, status, created_at) VALUES ('pcd_x','sys_welcome','once','wu2','t2','center','sent',1)").bind().run();
+
+    const r = await (await tryMessagingRoutes(req('POST', '/admin/messaging/backfill-welcomes', { token: 'mtok' }), env, u('/admin/messaging/backfill-welcomes'))).json();
+    expect(r.ok).toBe(true);
+    expect(r.backfilled).toBe(1);
+    expect(r.skipped).toBe(1);
+
+    const msgs = (await db.prepare('SELECT thread_id, body, created_at FROM platform_thread_messages').bind().all()).results;
+    expect(msgs.length).toBe(1);
+    expect(msgs[0].body).toContain('Salon A'); // personalized
+    expect(msgs[0].created_at).toBe(1000); // dated at registration, not now
+    const led = (await db.prepare("SELECT status FROM platform_campaign_deliveries WHERE recipient_web_user_id='wu1'").bind().all()).results;
+    expect(led.some((d) => d.status === 'sent')).toBe(true);
+  });
+
+  it('rejects when the welcome singleton is not active', async () => {
+    const res = await tryMessagingRoutes(req('POST', '/admin/messaging/backfill-welcomes', { token: 'mtok' }), makeEnv(), u('/admin/messaging/backfill-welcomes'));
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('flag (operator send pause)', () => {
   it('persists the pause flag and reflects it in stats', async () => {
     const env = makeEnv();

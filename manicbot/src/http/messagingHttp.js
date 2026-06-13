@@ -177,6 +177,97 @@ async function handleApprove(ctx, body) {
  * operator can green-light a whole occasion from the tg-bot. Builtins are already
  * 'approved' and untouched. Returns how many rows flipped.
  */
+/**
+ * One-off backfill: every salon owner who never received the `sys_welcome` message
+ * (registered before welcomeOnRegister shipped, or whose channel was non-empty when
+ * the cron backfill ran — it only fills EMPTY channels) gets it now, BACKDATED to
+ * their registration so it reads as the thread's first message. Idempotent via the
+ * delivery ledger (claim center once per owner ever). In-app center only — no bell,
+ * so established/real owners aren't pinged about a months-old welcome.
+ */
+async function handleBackfillWelcomes(ctx) {
+  const camp = await dbGet(
+    ctx, "SELECT title, body, bodies_json, status FROM platform_campaigns WHERE id = 'sys_welcome' LIMIT 1",
+  ).catch(() => null);
+  if (!camp || camp.status !== 'active') return json({ ok: false, error: 'welcome_inactive' }, 400);
+  let template = '';
+  try {
+    const bj = JSON.parse(camp.bodies_json || '{}');
+    template = (bj && typeof bj.center === 'string' ? bj.center : '') || camp.body || '';
+  } catch { template = camp.body || ''; }
+  if (!template.trim()) return json({ ok: false, error: 'empty_welcome' }, 400);
+
+  // Single-table read + JS filter (the test D1 mock drops `IN (...)` and JOINs).
+  const allUsers = await dbAll(
+    ctx,
+    // tenant-scan-ignore: operator-wide welcome backfill across all owners — intentional cross-tenant read.
+    'SELECT id, tenant_id, role FROM web_users',
+  ).catch(() => []);
+  const owners = (allUsers || []).filter((u) => u.role === 'tenant_owner' || u.role === 'tenant_manager');
+
+  let backfilled = 0;
+  let skipped = 0;
+  for (const o of owners) {
+    const tenant = await dbGet(ctx, 'SELECT name, created_at FROM tenants WHERE id = ? LIMIT 1', o.tenant_id).catch(() => null);
+    const reg = Number(tenant?.created_at) || Math.floor(Date.now() / 1000);
+    const salonName = tenant?.name || '';
+    // Idempotency gate: claim the (sys_welcome, once, owner, center) delivery once ever.
+    const claimed = await dbGet(
+      ctx,
+      // tenant-scan-ignore: welcome backfill — cross-tenant operator op, delivery ledger keyed by recipient.
+      "SELECT id FROM platform_campaign_deliveries WHERE campaign_id = 'sys_welcome' AND occurrence_key = 'once' AND recipient_web_user_id = ? AND channel = 'center' LIMIT 1",
+      o.id,
+    ).catch(() => null);
+    if (claimed?.id) { skipped += 1; continue; }
+    const claimId = `pcd_${ulid()}`;
+    try {
+      await dbRun(
+        ctx,
+        // tenant-scan-ignore: welcome backfill — cross-tenant operator op.
+        "INSERT INTO platform_campaign_deliveries (id, campaign_id, occurrence_key, recipient_web_user_id, tenant_id, channel, status, created_at) VALUES (?, 'sys_welcome', 'once', ?, ?, 'center', 'pending', ?)",
+        claimId, o.id, o.tenant_id, reg,
+      );
+    } catch { skipped += 1; continue; }
+
+    const body = String(template).replace(/\{salon_name\}/g, salonName);
+    let thread = await dbGet(
+      ctx, 'SELECT id, last_message_at FROM platform_threads WHERE recipient_web_user_id = ? LIMIT 1', o.id,
+    ).catch(() => null);
+    let threadId = thread?.id;
+    if (!threadId) {
+      threadId = `pt_${ulid(reg * 1000)}`;
+      await dbRun(
+        ctx,
+        'INSERT INTO platform_threads (id, recipient_web_user_id, recipient_tenant_id, archived, created_at) VALUES (?, ?, ?, 0, ?)',
+        threadId, o.id, o.tenant_id, reg,
+      ).catch(() => {});
+    }
+    // Backdated ULID id → sorts as the FIRST message in the thread (display orders by id).
+    await dbRun(
+      ctx,
+      "INSERT INTO platform_thread_messages (id, thread_id, sender_kind, sender_web_user_id, body, broadcast_id, created_at) VALUES (?, ?, 'platform', 'system', ?, 'sys_welcome:once', ?)",
+      ulid(reg * 1000), threadId, clean(body, MAX_BODY_LEN), reg,
+    ).catch(() => {});
+    // Only bump the thread header when the welcome is the newest message (empty or
+    // not-yet-touched thread) — never clobber a newer last-message preview.
+    if (!thread || thread.last_message_at == null || thread.last_message_at < reg) {
+      await dbRun(
+        ctx,
+        "UPDATE platform_threads SET last_message_at = ?, last_message_preview = ?, last_sender_kind = 'platform' WHERE id = ?",
+        reg, body.replace(/\s+/g, ' ').trim().slice(0, 200), threadId,
+      ).catch(() => {});
+    }
+    await dbRun(
+      ctx,
+      // tenant-scan-ignore: welcome backfill — cross-tenant operator op.
+      'UPDATE platform_campaign_deliveries SET status = ?, sent_at = ? WHERE id = ?',
+      'sent', reg, claimId,
+    ).catch(() => {});
+    backfilled += 1;
+  }
+  return json({ ok: true, owners: (owners || []).length, backfilled, skipped });
+}
+
 /** Approve-only alias of template-status (kept for back-compat; returns an `approved` count). */
 async function handleTemplateApprove(ctx, body) {
   const { template_key } = body || {};
@@ -419,6 +510,7 @@ export async function tryMessagingRoutes(request, env, url) {
       case 'approve': return await handleApprove(ctx, body);
       case 'template-status': return await handleTemplateStatus(ctx, body);
       case 'template-approve': return await handleTemplateApprove(ctx, body);
+      case 'backfill-welcomes': return await handleBackfillWelcomes(ctx);
       case 'reschedule': return await handleReschedule(ctx, body);
       case 'flag': return await handleFlag(ctx, body);
       case 'promo-mint': return await handlePromoMint(ctx, body);

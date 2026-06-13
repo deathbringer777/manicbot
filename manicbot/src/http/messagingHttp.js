@@ -279,6 +279,7 @@ async function handleStats(ctx, env) {
   ).catch(() => []);
   const templates = Object.fromEntries(TEMPLATE_STATUSES.map((s) => [s, 0]));
   for (const t of tplRows || []) if (templates[t.status] != null) templates[t.status] += 1;
+  // tenant-scan-ignore: cross-tenant delivery aggregate for the operator (system_admin) stats dashboard — intentional, not tenant-scoped.
   const delivRows = await dbAll(ctx, 'SELECT channel FROM platform_campaign_deliveries').catch(() => []);
   const deliveries_by_channel = {};
   for (const d of delivRows || []) deliveries_by_channel[d.channel] = (deliveries_by_channel[d.channel] || 0) + 1;

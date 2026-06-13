@@ -1784,7 +1784,7 @@ CREATE INDEX IF NOT EXISTS idx_holiday_date
   ON holiday_calendar(date);
 
 -- 0122: platform_settings — operator-controlled platform-global key/value switches
--- (first use: messaging_send_paused, the secondary seasonal-send gate). No tenant_id.
+-- (first use: messaging_send_paused, the secondary seasonal-send gate). Platform-scoped.
 CREATE TABLE IF NOT EXISTS platform_settings (
   key        TEXT PRIMARY KEY,
   value      TEXT,

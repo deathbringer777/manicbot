@@ -88,7 +88,9 @@ describe("marketingTenant.ts source scan: invariants per procedure", () => {
         "campaignStats",
         "campaignsList",
         "contactUpdate",
+        "contactsDelete",
         "contactsList",
+        "contactsSetSubscribed",
         "providersList",
         // 0072 manual lists — Brevo-style segment membership.
         "segmentAddContacts",

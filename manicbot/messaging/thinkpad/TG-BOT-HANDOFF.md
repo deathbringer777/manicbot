@@ -38,6 +38,15 @@ Only then does the seasonal dispatcher send to real owners.
 `claude -p` (Sonnet, subscription) — the result lands as a NEW draft in `/drafts`,
 never auto-sent.
 
+**Copy structure (no wall of text):** generated/authored bodies must be 2–3 short paragraphs
+separated by a blank line (`\n\n`) — greeting / value / call-to-action. The preset-generator
+prompt asks the model for this and `normalizeBody`/`reflowToParagraphs` (`lib/format.js`)
+enforce it. To fix the EXISTING `seasonal_*` drafts in place without re-running the LLM, run
+`npm run reflow` in the messaging tier (`~/automation/messaging/`): it re-paragraphs each draft
+and re-pushes via the seam (idempotent; `REFLOW_DRY_RUN=1 npm run reflow` previews). The
+messaging tier has its own `npm test` (node:test — `format.test.js`, `preset-generator.test.js`;
+the Claude runner is injected, so tests never spawn the CLI).
+
 ## Deploy / rollback (from the dev machine)
 - **Deploy:** `cd <bot working copy> && ./deploy.sh` — rsyncs source (keeps the
   server `.env` + runtime state), `npm install --omit=dev`, `pm2 restart tg-bot`.

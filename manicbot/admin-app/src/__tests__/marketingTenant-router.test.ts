@@ -229,6 +229,135 @@ describe("marketingTenantRouter.contactUpdate cross-tenant guard", () => {
   });
 });
 
+describe("marketingTenantRouter.contactsDelete bulk hard-delete", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("FORBIDDEN for a foreign tenant — assertTenantOwner fires before any DB work", async () => {
+    const { db, deleteCalls } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(
+      caller.contactsDelete({ tenantId: "t_b", contactIds: [1] }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(deleteCalls.length).toBe(0);
+  });
+
+  it("rejects an empty contactIds array (Zod .min(1))", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(
+      caller.contactsDelete({ tenantId: "t_a", contactIds: [] }),
+    ).rejects.toThrow();
+  });
+
+  it("hard-deletes the tenant's contacts (members cleanup + contacts delete)", async () => {
+    // 1st select = allowed-ids guard (both belong to t_a); 2nd = affected
+    // segment members (none here).
+    const { db, deleteCalls, updateCalls } = createDbMock([
+      [{ id: 1 }, { id: 2 }],
+      [],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    const out = await caller.contactsDelete({ tenantId: "t_a", contactIds: [1, 2] });
+    expect(out).toEqual({ deleted: 2 });
+    // two delete chains: marketing_segment_members + marketing_contacts.
+    expect(deleteCalls.length).toBe(2);
+    expect(deleteCalls.every((c) => c.whereCalled)).toBe(true);
+    // the users.marketing_contact_id back-reference is nulled (one update).
+    expect(updateCalls.length).toBe(1);
+    expect(updateCalls[0]?.values).toMatchObject({ marketingContactId: null });
+  });
+
+  it("drops foreign contactIds — only the caller's own contacts are deleted", async () => {
+    // caller passes [1,2,99] but the tenant-scoped guard SELECT only returns
+    // 1 and 2 → 99 is silently dropped (cross-tenant id can't be deleted).
+    const { db } = createDbMock([
+      [{ id: 1 }, { id: 2 }],
+      [],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    const out = await caller.contactsDelete({ tenantId: "t_a", contactIds: [1, 2, 99] });
+    expect(out).toEqual({ deleted: 2 });
+  });
+
+  it("no-op when none of the ids belong to the tenant — zero destructive calls", async () => {
+    const { db, deleteCalls, updateCalls } = createDbMock([[]]); // guard returns nothing
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    const out = await caller.contactsDelete({ tenantId: "t_a", contactIds: [99] });
+    expect(out).toEqual({ deleted: 0 });
+    expect(deleteCalls.length).toBe(0);
+    expect(updateCalls.length).toBe(0);
+  });
+
+  it("cleans segment membership and recounts each affected segment", async () => {
+    // allowed ids → [1]; affected members live in seg_1; recount count select.
+    const { db, deleteCalls, updateCalls } = createDbMock([
+      [{ id: 1 }],
+      [{ segmentId: "seg_1" }],
+      [{ count: 0 }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    const out = await caller.contactsDelete({ tenantId: "t_a", contactIds: [1] });
+    expect(out).toEqual({ deleted: 1 });
+    expect(deleteCalls.length).toBe(2);
+    // recount UPDATE on marketing_segments + users back-ref UPDATE.
+    expect(updateCalls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("marketingTenantRouter.contactsSetSubscribed bulk unsubscribe", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("FORBIDDEN for a foreign tenant", async () => {
+    const { db, updateCalls } = createDbMock();
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(
+      caller.contactsSetSubscribed({ tenantId: "t_b", contactIds: [1], unsubscribed: true }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(updateCalls.length).toBe(0);
+  });
+
+  it("unsubscribes the tenant's contacts and writes a consent-log event per contact", async () => {
+    const { db, updateCalls, insertCalls } = createDbMock([
+      [{ id: 1 }, { id: 2 }], // allowed-ids guard
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    const out = await caller.contactsSetSubscribed({ tenantId: "t_a", contactIds: [1, 2], unsubscribed: true });
+    expect(out).toEqual({ updated: 2 });
+    // the unsubscribed flag is flipped on (the send gate).
+    expect(updateCalls.length).toBe(1);
+    expect(updateCalls[0]?.values).toMatchObject({ unsubscribed: 1 });
+    // a demonstrable consent event is logged for each contact (GDPR trail).
+    const logged = insertCalls
+      .flatMap((c) => { const v = c.values as unknown; return Array.isArray(v) ? v : [v]; })
+      .filter((v: { event?: string }) => v?.event === "unsubscribed");
+    expect(logged).toHaveLength(2);
+    expect(logged[0]).toMatchObject({ event: "unsubscribed", source: "owner" });
+  });
+
+  it("re-subscribes (unsubscribed=false) and logs a 'subscribed' event", async () => {
+    const { db, updateCalls, insertCalls } = createDbMock([
+      [{ id: 5 }],
+    ]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    const out = await caller.contactsSetSubscribed({ tenantId: "t_a", contactIds: [5], unsubscribed: false });
+    expect(out).toEqual({ updated: 1 });
+    expect(updateCalls[0]?.values).toMatchObject({ unsubscribed: 0 });
+    const logged = insertCalls
+      .flatMap((c) => { const v = c.values as unknown; return Array.isArray(v) ? v : [v]; })
+      .find((v: { contactId?: number }) => v?.contactId === 5);
+    expect(logged).toMatchObject({ event: "subscribed" });
+  });
+
+  it("drops foreign ids and no-ops cleanly when none belong to the tenant", async () => {
+    const { db, updateCalls, insertCalls } = createDbMock([[]]); // guard returns nothing
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    const out = await caller.contactsSetSubscribed({ tenantId: "t_a", contactIds: [99], unsubscribed: true });
+    expect(out).toEqual({ updated: 0 });
+    expect(updateCalls.length).toBe(0);
+    expect(insertCalls.length).toBe(0);
+  });
+});
+
 describe("marketingTenantRouter manual lists (0072)", () => {
   beforeEach(() => vi.clearAllMocks());
 

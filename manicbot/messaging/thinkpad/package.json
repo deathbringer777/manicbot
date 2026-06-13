@@ -5,9 +5,11 @@
   "type": "module",
   "description": "ThinkPad scheduled/generative tier for the ManicBot System & Seasonal Messaging service. Pushes drafts to the Worker /admin/messaging/* seam; never writes D1 directly.",
   "scripts": {
+    "test": "node --test",
     "holidays": "node --env-file=.env holidays-sync.js",
     "plan": "node --env-file=.env content-plan-builder.js",
     "presets": "node --env-file=.env preset-generator.js",
+    "reflow": "node --env-file=.env reflow-templates.js",
     "health": "node --env-file=.env health-report.js"
   },
   "dependencies": {

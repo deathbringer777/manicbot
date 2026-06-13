@@ -323,6 +323,56 @@ describe("platformMessengerRouter sysadmin operations", () => {
   });
 });
 
+// ─── multi-line body structure survives to storage ──────────────────────
+//
+// Regression for the "wall of text" bug: operator-composed bodies must keep
+// their paragraph breaks (\n\n) all the way into platform_thread_messages.body
+// and platform_broadcasts.body. The render layer is already whitespace-pre-wrap;
+// the write path used to flatten newlines via sanitizeText. sanitizeMessageBody
+// preserves them.
+
+describe("platformMessengerRouter preserves multi-line body structure", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const MULTILINE = "Hi {salon_name}!\n\nNews here.\n\nCheck it 👉";
+
+  it("sendDirectMessage stores the body with paragraph breaks intact", async () => {
+    const { db, insertCalls } = createDbMock([
+      // recipient lookup
+      [{ id: "w_owner", email: "owner@gmail.com", tenantId: "t_a", role: "tenant_owner" }],
+      // ensureThread → existing thread (no insert race)
+      [{ id: "pt_1" }],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await caller.sendDirectMessage({ recipientWebUserId: "w_owner", body: MULTILINE });
+
+    const msg = insertCalls.find((c) => typeof c.values.body === "string");
+    expect(msg).toBeTruthy();
+    expect(msg!.values.body).toContain("\n\n");
+    expect(msg!.values.body).toContain("Check it 👉");
+    // Token left verbatim for delivery-time substitution.
+    expect(msg!.values.body).toContain("{salon_name}");
+  });
+
+  it("broadcast stores both the audit row body and the per-recipient message body with breaks", async () => {
+    const { db, insertCalls } = createDbMock([
+      // resolveAudience (scope: all) → one real owner
+      [{ id: "w_owner", email: "owner@gmail.com", name: "Owner", tenantId: "t_a", plan: "pro", role: "tenant_owner" }],
+      // ensureThread → existing thread
+      [{ id: "pt_1" }],
+    ]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await caller.broadcast({ body: MULTILINE, audience: { scope: "all" } });
+
+    const bodies = insertCalls
+      .map((c) => c.values.body)
+      .filter((b): b is string => typeof b === "string");
+    // broadcast audit row + one recipient message — both keep \n\n.
+    expect(bodies.length).toBeGreaterThanOrEqual(2);
+    for (const b of bodies) expect(b).toContain("\n\n");
+  });
+});
+
 // ─── markMyThreadRead idempotency ────────────────────────────────────────
 
 describe("platformMessengerRouter markMyThreadRead", () => {

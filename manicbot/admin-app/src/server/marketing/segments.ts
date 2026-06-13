@@ -25,6 +25,7 @@ import {
   marketingContacts,
   marketingSegmentMembers,
   marketingSegments,
+  users,
 } from "~/server/db/schema";
 
 // Drizzle DB type intentionally widened to `any` — see the rationale in
@@ -132,4 +133,89 @@ export async function removeContactsFromSegment(
 
   await recountSegment(db, segmentId, nowS);
   return { ok: true };
+}
+
+/**
+ * Hard-delete a set of marketing contacts and everything that points at them.
+ *
+ * The CLIENT record in `users` is intentionally PRESERVED — this only removes
+ * the marketing footprint (the salon's client history/metrics/logs are the
+ * canonical record and stay intact). The `users.marketing_contact_id`
+ * back-reference is nulled so a live client never dangles at a deleted row.
+ *
+ * Tenant model: the CALLER (router) has already run `assertTenantOwner`. This
+ * helper enforces the contact-side guard — it re-SELECTs which of `contactIds`
+ * actually belong to `tenantId` and operates ONLY on those, so a crafted
+ * foreign id is silently dropped and cross-tenant deletion is impossible even
+ * though `marketing_segment_members` has no `tenant_id` column. Lives outside
+ * `routers/` (like the rest of this file) and is exempt from the router
+ * tenant-isolation scanner.
+ *
+ * Cascade order (no FKs in SQLite here, so explicit):
+ *   1. resolve the tenant-owned subset of ids
+ *   2. delete segment_members for those ids + recount each affected segment
+ *   3. null the `users.marketing_contact_id` back-reference (tenant-scoped)
+ *   4. hard-delete the `marketing_contacts` rows (tenant-scoped WHERE)
+ *
+ * NOTE: a still-active linked client may re-sync a fresh contact later via
+ * `marketingSync` — that is expected behaviour. For durable do-not-contact use
+ * the unsubscribe flag (`marketingTenant.contactsSetSubscribed`), not delete.
+ *
+ * @returns `{ deleted }` — count of contacts actually removed (allowed subset).
+ */
+export async function deleteContacts(
+  db: Db,
+  tenantId: string,
+  contactIds: number[],
+  nowS: number = nowSec(),
+): Promise<{ deleted: number }> {
+  if (contactIds.length === 0) return { deleted: 0 };
+
+  // 1. Restrict to ids that genuinely belong to this tenant.
+  const allowed = await db
+    .select({ id: marketingContacts.id })
+    .from(marketingContacts)
+    .where(and(
+      eq(marketingContacts.tenantId, tenantId),
+      inArray(marketingContacts.id, contactIds),
+    ));
+  const ok: number[] = allowed.map((r: { id: number }) => r.id);
+  if (ok.length === 0) return { deleted: 0 };
+
+  // 2. Which manual lists lose members? Capture them first so we can recount,
+  //    then drop the membership rows for the deleted contacts.
+  const memberRows = await db
+    .select({ segmentId: marketingSegmentMembers.segmentId })
+    .from(marketingSegmentMembers)
+    .where(inArray(marketingSegmentMembers.contactId, ok));
+  const affectedSegments = new Set<string>(
+    memberRows.map((r: { segmentId: string }) => r.segmentId),
+  );
+
+  await db
+    .delete(marketingSegmentMembers)
+    .where(inArray(marketingSegmentMembers.contactId, ok));
+  for (const segId of affectedSegments) {
+    await recountSegment(db, segId, nowS);
+  }
+
+  // 3. Null the salon-client back-reference (tenant-scoped) so the still-living
+  //    client row doesn't point at a contact we're about to delete.
+  await db
+    .update(users)
+    .set({ marketingContactId: null, updatedAt: nowS })
+    .where(and(
+      eq(users.tenantId, tenantId),
+      inArray(users.marketingContactId, ok),
+    ));
+
+  // 4. Hard-delete the contacts — never trust `ok` alone, re-scope by tenantId.
+  await db
+    .delete(marketingContacts)
+    .where(and(
+      eq(marketingContacts.tenantId, tenantId),
+      inArray(marketingContacts.id, ok),
+    ));
+
+  return { deleted: ok.length };
 }

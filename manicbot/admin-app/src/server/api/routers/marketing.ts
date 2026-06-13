@@ -87,7 +87,9 @@ export const marketingRouter = createTRPCRouter({
   // ═══════════════════════════════════════════════════════════════
   contactsList: adminProcedure
     .input(z.object({
-      limit: z.number().int().min(1).max(500).default(100),
+      // Cap raised 500 → 1000 to match marketingTenant.contactsList and back
+      // the "Показать все" page-size option on the shared Contacts UI.
+      limit: z.number().int().min(1).max(1000).default(100),
       offset: z.number().int().min(0).default(0),
       subscribedOnly: z.boolean().default(false),
       search: z.string().optional(),

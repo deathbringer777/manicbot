@@ -85,6 +85,20 @@ describe("campaignCreate", () => {
     expect(v.createdBy).toBe("w_admin");
   });
 
+  it("preserves paragraph breaks in the center body (no wall-of-text flattening)", async () => {
+    const mock = createDbMock();
+    const caller = createCaller(makeAdminCtx(mock.db) as never);
+    await caller.campaignCreate({
+      title: "Summer", bodies: { center: "Hello {salon_name}!\n\nSummer is here.\n\nBook now 👉" },
+      audience: { scope: "all" }, channels: ["center"], schedule: { kind: "now" },
+    });
+    const v = mock.insertCalls[0]!.values;
+    const center = JSON.parse(v.bodiesJson as string).center as string;
+    expect(center).toContain("\n\n");
+    expect(center).toContain("Book now 👉");
+    expect(center).toContain("{salon_name}");
+  });
+
   it("rejects channels without 'center' (always-on enforced)", async () => {
     const caller = createCaller(makeAdminCtx(createDbMock().db) as never);
     await expect(
@@ -142,6 +156,19 @@ describe("welcome settings", () => {
     const center = JSON.parse(v.bodiesJson as string).center as string;
     expect(center).toContain("{salon_name}");
     expect(center).toContain("{owner_name}");
+  });
+
+  it("setWelcomeSettings preserves paragraph breaks in body + center", async () => {
+    const mock = createDbMock();
+    await createCaller(makeAdminCtx(mock.db) as never).setWelcomeSettings({
+      enabled: true, channels: ["center"],
+      body: "Welcome, {salon_name}!\n\nYour AI admin is live.\n\nOpen the dashboard 👉",
+    });
+    const v = mock.insertCalls[0]!.values;
+    expect(v.body).toContain("\n\n");
+    const center = JSON.parse(v.bodiesJson as string).center as string;
+    expect(center).toContain("\n\n");
+    expect(center).toContain("Open the dashboard 👉");
   });
 
   it("setWelcomeSettings stores status=paused when disabled", async () => {

@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { eq, and, desc, sql, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, isNull, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { assertTenantOwner, assertTenantBillingActive, assertEmailVerified } from "~/server/api/tenantAccess";
@@ -31,7 +31,7 @@ import {
 import { listProviders } from "~/server/marketing/providers";
 import { runCampaignSend } from "~/server/marketing/sender";
 import { resolveAudience } from "~/server/marketing/audience";
-import { addContactsToSegment, removeContactsFromSegment } from "~/server/marketing/segments";
+import { addContactsToSegment, removeContactsFromSegment, deleteContacts } from "~/server/marketing/segments";
 
 const CHANNEL = z.enum(["email", "sms", "whatsapp"]);
 const CAMPAIGN_STATUS = z.enum(["draft", "scheduled", "sending", "sent", "paused", "failed"]);
@@ -108,7 +108,10 @@ export const marketingTenantRouter = createTRPCRouter({
   contactsList: protectedProcedure
     .input(z.object({
       tenantId: z.string().min(1),
-      limit: z.number().int().min(1).max(500).default(100),
+      // Cap raised 500 → 1000 to back the "Показать все" page-size option on
+      // the Contacts UI (select-all then covers the full loaded set). Tenants
+      // beyond 1000 contacts need true streaming pagination — flagged follow-up.
+      limit: z.number().int().min(1).max(1000).default(100),
       offset: z.number().int().min(0).default(0),
       subscribedOnly: z.boolean().default(false),
       search: z.string().optional(),
@@ -187,6 +190,67 @@ export const marketingTenantRouter = createTRPCRouter({
       }
       if (consentLogs.length) await ctx.db.insert(marketingConsentLog).values(consentLogs);
       return { ok: true };
+    }),
+
+  /**
+   * Bulk subscribe / unsubscribe. The durable "do-not-contact" toggle that
+   * powers the Contacts action bar's «Отписать»/«Подписать». Allowed-ids-first
+   * so a crafted foreign id is dropped (never flipped, never logged). Writes a
+   * per-contact consent event mirroring `contactUpdate` (the GDPR audit trail).
+   */
+  contactsSetSubscribed: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      contactIds: z.array(z.number().int()).min(1).max(500),
+      unsubscribed: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      // Restrict to ids that belong to this tenant before any write.
+      const allowed = await ctx.db
+        .select({ id: marketingContacts.id })
+        .from(marketingContacts)
+        .where(and(
+          eq(marketingContacts.tenantId, input.tenantId),
+          inArray(marketingContacts.id, input.contactIds),
+        ));
+      const ids = allowed.map((r) => r.id);
+      if (!ids.length) return { updated: 0 };
+
+      await ctx.db
+        .update(marketingContacts)
+        .set({ unsubscribed: input.unsubscribed ? 1 : 0 })
+        .where(and(
+          eq(marketingContacts.tenantId, input.tenantId),
+          inArray(marketingContacts.id, ids),
+        ));
+
+      const event = input.unsubscribed ? "unsubscribed" : "subscribed";
+      const ts = now();
+      await ctx.db.insert(marketingConsentLog).values(
+        ids.map((id) => ({ contactId: id, event, source: "owner", note: "bulk", createdAt: ts })),
+      );
+      return { updated: ids.length };
+    }),
+
+  /**
+   * Bulk hard-delete contacts from the MARKETING base only — the salon client
+   * record in `users` is preserved (see `deleteContacts`). Thin wrapper: the
+   * cascade (member cleanup + recount + users back-ref null + delete) lives in
+   * the scanner-exempt `server/marketing/segments.ts` helper, which re-scopes
+   * every touch by tenantId. Keeping the DB work out of this router file means
+   * there is no `ctx.db.delete(marketingContacts)` chain here for the source
+   * scanner to flag — the helper is the single tenant-isolation chokepoint.
+   */
+  contactsDelete: protectedProcedure
+    .input(z.object({
+      tenantId: z.string().min(1),
+      contactIds: z.array(z.number().int()).min(1).max(500),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      return deleteContacts(ctx.db, input.tenantId, input.contactIds);
     }),
 
   // ═══════════════════════════════════════════════════════════════

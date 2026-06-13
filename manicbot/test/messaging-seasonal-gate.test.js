@@ -65,6 +65,29 @@ describe('seasonal campaign gate', () => {
     expect(msgs.length).toBe(0);
   });
 
+  it('delivers IN-APP to an opted-in showcase (is_test) tenant even with the flag off, skipping external', async () => {
+    const ctx = makeCtx({ tenantId: 't_demo' });
+    ctx.messagingSendEnabled = false;
+    run(ctx, "INSERT INTO platform_settings (key, value, updated_at) VALUES ('announce_optin_tenants', '[\"t_demo\"]', 1)");
+    run(ctx, 'INSERT INTO tenants (id, name, plan, billing_status, is_test) VALUES (?, ?, ?, ?, ?)',
+      't_demo', 'Demo Studio', 'max', 'active', 1); // is_test = 1 (showcase)
+    run(ctx, `INSERT INTO web_users (id, email, tenant_id, role, lang, email_verified) VALUES (?, ?, ?, 'tenant_owner', ?, 1)`,
+      'wu1', 'o@demo.com', 't_demo', 'ru');
+    run(ctx,
+      `INSERT INTO platform_campaigns (id, kind, title, body, bodies_json, channels_json, schedule_kind, status, occasion_key, created_by, created_at, updated_at)
+       VALUES (?, 'announcement', 'Lato', 'x', ?, ?, 'now', 'active', 'summer_start', 'op', 1, 1)`,
+      'pc_demo', JSON.stringify({ center: 'Lato w {salon_name}!' }), JSON.stringify(['center', 'email']));
+
+    await phasePlatformCampaigns(ctx, Date.now());
+
+    const msgs = await all(ctx, 'SELECT * FROM platform_thread_messages');
+    expect(msgs.length).toBe(1); // in-app center delivered despite the flag being off
+    expect(msgs[0].body).toContain('Demo Studio');
+    const ledger = await all(ctx, 'SELECT * FROM platform_campaign_deliveries');
+    expect(ledger.find((d) => d.channel === 'center').status).toBe('sent');
+    expect(ledger.filter((d) => d.channel === 'email').length).toBe(0); // external skipped entirely
+  });
+
   it('resolves a per-locale template body when the campaign has an empty body + template_key', async () => {
     const ctx = makeCtx({ tenantId: 't_a' });
     ctx.messagingSendEnabled = true;

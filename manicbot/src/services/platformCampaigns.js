@@ -34,7 +34,7 @@ import {
 import { buildCampaignVars } from './platformCampaignVars.js';
 import { deliverEmail } from './platformCampaignEmail.js';
 import { getPromoForCampaign } from '../billing/promoCodes.js';
-import { isSendPaused } from './platformSettings.js';
+import { isSendPaused, getAnnounceOptInTenants } from './platformSettings.js';
 
 const NOT_DUE = Object.freeze({ due: false, occurrenceKey: null });
 
@@ -234,6 +234,8 @@ export function isCampaignDueForTenant(campaign, tenant, now) {
 // ─── Dispatch (impure: DB reads/writes + channel delivery) ──────────────────
 
 const CHANNEL_VALUES = ['center', 'bell', 'telegram', 'email'];
+// In-app channels (dashboard message + notification bell) — not external egress.
+const IN_APP_CHANNELS = new Set(['center', 'bell']);
 
 function parseChannels(channelsJson) {
   try {
@@ -550,7 +552,9 @@ export async function phasePlatformCampaigns(ctx, nowMs) {
 
   const tenant = await loadTenantRow(ctx);
   if (!tenant) return;
-  if (tenant.is_test === 1) return; // never deliver platform campaigns to test tenants
+  // Test tenants are skipped — EXCEPT showcase/demo tenants explicitly opted in via
+  // platform_settings.announce_optin_tenants, which receive IN-APP channels only.
+  if (tenant.is_test === 1 && !(await getAnnounceOptInTenants(ctx)).has(tenant.id)) return;
 
   let scanned;
   try {
@@ -573,6 +577,9 @@ export async function phasePlatformCampaigns(ctx, nowMs) {
   // Operator secondary send-pause (D1). Effective seasonal egress requires BOTH
   // the env master flag AND not-paused — pausing can only restrict, never enable.
   const sendPaused = await isSendPaused(ctx);
+  // Reaching here with is_test === 1 means the tenant is an opted-in showcase tenant
+  // (in-app channels only, send-flag bypassed for those — never external egress).
+  const optedInShowcase = tenant.is_test === 1;
   const now = { ...warsawNow(), epochSec: nowSec };
   const recipients = await resolveTenantRecipients(ctx);
 
@@ -604,10 +611,14 @@ export async function phasePlatformCampaigns(ctx, nowMs) {
         const bodies = await buildBodies(ctx, c, tenant, r, occurrenceKey);
         if (!bodies) continue;
         for (const ch of channels) {
+          // Opted-in showcase tenants receive IN-APP channels only — never external.
+          if (optedInShowcase && !IN_APP_CHANNELS.has(ch)) continue;
           const claimId = await tryClaimDelivery(ctx, c.id, occurrenceKey, r.id, ch, ctx.tenantId, nowSec);
           if (!claimId) continue;
           delivered = true;
-          if (seasonalGated) {
+          // In-app delivery to an opted-in showcase tenant is not external egress, so
+          // it bypasses the send-flag gate; every other case stays gated as before.
+          if (seasonalGated && !optedInShowcase) {
             await markDelivery(ctx, claimId, 'skipped_flag', 'messaging_send_disabled', nowSec);
             continue;
           }

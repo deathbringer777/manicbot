@@ -22,3 +22,21 @@ export async function getPlatformSetting(ctx, key) {
 export async function isSendPaused(ctx) {
   return (await getPlatformSetting(ctx, 'messaging_send_paused')) === '1';
 }
+
+/**
+ * Tenant ids opted in to receive IN-APP platform announcements (center/bell)
+ * despite being is_test — showcase/demo tenants. JSON array in platform_settings
+ * key `announce_optin_tenants`. Default empty (no tenant affected). These tenants
+ * receive in-app channels only (never external) and bypass the send-flag for the
+ * in-app channels, so they can demo the feature without any external egress.
+ */
+export async function getAnnounceOptInTenants(ctx) {
+  const raw = await getPlatformSetting(ctx, 'announce_optin_tenants');
+  if (!raw) return new Set();
+  try {
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}

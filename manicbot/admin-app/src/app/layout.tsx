@@ -74,6 +74,13 @@ export const metadata: Metadata = {
     shortcut: "/manicbot-mark-ui.png?v=2",
     apple: "/manicbot-mark-ui.png?v=2",
   },
+  // iOS doesn't read the web manifest's display mode, so opt into standalone
+  // the Apple way too (pairs with app/manifest.ts for Android/Chrome).
+  appleWebApp: {
+    capable: true,
+    title: "ManicBot",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport: Viewport = {
@@ -83,6 +90,10 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  // `cover` lets the layout extend under the notch / home indicator so that
+  // env(safe-area-inset-*) resolves to real insets (used by .safe-area-pb and
+  // the Sheet footer) instead of 0. Pairs with the PWA standalone display.
+  viewportFit: "cover",
 };
 
 const geist = Geist({

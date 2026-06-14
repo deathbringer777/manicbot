@@ -47,7 +47,7 @@ export function ErrorStatsWidget() {
         </div>
         <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
       </div>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Total" value={total} tone="neutral" />
         <Stat label="Fatal" value={fatal} tone="red" />
         <Stat label="Error" value={error} tone="orange" />

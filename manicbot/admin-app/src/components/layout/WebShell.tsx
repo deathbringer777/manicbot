@@ -324,7 +324,7 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
                     <p className="text-[10px] text-[#9ca3af] dark:text-slate-500 truncate">{roleInfo.subtitle}</p>
                   </div>
                 </Link>
-                <button onClick={() => setSidebarOpen(false)} className="p-2 rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-white/5 text-[#6b7280] dark:text-slate-400 shrink-0">
+                <button onClick={() => setSidebarOpen(false)} aria-label="Close menu" className="tap-target p-2 rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-white/5 text-[#6b7280] dark:text-slate-400 shrink-0">
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -373,7 +373,8 @@ export function WebShell({ children, userEmail }: { children: React.ReactNode; u
           >
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-white/5 text-[#6b7280] dark:text-slate-400"
+              className="tap-target lg:hidden p-2 -ml-2 rounded-lg hover:bg-[#f3f4f6] dark:hover:bg-white/5 text-[#6b7280] dark:text-slate-400"
+              aria-label="Open menu"
             >
               <Menu className="h-5 w-5" />
             </button>

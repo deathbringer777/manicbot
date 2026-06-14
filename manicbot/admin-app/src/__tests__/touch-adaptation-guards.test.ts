@@ -47,3 +47,50 @@ describe("touch adaptation — overflow + viewport guards", () => {
     }
   });
 });
+
+describe("WS-0 foundation — globals.css base rules", () => {
+  const css = read("src/styles/globals.css");
+
+  it("kills iOS focus-zoom by flooring form controls at 16px on touch", () => {
+    // The rule lives inside the @media (hover: none) block (asserted above).
+    expect(css).toContain("font-size: 16px");
+  });
+
+  it("removes the grey tap-flash on interactive controls", () => {
+    expect(css).toContain("-webkit-tap-highlight-color: transparent");
+  });
+
+  it("drops the 300ms tap delay via touch-action: manipulation", () => {
+    expect(css).toContain("touch-action: manipulation");
+  });
+
+  it("contains overscroll so the page doesn't rubber-band behind modals", () => {
+    expect(css).toContain("overscroll-behavior-y: contain");
+  });
+});
+
+describe("WS-0 foundation — viewport + primitives", () => {
+  it("layout opts into viewport-fit=cover for safe-area insets", () => {
+    expect(read("src/app/layout.tsx")).toContain('viewportFit: "cover"');
+  });
+
+  it("ResponsiveTable provides a horizontal scroll wrapper", () => {
+    const src = read("src/components/ui/ResponsiveTable.tsx");
+    expect(src).toContain("overflow-x-auto");
+    expect(src).toContain("overscroll-x-contain");
+  });
+
+  it("Sheet is a mobile-bottom-sheet / desktop-centered overlay", () => {
+    const src = read("src/components/ui/Sheet.tsx");
+    expect(src).toContain("items-end");
+    expect(src).toContain("sm:items-center");
+  });
+
+  it("Sheet locks body scroll, traps focus, and pads the safe area", () => {
+    const src = read("src/components/ui/Sheet.tsx");
+    expect(src).toContain('document.body.style.overflow = "hidden"');
+    expect(src).toContain('e.key === "Escape"');
+    expect(src).toContain('e.key !== "Tab"');
+    expect(src).toContain("env(safe-area-inset-bottom)");
+  });
+});

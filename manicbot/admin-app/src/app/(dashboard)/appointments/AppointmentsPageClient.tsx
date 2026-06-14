@@ -36,7 +36,7 @@ import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { ManualBookingModal } from "~/components/dashboard/ManualBookingModal";
 import { TimeReservationDialog } from "~/components/dashboard/TimeReservationDialog";
 import { TimeOffDialog } from "~/components/dashboard/TimeOffDialog";
-import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
+import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode, useMobileInitialDayView } from "~/components/dashboards/CalendarViewSwitcher";
 
 type AptViewMode = CalendarViewMode;
 
@@ -87,6 +87,8 @@ export default function AppointmentsPageClient() {
   // match Google Calendar parity; the dropdown surface lets us drop the
   // 5-pill bar entirely and reclaim header width for the page title.
   const [aptViewMode, setAptViewMode] = useState<AptViewMode>(() => normalizeViewMode("week"));
+  // Phones land on single-day instead of the horizontally-scrolling week grid.
+  useMobileInitialDayView(setAptViewMode);
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   // 2026-05-26: single-select dropdown (was Set<StatusKey>) to match the

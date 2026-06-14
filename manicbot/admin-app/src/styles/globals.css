@@ -118,6 +118,23 @@
     background-color: var(--background);
     color: var(--foreground);
     @apply antialiased min-h-screen selection:bg-brand-500/30;
+    /* Native-app feel: stop the whole page from rubber-band / pull-to-refresh
+       chaining when an inner scroller or a modal is scrolled. */
+    overscroll-behavior-y: contain;
+  }
+
+  /* Native-app feel on tappable controls:
+     - kill the grey iOS/Android tap-flash (we provide our own :active dim on
+       touch — see the @media (hover:none) block in the utilities layer);
+     - `touch-action: manipulation` drops the legacy 300ms double-tap-zoom delay.
+     Inputs are deliberately excluded from `manipulation` and the calendar grid
+     sets its own `touch-action` inline, so the drag hooks keep full control. */
+  a, button, [role="button"], label, summary {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
@@ -258,6 +275,25 @@ body.driver-tour-active .overflow-hidden {
   button:active,
   [role="button"]:active {
     opacity: 0.85;
+  }
+
+  /* (4) iOS focus-zoom kill. Mobile Safari auto-zooms when a focused form
+     control's font-size is < 16px, then zooms back out on blur — jarring on a
+     phone. Floor every control at 16px on touch only; desktop keeps the compact
+     13–14px sizing the design uses. */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* (5) Opt-in 44px tap target for raw icon buttons that don't flow through the
+     <Button> primitive (close buttons, nav toggles, bottom-nav items). Applied
+     by adding `tap-target`; only enforces on touch so desktop keeps the compact
+     footprint. */
+  .tap-target {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
   }
 }
 

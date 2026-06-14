@@ -44,7 +44,7 @@ module.exports = {
     {
       name: 'lead-scout',
       script: `${BASE}/crons/lead-scout/index.js`,
-      cron_restart: '*/30 * * * *',   // every 30 min slot rotation (2× hourly)
+      cron_restart: '*/15 * * * *',   // every 15 min slot rotation (4× hourly)
       autorestart: false,
       watch: false,
       env: {

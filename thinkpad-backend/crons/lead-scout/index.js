@@ -3,9 +3,14 @@
 /**
  * lead-scout/index.js — Warsaw nail salon lead scraper.
  *
- * Runs every hour via PM2 cron_restart.
+ * Runs every 15 minutes via PM2 cron_restart.
  * Each run: picks the next (district, query, source) slot, scrapes, appends
  * new leads to CSV. Goal: 5000 unique leads with at least one contact.
+ *
+ * Sources: google_maps + booksy (salons) and olx + google + bing (web search,
+ * also surfaces solo masters). Google search needs GOOGLE_CSE_KEY/CX in .env to
+ * yield results; without them it is a graceful no-op. duckduckgo was retired
+ * (low-quality, stale results).
  *
  * State:  ~/manicbot-backend/marketing/research/lead-scout-state.json
  * Output: ~/manicbot-backend/marketing/research/leads.csv
@@ -32,7 +37,7 @@ const RESEARCH_DIR = path.join(BASE_DIR, 'marketing', 'research');
 const STATE_FILE = path.join(RESEARCH_DIR, 'lead-scout-state.json');
 
 const LEAD_TARGET = 5000;
-// 8-minute hard timeout — a hung scraper must not block the hourly slot
+// 8-minute hard timeout — a hung scraper must not block the 15-minute slot
 const HARD_TIMEOUT_MS = 8 * 60 * 1000;
 
 // ─── Corpus ───────────────────────────────────────────────────────────────────
@@ -44,17 +49,30 @@ const DISTRICTS = [
   'Bemowo', 'Targówek', 'Białołęka', 'Włochy',
 ];
 
-// 5 query templates per district (varied to hit different business types)
+// Query templates per district. Mix of salon-oriented terms (Google Maps /
+// Booksy) and service/solo-master terms (OLX / web search) so both segments —
+// established salons and individual masters — are covered.
 const QUERY_TEMPLATES = [
   (d) => `salon manicure ${d} Warszawa`,
   (d) => `salon paznokci ${d} Warszawa`,
+  (d) => `studio paznokci ${d} Warszawa`,
   (d) => `manicure pedicure ${d} Warszawa`,
-  (d) => `gabinet urody ${d} Warszawa`,
-  (d) => `prywatna kosmetyczka ${d} Warszawa`,
+  (d) => `manicure hybrydowy ${d} Warszawa`,
+  (d) => `paznokcie żelowe ${d} Warszawa`,
+  (d) => `przedłużanie paznokci ${d} Warszawa`,
+  (d) => `stylizacja paznokci ${d} Warszawa`,
+  (d) => `lakier hybrydowy ${d} Warszawa`,
+  (d) => `pedicure ${d} Warszawa`,
+  (d) => `gabinet kosmetyczny ${d} Warszawa`,
+  (d) => `kosmetyczka ${d} Warszawa`,
+  (d) => `nail art ${d} Warszawa`,
+  (d) => `paznokcie ${d} Warszawa`,
+  (d) => `manicure ${d} Warszawa`,
 ];
 
-// 3 sources in rotation order (sourceIndex % 3)
-const SOURCES = ['google_maps', 'booksy', 'duckduckgo'];
+// Sources in rotation order (sourceIndex % SOURCES.length). google_maps + booksy
+// target salons; olx + google + bing add solo masters and web presence.
+const SOURCES = ['google_maps', 'booksy', 'olx', 'google', 'bing'];
 
 const CORPUS = {
   districts: DISTRICTS.length,
@@ -93,17 +111,24 @@ function saveState(state) {
 
 const googleMaps = require('./scrapers/google-maps');
 const booksy = require('./scrapers/booksy');
-const ddg = require('./scrapers/ddg');
+const olx = require('./scrapers/olx');
+const google = require('./scrapers/google');
+const bing = require('./scrapers/bing');
 
 async function runScraper(sourceName, query, district, state) {
   switch (sourceName) {
     case 'google_maps':
       return googleMaps.scrape(query, district);
     case 'booksy':
-      // Page hint derived from sourceIndex so hourly runs don't repeat page 1.
-      return booksy.scrape(query, district, { pageHint: Math.floor(state.sourceIndex / 3) + 1 });
-    case 'duckduckgo':
-      return ddg.scrape(query, district);
+      // Page hint walks Booksy pages across full source cycles so runs don't
+      // repeat page 1 (one increment per complete pass over SOURCES).
+      return booksy.scrape(query, district, { pageHint: Math.floor(state.sourceIndex / CORPUS.sources) + 1 });
+    case 'olx':
+      return olx.scrape(query, district);
+    case 'google':
+      return google.scrape(query, district);
+    case 'bing':
+      return bing.scrape(query, district);
     default:
       return [];
   }

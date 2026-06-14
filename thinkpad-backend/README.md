@@ -12,12 +12,28 @@ runtime credentials stay in `~/manicbot-backend/.env` on the server
 | `health-check` | every 30 min | system stats + Worker `/api/health` probe; TG alert on FAIL |
 | `nightly` | 01:00 + 13:00 | tenant roster → `marketing/clients.csv` + full D1 SQL backup (30 days kept) |
 | `blog-autopilot` | 02:00 + 14:00 | generates a long-form (~2000 words/language) blog draft via `claude -p` (i18n: write RU once, localize ua/en/pl) and sends a Telegram preview with **Читать / Publish / Revise / Skip** buttons; skips generation while a draft awaits approval |
-| `lead-scout` | every 30 min | scrapes one (district, query, source) slot of Warsaw nail salons |
+| `lead-scout` | every 15 min | scrapes one (district, query, source) slot of Warsaw nail salons/masters |
 | `booksy-full` | 03:30 + 15:30 | full Booksy catalog crawl via JSON-LD with yield-anomaly alerts |
 | `gsc-monitor` | 08:00 daily | Google Search Console 7d-over-7d trend + sitemap status + index coverage of priority URLs → TG; no-ops until `GSC_SERVICE_ACCOUNT_JSON` is set |
 
 Blog publishing is button-driven: the tg-bot callback handler shells out to
 `crons/blog/publish.js --slug <slug> --action publish|skip|revise`.
+
+## Lead sources (`crons/lead-scout/`)
+
+The rotation cycles 14 districts × 15 query templates × 5 sources:
+
+| Source | How | Notes |
+| --- | --- | --- |
+| `google_maps` | Playwright (headless Chrome) | richest — name + phone + website |
+| `booksy` | HTTP + JSON-LD | salons; phones behind login |
+| `olx` | HTTP + `__PRERENDERED_STATE__` | solo masters; services-only, phone regex'd from description |
+| `google` | Custom Search JSON API | **needs `GOOGLE_CSE_KEY` + `GOOGLE_CSE_CX`** in `.env`; graceful no-op without them |
+| `bing` | best-effort HTML scrape | often JS-gated → 0 results; harmless |
+
+Dedup (`dedup.js`, shared with `scripts/clean-leads.js`) collapses leads that
+share any of: phone / website / instagram / booksy / maps / olx url. One-off
+maintenance: `node scripts/clean-leads.js [--drops quality-drop.json]`.
 
 ## LLM policy
 

@@ -1,51 +1,38 @@
 /**
  * storage.js — Crash-safe CSV append + dedup engine.
  *
- * Dedup keys (in priority order):
- *   1. Normalized phone (9 PL digits, strip +48/48/spaces/dashes)
- *   2. Booksy profile URL (normalized hostname+path)
- *   3. Google Maps place URL (normalized)
+ * Dedup is delegated to dedup.js (shared with the offline base cleaner) so the
+ * live scraper and the cleaner agree on what "the same business" means. Strong
+ * keys: normalized phone, any url (website/booksy/maps/olx), instagram handle.
  *
- * CSV is appended one row at a time (no buffering) — survives mid-run crashes.
+ * The CSV is appended one row at a time (no buffering) — survives mid-run
+ * crashes. Row<->lead mapping is header-driven: init() reads whatever header is
+ * on disk, so rows written under the previous 14-column schema still map
+ * correctly after olx_url was appended as the trailing column.
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const dedup = require('./dedup');
 
 const BASE_DIR = path.join(os.homedir(), 'manicbot-backend');
 const RESEARCH_DIR = path.join(BASE_DIR, 'marketing', 'research');
 const LEADS_FILE = path.join(RESEARCH_DIR, 'leads.csv');
 
-const CSV_HEADER = 'id,source,name,phone,email,address,district,website,instagram_url,booksy_url,maps_url,rating,reviews_count,added_at\n';
+// olx_url is appended LAST so the pre-existing 14-column file migrates with zero
+// index shift (old rows simply lack the trailing column).
+const CSV_COLUMNS = [
+  'id', 'source', 'name', 'phone', 'email', 'address', 'district',
+  'website', 'instagram_url', 'booksy_url', 'maps_url', 'rating',
+  'reviews_count', 'added_at', 'olx_url',
+];
+const CSV_HEADER = CSV_COLUMNS.join(',') + '\n';
 
-let phoneSet = new Set();
-let urlSet = new Set();
+const deduper = dedup.createDeduper();
 let totalLeads = 0;
 
-// ─── Normalization ────────────────────────────────────────────────────────────
-
-function normalizePhone(p) {
-  if (!p) return null;
-  // Remove +48 / 48 prefix, spaces, dashes, parens, dots → 9 Polish digits
-  const digits = String(p)
-    .replace(/[\s\-\(\)\.\+]/g, '')
-    .replace(/^48/, '')
-    .replace(/\D/g, '');
-  return digits.length >= 7 ? digits.slice(-9) : null;
-}
-
-function normalizeUrl(u) {
-  if (!u) return null;
-  try {
-    const url = new URL(u);
-    return (url.hostname + url.pathname).replace(/\/+$/, '').toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-// ─── CSV parsing (simple single-row parser, handles double-quote escaping) ────
+// ─── CSV parsing (single-row parser, handles double-quote escaping) ───────────
 
 function parseCsvRow(line) {
   const result = [];
@@ -71,7 +58,35 @@ function parseCsvRow(line) {
   return result;
 }
 
-// ─── Init: build dedup sets from existing file ────────────────────────────────
+/** Map column name → its index in the on-disk header (robust to schema drift). */
+function buildIndexMap(headerLine) {
+  const map = {};
+  parseCsvRow(headerLine).forEach((name, idx) => { map[name.trim()] = idx; });
+  return map;
+}
+
+/** Build a lead object from a parsed row using the header index map. */
+function rowToLead(cols, indexMap) {
+  const lead = {};
+  for (const col of CSV_COLUMNS) {
+    const idx = indexMap[col];
+    lead[col] = idx === undefined ? '' : (cols[idx] ?? '');
+  }
+  return lead;
+}
+
+function esc(v) { return '"' + String(v ?? '').replace(/"/g, '""') + '"'; }
+
+/** Serialize a lead into a CSV row string in CSV_COLUMNS order. */
+function leadToRow(lead, id) {
+  return CSV_COLUMNS.map((col) => {
+    if (col === 'id') return esc(id);
+    if (col === 'added_at') return esc(lead.added_at || new Date().toISOString());
+    return esc(lead[col]);
+  }).join(',');
+}
+
+// ─── Init: build dedup state from existing file ───────────────────────────────
 
 function init() {
   fs.mkdirSync(RESEARCH_DIR, { recursive: true });
@@ -82,74 +97,47 @@ function init() {
     return 0;
   }
 
-  const lines = fs.readFileSync(LEADS_FILE, 'utf8').split('\n').slice(1);
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const cols = parseCsvRow(line);
-    // Columns: id(0) source(1) name(2) phone(3) email(4) address(5) district(6)
-    //          website(7) instagram_url(8) booksy_url(9) maps_url(10) rating(11) reviews_count(12) added_at(13)
-    const phone = cols[3];
-    const booksyUrl = cols[9];
-    const mapsUrl = cols[10];
+  const lines = fs.readFileSync(LEADS_FILE, 'utf8').split('\n');
+  const header = lines[0] || CSV_COLUMNS.join(',');
+  const indexMap = buildIndexMap(header);
 
-    if (phone) { const n = normalizePhone(phone); if (n) phoneSet.add(n); }
-    if (booksyUrl) { const n = normalizeUrl(booksyUrl); if (n) urlSet.add(n); }
-    if (mapsUrl) { const n = normalizeUrl(mapsUrl); if (n) urlSet.add(n); }
+  totalLeads = 0;
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) continue;
+    const lead = rowToLead(parseCsvRow(line), indexMap);
+    deduper.add(lead);
     totalLeads++;
   }
   return totalLeads;
 }
 
-// ─── Dedup check ──────────────────────────────────────────────────────────────
+// ─── Dedup / contact gates ────────────────────────────────────────────────────
 
-function isDuplicate(lead) {
-  if (lead.phone) { const n = normalizePhone(lead.phone); if (n && phoneSet.has(n)) return true; }
-  if (lead.booksy_url) { const n = normalizeUrl(lead.booksy_url); if (n && urlSet.has(n)) return true; }
-  if (lead.maps_url) { const n = normalizeUrl(lead.maps_url); if (n && urlSet.has(n)) return true; }
-  return false;
-}
+function isDuplicate(lead) { return deduper.isDuplicate(lead); }
 
 function hasContact(lead) {
-  return !!(lead.phone || lead.email || lead.website || lead.booksy_url || lead.instagram_url);
+  return !!(lead.phone || lead.email || lead.website || lead.booksy_url || lead.instagram_url || lead.olx_url);
 }
 
 // ─── Append ───────────────────────────────────────────────────────────────────
-
-function esc(v) { return '"' + String(v ?? '').replace(/"/g, '""') + '"'; }
 
 function appendLead(lead) {
   if (!hasContact(lead)) return false;
   if (isDuplicate(lead)) return false;
 
   totalLeads++;
+  // Register keys before writing so a crash mid-write doesn't replay this lead.
+  deduper.add(lead);
 
-  // Update dedup sets before writing (so a crash mid-write doesn't replay)
-  if (lead.phone) { const n = normalizePhone(lead.phone); if (n) phoneSet.add(n); }
-  if (lead.booksy_url) { const n = normalizeUrl(lead.booksy_url); if (n) urlSet.add(n); }
-  if (lead.maps_url) { const n = normalizeUrl(lead.maps_url); if (n) urlSet.add(n); }
-
-  const row = [
-    totalLeads,
-    lead.source ?? '',
-    lead.name ?? '',
-    lead.phone ?? '',
-    lead.email ?? '',
-    lead.address ?? '',
-    lead.district ?? '',
-    lead.website ?? '',
-    lead.instagram_url ?? '',
-    lead.booksy_url ?? '',
-    lead.maps_url ?? '',
-    lead.rating ?? '',
-    lead.reviews_count ?? '',
-    new Date().toISOString(),
-  ].map(esc).join(',');
-
-  fs.appendFileSync(LEADS_FILE, row + '\n');
+  fs.appendFileSync(LEADS_FILE, leadToRow(lead, totalLeads) + '\n');
   return true;
 }
 
 function getTotal() { return totalLeads; }
 function getLeadsFile() { return LEADS_FILE; }
 
-module.exports = { init, appendLead, isDuplicate, hasContact, getTotal, getLeadsFile };
+module.exports = {
+  init, appendLead, isDuplicate, hasContact, getTotal, getLeadsFile,
+  // Pure helpers (exported for tests + the offline cleaner)
+  CSV_COLUMNS, CSV_HEADER, parseCsvRow, buildIndexMap, rowToLead, leadToRow,
+};

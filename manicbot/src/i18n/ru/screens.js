@@ -23,6 +23,6 @@ export default {
   cat_title: '📸 <b>Каталог работ</b>\n\nВыбери категорию:',
   cat_cap: '{e} <b>{svc}</b>\n💵 {p} {c} · ⏱ {d} {min}\n\n📷 {i} / {total}',
   cat_book: '📝 Записаться на эту услугу',
-  cat_back: '◀️ К категориям',
+  cat_back: '◀️ Назад',
   cat_empty: '🖼 Фото пока нет',
 };

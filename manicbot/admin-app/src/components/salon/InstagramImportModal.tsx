@@ -172,8 +172,10 @@ export function InstagramImportModal({ tenantId, albumId, albumName, onClose, on
                           : "bg-black/0 hover:bg-black/10"
                       }`}
                     />
-                    {/* Checkbox badge */}
-                    <div className={`absolute top-1.5 right-1.5 rounded ${isChecked ? "text-white" : "text-white/70"}`}>
+                    {/* Checkbox badge — icons overlay the photo thumbnail */}
+                    <div className={isChecked
+                      ? "absolute top-1.5 right-1.5 rounded text-white"
+                      : "absolute top-1.5 right-1.5 rounded text-white/70"}>
                       {isChecked
                         ? <CheckSquare className="h-5 w-5 drop-shadow" />
                         : <Square className="h-5 w-5 drop-shadow" />}

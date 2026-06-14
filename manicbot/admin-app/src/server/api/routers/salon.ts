@@ -52,6 +52,7 @@ import { log } from "~/server/utils/logger";
 import { notifyWorker } from "~/server/utils/notifyWorker";
 import { parseServicesCsv, servicesToCsv } from "~/server/services/servicesCsv";
 import { writeAudit, ctxIp } from "~/server/security/audit";
+import { workerConfigOrThrow, callWorker } from "~/server/api/workerClient";
 import { addMasterToDefaultGroup } from "~/server/messenger/defaultStaffGroup";
 import { notifyWebUser } from "~/server/services/notifyWebUser";
 import { notifyOrCapture } from "~/server/services/notifyOrCapture";
@@ -1194,6 +1195,56 @@ export const salonRouter = createTRPCRouter({
         .set({ coverUrl: input.photos[0]?.url ?? null })
         .where(and(eq(photoAlbums.tenantId, input.tenantId), eq(photoAlbums.id, input.albumId)));
       return { ok: true, count: input.photos.length };
+    }),
+
+  // ── Instagram photo import ──────────────────────────────────────────────
+  // Fetches the tenant's Instagram media via the Worker (which holds the
+  // encrypted access token) and downloads selected photos into album_photos.
+  // Requires an active Instagram channel_config with instagram_business_basic
+  // scope. Users who connected before that scope was added will see
+  // missingScope=true and a reconnect prompt in the UI.
+
+  listInstagramMedia: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const { workerUrl, adminKey } = workerConfigOrThrow();
+      return callWorker<{
+        ok: true;
+        media: Array<{
+          id: string;
+          mediaType: string;
+          mediaUrl: string;
+          thumbnailUrl: string | null;
+          timestamp: string | null;
+          caption: string | null;
+          permalink: string | null;
+        }>;
+        hasMore: boolean;
+        missingScope: boolean;
+        notConnected?: boolean;
+        error?: string;
+      }>(workerUrl, adminKey, "/admin/instagram/media", { tenantId: input.tenantId });
+    }),
+
+  importInstagramPhotos: tenantOwnerProcedure
+    .input(z.object({
+      tenantId: z.string(),
+      albumId: z.string().min(1),
+      mediaIds: z.array(z.string().min(1)).min(1).max(50),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const { workerUrl, adminKey } = workerConfigOrThrow();
+      return callWorker<{
+        ok: true;
+        imported: number;
+        errors: Array<{ mediaId: string; error: string }>;
+      }>(workerUrl, adminKey, "/admin/instagram/import", {
+        tenantId: input.tenantId,
+        albumId: input.albumId,
+        mediaIds: input.mediaIds,
+      });
     }),
 
   // ── CSV export/import ───────────────────────────────────────────────────

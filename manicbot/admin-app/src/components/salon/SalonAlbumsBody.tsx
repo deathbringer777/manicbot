@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Save, Loader2, FolderPlus, Trash2, Pencil } from "lucide-react";
+import { Save, Loader2, FolderPlus, Trash2, Pencil, Instagram } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 import { toast } from "~/lib/toast";
 import { Btn } from "~/components/salon/SalonShared";
 import { SalonGalleryUploader } from "~/components/salon/SalonGalleryUploader";
+import { InstagramImportModal } from "~/components/salon/InstagramImportModal";
 
 /**
  * Body of the "Альбомы" chip — gallery folders. Lists albums, lets the owner
@@ -21,7 +22,14 @@ import { SalonGalleryUploader } from "~/components/salon/SalonGalleryUploader";
 interface AlbumPhoto { url: string; r2Key: string | null; caption: string | null }
 interface Album { id: string; name: string; coverUrl: string | null; sortOrder: number; photos: AlbumPhoto[] }
 
-function AlbumEditor({ tenantId, album, onChanged }: { tenantId: string; album: Album; onChanged: () => void }) {
+interface IgImportTarget { albumId: string; albumName: string }
+
+function AlbumEditor({ tenantId, album, onChanged, onImportFromIg }: {
+  tenantId: string;
+  album: Album;
+  onChanged: () => void;
+  onImportFromIg: (target: IgImportTarget) => void;
+}) {
   const { lang } = useLang();
   const [photos, setPhotos] = useState<string[]>(album.photos.map((p) => p.url));
 
@@ -43,6 +51,14 @@ function AlbumEditor({ tenantId, album, onChanged }: { tenantId: string; album: 
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-medium text-slate-900 dark:text-white">{album.name}</span>
         <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onImportFromIg({ albumId: album.id, albumName: album.name })}
+            className="rounded-lg p-1.5 text-pink-400 transition hover:text-pink-600"
+            title={t("salon.albums.importFromIg", lang)}
+          >
+            <Instagram className="h-4 w-4" />
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -87,6 +103,8 @@ export function SalonAlbumsBody({ tenantId }: { tenantId: string }) {
   const albumsQ = api.salon.listAlbums.useQuery({ tenantId });
   const refresh = () => { void utils.salon.listAlbums.invalidate(); };
 
+  const [igTarget, setIgTarget] = useState<IgImportTarget | null>(null);
+
   const create = api.salon.createAlbum.useMutation({
     onSuccess: refresh,
     onError: (e) => toast.error(t("common.saveError", lang), e.message),
@@ -115,9 +133,25 @@ export function SalonAlbumsBody({ tenantId }: { tenantId: string }) {
       ) : (
         <div className="space-y-3">
           {albums.map((a) => (
-            <AlbumEditor key={a.id} tenantId={tenantId} album={a} onChanged={refresh} />
+            <AlbumEditor
+              key={a.id}
+              tenantId={tenantId}
+              album={a}
+              onChanged={refresh}
+              onImportFromIg={setIgTarget}
+            />
           ))}
         </div>
+      )}
+
+      {igTarget && (
+        <InstagramImportModal
+          tenantId={tenantId}
+          albumId={igTarget.albumId}
+          albumName={igTarget.albumName}
+          onClose={() => setIgTarget(null)}
+          onImported={refresh}
+        />
       )}
     </div>
   );

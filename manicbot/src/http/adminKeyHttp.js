@@ -1747,6 +1747,54 @@ export async function tryAdminKeyRoutes(request, env, url) {
     }
   }
 
+  // ─── Instagram media import (tenant photo import from IG) ───────────────────
+  // POST /admin/instagram/media  — list tenant's IG posts (images only).
+  // POST /admin/instagram/import — download selected photos to R2 + album_photos.
+  // Both gated by ADMIN_KEY; called from admin-app tRPC via callWorker().
+
+  if (request.method === 'POST' && url.pathname === '/admin/instagram/media') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: 'invalid_json' }, { status: 400 }); }
+    const tenantId = typeof body?.tenantId === 'string' ? body.tenantId.trim() : null;
+    if (!tenantId) return Response.json({ error: 'tenantId required' }, { status: 400 });
+    try {
+      const { fetchInstagramMedia } = await import('../services/instagram-media.js');
+      const result = await fetchInstagramMedia(env, tenantId);
+      return Response.json({ ok: true, ...result });
+    } catch (e) {
+      log.error('admin.igMedia', e instanceof Error ? e : new Error(String(e?.message)));
+      return Response.json({ ok: false, error: e?.message || 'failed' }, { status: 500 });
+    }
+  }
+
+  if (request.method === 'POST' && url.pathname === '/admin/instagram/import') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return Response.json({ error: 'DB not bound' }, { status: 500 });
+    if (!env.ASSETS) return Response.json({ error: 'R2 not bound' }, { status: 500 });
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: 'invalid_json' }, { status: 400 }); }
+    const { tenantId, albumId, mediaIds } = body ?? {};
+    if (
+      typeof tenantId !== 'string' || !tenantId ||
+      typeof albumId !== 'string' || !albumId ||
+      !Array.isArray(mediaIds) || mediaIds.length === 0
+    ) {
+      return Response.json({ error: 'tenantId, albumId, and mediaIds[] required' }, { status: 400 });
+    }
+    const origin = new URL(request.url).origin;
+    try {
+      const { importInstagramPhotos } = await import('../services/instagram-media.js');
+      const result = await importInstagramPhotos(env, tenantId, albumId, mediaIds, origin);
+      return Response.json({ ok: true, ...result });
+    } catch (e) {
+      log.error('admin.igImport', e instanceof Error ? e : new Error(String(e?.message)));
+      const status = e?.message === 'album_not_found' ? 404 : 500;
+      return Response.json({ ok: false, error: e?.message || 'failed' }, { status });
+    }
+  }
+
   if (request.method === 'GET' && url.pathname === '/admin/marketing-status') {
     if (!isAdminKeyValid(url, env, request)) return forbidden();
     if (!env.DB) return new Response('DB not bound', { status: 500 });

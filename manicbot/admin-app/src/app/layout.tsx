@@ -83,6 +83,10 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  // `cover` lets the layout extend under the notch / home indicator so that
+  // env(safe-area-inset-*) resolves to real insets (used by .safe-area-pb and
+  // the Sheet footer) instead of 0. Pairs with the PWA standalone display.
+  viewportFit: "cover",
 };
 
 const geist = Geist({

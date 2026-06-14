@@ -1517,6 +1517,48 @@ export const salonRouter = createTRPCRouter({
     }),
 
   /**
+   * Read the pinned "featured service" shown under the web-chat welcome.
+   * Stored in `tenant_config` under `featured_service_id`. `'auto'` (the
+   * default) means the Worker auto-picks most-booked → first-with-photos via
+   * `resolveFeaturedServiceId` — which reads the same key.
+   */
+  getFeaturedService: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const row = await ctx.db.select().from(tenantConfig)
+        .where(and(eq(tenantConfig.tenantId, input.tenantId), eq(tenantConfig.key, "featured_service_id")))
+        .limit(1);
+      const raw = row[0]?.value;
+      let svcId = "auto";
+      if (raw != null) {
+        try {
+          const parsed = JSON.parse(raw);
+          svcId = typeof parsed === "string" && parsed ? parsed : "auto";
+        } catch {
+          svcId = String(raw) || "auto";
+        }
+      }
+      return { svcId };
+    }),
+
+  /**
+   * Pin (or clear) the featured service for the web-chat welcome card.
+   * `'auto'` clears the pin → the Worker auto-selects. Stored as a JSON string
+   * so the Worker's `getConfig` parses it back cleanly.
+   */
+  setFeaturedService: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), svcId: z.string().min(1).max(64) }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const value = JSON.stringify(input.svcId);
+      await ctx.db.insert(tenantConfig)
+        .values({ tenantId: input.tenantId, key: "featured_service_id", value })
+        .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
+      return { success: true };
+    }),
+
+  /**
    * Read the "send a Telegram review ask 24h after the visit" opt-in flag.
    * Stored in `tenant_config` under `post_visit_followup_tg_enabled`
    * (default OFF). The Worker's `phasePostVisitFollowup` reads the same key

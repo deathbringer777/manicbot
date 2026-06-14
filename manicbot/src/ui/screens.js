@@ -6,7 +6,7 @@ import { getLang } from '../services/chat.js';
 import { clearState } from '../services/state.js';
 import { getRole, isPlatformAdmin, getUser } from '../services/users.js';
 import { getApts } from '../services/appointments.js';
-import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl, getConfig } from '../services/services.js';
+import { loadAboutPhotos, loadAboutDesc, loadInstagramUrl, getConfig, resolveFeaturedServiceId } from '../services/services.js';
 import { mainKb, langKb, catListKb, catPhotoKb, aboutPhotoKb } from './keyboards.js';
 import { showAdminPanel, showMasterPanel } from './admin.js';
 import { showPlatformAdminPanel } from './sysadmin.js';
@@ -39,6 +39,17 @@ export async function showWelcome(ctx, cid, name) {
   }
   await send(ctx, cid, '\u200b', { reply_markup: { remove_keyboard: true } });
   await send(ctx, cid, fill(t(lg, welcomeKey), { s: salonName, n: nameForFill }), mainKb(lg, role, ctx));
+
+  // Web only: showcase a featured service/portfolio card right under the welcome
+  // so the empty first screen immediately shows real work. The featured service
+  // is the salon's manual pin \u2192 most-booked \u2192 first-with-photos (see
+  // resolveFeaturedServiceId). Best-effort \u2014 never let it block the welcome.
+  if (ctx?.channel?.type === 'web') {
+    try {
+      const svcId = await resolveFeaturedServiceId(ctx);
+      if (svcId) await showCatPhoto(ctx, cid, svcId, 0, null);
+    } catch { /* non-critical \u2014 welcome already delivered */ }
+  }
 }
 
 /**

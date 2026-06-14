@@ -1,22 +1,18 @@
 /**
- * Regression: an unregistered web visitor who picks a service from the catalog
- * ("Записаться на эту услугу" → `sv:<id>`) must NOT lose that service across the
- * name/phone registration gate.
+ * Booking registration gating at the service-pick (`sv:<id>`) step.
  *
- * The resume machinery already exists end-to-end:
- *   - startBooking(ctx, cid, from, bookingIntent) spreads { svcId } into REG state
- *     (src/ui/booking.js)
- *   - the REG_NAME handler preserves state in place (src/handlers/message.js)
- *   - finishPhone() sees flow==='book' && svcId and resumes via
- *     startBookingWithService() straight to date selection
+ * WEB (low-friction): an unregistered visitor must NOT be gated on registration
+ * up front — picking a service drops them straight onto date selection. Name +
+ * phone are collected later, at the confirmation step (see
+ * test/booking-defer-registration.test.js).
  *
- * The bug was in the CALLER: callback.js dispatched the `sv:` tap with
- * `startBooking(ctx, cid, cb.from)` — without the 4th `bookingIntent` argument —
- * so svcId was never stashed and the user was re-asked to choose a service after
- * registering. This test pins the caller contract.
+ * OTHER channels (Telegram / IG / WA): keep the up-front gate, threading the
+ * picked service into the registration flow so finishPhone() resumes straight to
+ * date selection instead of re-asking for a service. This pins the caller
+ * contract: startBooking() must receive the `{ svcId }` booking intent.
  *
  * The onCb preamble + sv: branch touch many collaborators; we mock them so the
- * handler runs hermetically and we can spy the exact startBooking() call.
+ * handler runs hermetically and we can spy the exact calls.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CB } from '../src/config.js';
@@ -65,15 +61,18 @@ vi.mock('../src/ui/booking.js', () => ({
   showCancelAllConfirm: vi.fn(async () => {}),
   showMasterPick: vi.fn(async () => {}),
   enterBookingAdjustState: vi.fn(async () => {}),
+  deferBookingRegistration: vi.fn(async () => {}),
 }));
 
 import { onCb } from '../src/handlers/callback.js';
+import { setState } from '../src/services/state.js';
 import { startBooking, startBookingWithService } from '../src/ui/booking.js';
+import { STEP } from '../src/config.js';
 
-function makeCtx() {
+function makeCtx(channelType = 'web') {
   return {
     tenantId: 't1',
-    channel: { type: 'web' },
+    channel: { type: channelType },
     env: {},
     tenant: { billingStatus: 'active', plan: 'pro' },
     svc: [{ id: 'classic', e: '💅', dur: 60, price: 80, active: true }],
@@ -90,21 +89,29 @@ function makeCb(data, cid = -12345) {
   };
 }
 
-describe('booking resume after registration (web sv: gate)', () => {
+describe('booking registration gate at service pick', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('passes { svcId } into startBooking when an unregistered user picks a service', async () => {
-    const ctx = makeCtx();
+  it('WEB: unregistered visitor goes straight to date selection (no up-front reg gate)', async () => {
+    const ctx = makeCtx('web');
+    await onCb(ctx, makeCb(CB.SERVICE + 'classic'));
+
+    // No registration gate — falls through to date selection.
+    expect(startBooking).not.toHaveBeenCalled();
+    const dateCall = setState.mock.calls.find(c => c[2]?.step === STEP.DATE);
+    expect(dateCall).toBeTruthy();
+    expect(dateCall[2]).toMatchObject({ step: STEP.DATE, svcId: 'classic' });
+  });
+
+  it('NON-WEB: unregistered visitor is gated up front with { svcId } threaded', async () => {
+    const ctx = makeCtx('instagram');
     await onCb(ctx, makeCb(CB.SERVICE + 'classic'));
 
     expect(startBooking).toHaveBeenCalledTimes(1);
     const args = startBooking.mock.calls[0];
-    // args = (ctx, cid, from, bookingIntent)
     expect(args[1]).toBe(-12345);
     expect(args[2]).toMatchObject({ id: 999 });
-    expect(args[3]).toEqual({ svcId: 'classic' }); // ← the fix: intent must be threaded
-
-    // Must go through the registration gate, not jump straight to date selection.
+    expect(args[3]).toEqual({ svcId: 'classic' });
     expect(startBookingWithService).not.toHaveBeenCalled();
   });
 });

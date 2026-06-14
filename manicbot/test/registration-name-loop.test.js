@@ -9,10 +9,28 @@
  * the phone prompt never ships a phantom Telegram reply-keyboard off-Telegram.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { hasRealName, regPhonePrompt } from '../src/utils/helpers.js';
+import { hasRealName, regPhonePrompt, isLikelyRealName } from '../src/utils/helpers.js';
 import { STEP } from '../src/config.js';
 
 // ── Pure helpers ────────────────────────────────────────────────────────────
+describe('isLikelyRealName', () => {
+  it('accepts plausible names (incl. multi-word and non-Latin scripts)', () => {
+    for (const n of ['Анна', 'Мария Иванова', 'Olga', 'Anna-Maria', 'Łukasz', "О'Брайен", 'Jean Pierre', 'Ия']) {
+      expect(isLikelyRealName(n)).toBe(true);
+    }
+  });
+  it('rejects objections / questions typed instead of a name', () => {
+    for (const n of ['а зачем тебе', 'зачем', 'почему', 'что', 'нет', 'why', 'po co ci to', 'nie podam', 'не дам']) {
+      expect(isLikelyRealName(n)).toBe(false);
+    }
+  });
+  it('rejects junk: digits-only, punctuation, too few letters, too many words', () => {
+    for (const n of ['123', '???', 'a', '!!!', 'one two three four five']) {
+      expect(isLikelyRealName(n)).toBe(false);
+    }
+  });
+});
+
 describe('hasRealName', () => {
   it('true only when a non-empty first/last name is present', () => {
     expect(hasRealName({ first_name: 'Аня' })).toBe(true);
@@ -89,5 +107,15 @@ describe('startBooking — Instagram visitor without first_name', () => {
     await startBooking(ctx, 42, { id: 42, first_name: 'Аня' });
 
     expect(setState.mock.calls[0][2]).toMatchObject({ step: 'rc', tgName: 'Аня' });
+  });
+
+  it('WEB visitor is NOT gated up front — goes straight to service choice', async () => {
+    const ctx = { tenantId: 't1', channel: { type: 'web' }, env: {}, svc: [], svcIds: new Set() };
+    await startBooking(ctx, 7001, { id: 7001 /* anonymous web */ });
+
+    // No registration state is set; the visitor is shown the service picker.
+    expect(setState).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][2]).not.toMatch(/Введи своё имя/);
   });
 });

@@ -4,6 +4,7 @@ export default {
   reg_change: '✏️ Zmień imię',
   reg_enter_name: '✏️ Podaj swoje imię:',
   reg_name_err: '❌ Podaj poprawne imię (2-50 znaków):',
+  reg_name_invalid: '🙂 To chyba nie imię. Napisz proszę, jak masz na imię — np. Anna:',
   reg_phone: 'Świetnie, <b>{n}</b>! 😊\n\n📱 Podaj numer telefonu lub naciśnij przycisk:\n\n<i>Prosimy sprawdzić poprawność numeru</i>',
   // Channels without a Telegram reply-keyboard (web/Instagram/WhatsApp): no button to press.
   reg_phone_web: 'Świetnie, <b>{n}</b>! 😊\n\n📱 Wpisz numer telefonu w wiadomości (np. +48123456789):\n\n<i>Prosimy sprawdzić poprawność numeru</i>',

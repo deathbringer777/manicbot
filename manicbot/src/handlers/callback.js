@@ -16,7 +16,7 @@ import { notifyAptStaff, notifyAptStaffAutoConfirmed, sendAptConfirmedToClient, 
 import { mainKb, langKb, svcKb, calKb, timeKb } from '../ui/keyboards.js';
 import { showWelcome, showHomeByRole, showPrices, showContacts, showCatalog, showCatPhoto, showAbout, showMyApts, showLangPick, showReviews } from '../ui/screens.js';
 import { showAdminPanel, showMasterPanel, showAdminApts, showAdminAllApts, showMasterAllApts, showMastersList, showClientsList, showServicesList, showServiceEdit, showServicePhotos, showAboutSettings, showAboutPhotos, showAboutDescEdit, showAboutInstagramEdit, showAdminSettings, showTenantSupportList, showMetaChannelsGuide } from '../ui/admin.js';
-import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick, enterBookingAdjustState } from '../ui/booking.js';
+import { startBooking, startBookingWithService, showCancelAllConfirm, showMasterPick, enterBookingAdjustState, deferBookingRegistration } from '../ui/booking.js';
 import { showBillingMenu, showInactiveMessage } from '../ui/billing.js';
 import { createCheckoutSession, createPortalSession } from '../billing/stripe.js';
 import { getTenant } from '../tenant/storage.js';
@@ -1355,10 +1355,11 @@ export async function onCb(ctx, cb) {
     if (!ctx.svcIds.has(sid)) return;
     const s = ctx.svc.find(x => x.id === sid);
     const user = await getUser(ctx, cid);
-    if (!isRegComplete(user)) {
-      // Thread the picked service into the registration gate so finishPhone()
-      // can resume straight to date selection instead of re-asking for a
-      // service after the user registers. See test/booking-resume-after-reg.
+    if (!isRegComplete(user) && ctx.channel?.type !== 'web') {
+      // Telegram / IG / WA: gate registration up front, threading the picked
+      // service so finishPhone() resumes straight to date selection instead of
+      // re-asking for a service. See test/booking-resume-after-reg.
+      // Web defers registration to the confirmation step → fall through to date.
       return startBooking(ctx, cid, cb.from, { svcId: sid });
     }
     const st0 = await getState(ctx, cid);
@@ -1439,11 +1440,17 @@ export async function onCb(ctx, cb) {
     if (!st.svcId || !st.date || !ctx.svcIds.has(st.svcId) || !isValidDate(st.date)) {
       return send(ctx, cid, t(lg, 'book_err'), svcKb(ctx, lg));
     }
+    const user = await getUser(ctx, cid);
+    // Web low-friction: the slot is now chosen — collect name + phone here
+    // (deferred), then finishPhone() resumes straight to the confirm card.
+    // Other channels are already registered by this point (gated up front).
+    if (ctx.channel?.type === 'web' && !isRegComplete(user)) {
+      return deferBookingRegistration(ctx, cid, lg, { svcId: st.svcId, date: st.date, time, masterId: st.masterId ?? null }, cb.from);
+    }
     st.step = STEP.CONFIRM;
     st.time = time;
     await setState(ctx, cid, st);
     const s = ctx.svc.find(x => x.id === st.svcId);
-    const user = await getUser(ctx, cid);
     const confLines = isCorrectionSvc(st.svcId)
       ? [fill(t(lg, 'confirm_correction'), { svc: svcName(ctx, lg, st.svcId), dt: fmtDT(lg, st.date, time), name: escHtml(user?.name || '—'), phone: escHtml(user?.phone || '—') })]
       : [t(lg, 'confirm_title'), '', svcName(ctx, lg, st.svcId), `📅 ${fmtDT(lg, st.date, time)}`, `⏱ ${s.dur} ${t(lg, 'min')}`, `💵 ${s.price} ${t(lg, 'cur')}`, '', `👤 ${escHtml(user?.name || '—')}`, `📱 ${escHtml(user?.phone || '—')}`];

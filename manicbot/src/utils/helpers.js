@@ -33,6 +33,44 @@ export function hasRealName(from) {
   return Boolean(first || last);
 }
 
+// Objection / question fragments people type instead of a name. Kept small and
+// substring-matched so e.g. "а зачем тебе" → contains "зачем" → rejected.
+const NAME_OBJECTION_SUBSTR = [
+  'зачем', 'почему', 'не надо', 'не буду', 'не дам', 'отстань', 'не скажу',
+  'навіщо', 'чому', 'не буду',
+  'po co', 'dlaczego', 'czemu', 'nie podam', 'nie powiem',
+  'why', 'what for', "won't", 'none of',
+];
+// Whole-word non-names (exact match after lowercasing/trimming).
+const NAME_OBJECTION_EXACT = new Set([
+  'нет', 'что', 'неа', 'ні', 'що', 'ні', 'no', 'nope', 'none', 'nie', 'nic', 'ok', 'ок', 'da', 'нn',
+]);
+
+/**
+ * Heuristic guard for the "enter your name" step: is `text` plausibly a person's
+ * name rather than an objection / question / junk (e.g. "а зачем тебе", "что",
+ * "нет", "why")? Deliberately conservative — biased to ACCEPT so an unusual real
+ * name is never rejected; only clear non-names are blocked. Length (2–50) is
+ * validated by the caller; this adds the semantic check.
+ * @param {string} text already-trimmed candidate
+ * @returns {boolean}
+ */
+export function isLikelyRealName(text) {
+  const s = String(text ?? '').normalize('NFKC').trim();
+  if (!s) return false;
+  // A name carries at least two letters (any script).
+  const letters = s.match(/\p{L}/gu);
+  if (!letters || letters.length < 2) return false;
+  // Sentence / question punctuation never belongs in a name.
+  if (/[?!¿¡…]/u.test(s)) return false;
+  // Names are short — at most three whitespace-separated tokens.
+  if (s.split(/\s+/).filter(Boolean).length > 3) return false;
+  const lower = s.toLowerCase();
+  if (NAME_OBJECTION_EXACT.has(lower)) return false;
+  if (NAME_OBJECTION_SUBSTR.some(w => lower.includes(w))) return false;
+  return true;
+}
+
 /**
  * Build the registration phone-step prompt for the current channel.
  *

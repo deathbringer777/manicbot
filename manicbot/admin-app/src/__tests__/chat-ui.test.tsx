@@ -72,7 +72,8 @@ describe("PhotoCarousel", () => {
   it("renders one slide per photo plus one dot per photo", () => {
     const { container } = render(<PhotoCarousel photos={photos} brandColor="#EC4899" />);
     expect(container.querySelectorAll("img")).toHaveLength(3);
-    expect(container.querySelectorAll("button")).toHaveLength(3); // dots
+    // Dots are labelled "Фото N"; desktop hover nav arrows are separate buttons.
+    expect(container.querySelectorAll('button[aria-label^="Фото"]')).toHaveLength(3);
   });
 
   it("drops a broken image (dead URL never shows a torn icon)", () => {

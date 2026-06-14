@@ -462,7 +462,10 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
             </p>
           )}
 
-          <div className="flex gap-3 pt-2">
+          {/* Sticky action bar on phones so the submit button is never trapped
+              under the on-screen keyboard / below the fold; reverts to the
+              original inline `pt-2` row on desktop (sm:). */}
+          <div className="sticky bottom-0 -mx-4 -mb-4 flex gap-3 border-t border-slate-100 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur dark:border-white/10 dark:bg-slate-900/95 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0 sm:pt-2 sm:backdrop-blur-none">
             <button
               type="button"
               onClick={onClose}

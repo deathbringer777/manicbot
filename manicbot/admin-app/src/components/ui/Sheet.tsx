@@ -121,7 +121,7 @@ export function Sheet({
               type="button"
               onClick={onClose}
               aria-label="close"
-              className="-mr-1 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/[0.05]"
+              className="tap-target -mr-1 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/[0.05]"
             >
               <X className="h-5 w-5" />
             </button>

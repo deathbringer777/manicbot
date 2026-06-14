@@ -286,6 +286,15 @@ body.driver-tour-active .overflow-hidden {
   textarea {
     font-size: 16px;
   }
+
+  /* (5) Opt-in 44px tap target for raw icon buttons that don't flow through the
+     <Button> primitive (close buttons, nav toggles, bottom-nav items). Applied
+     by adding `tap-target`; only enforces on touch so desktop keeps the compact
+     footprint. */
+  .tap-target {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────

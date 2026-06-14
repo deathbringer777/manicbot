@@ -2,7 +2,7 @@
  * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially useful
  * for Docker builds.
  */
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import "./src/env.js";
 import { setupDevPlatform } from "@cloudflare/next-on-pages/next-dev";
@@ -25,6 +25,14 @@ const config = {
   // the *main* checkout's content rendered, not the local worktree edits.
   turbopack: {
     root: __dirname,
+    // Turbopack doesn't auto-apply tsconfig paths that escape `root`.
+    // The @plugins/* alias points to ../plugins/ (outside admin-app/), so
+    // we declare it explicitly here. Keep in sync with tsconfig.json paths.
+    resolveAlias: {
+      "@plugins/index": resolve(__dirname, "../plugins/index.ts"),
+      "@plugins/registry": resolve(__dirname, "../plugins/registry.ts"),
+      "@plugins/types": resolve(__dirname, "../plugins/types.ts"),
+    },
   },
   images: {
     // Blog cover images live on Pexels/Unsplash. We use `unoptimized` on the

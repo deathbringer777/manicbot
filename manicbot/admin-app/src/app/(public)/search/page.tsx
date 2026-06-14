@@ -15,17 +15,17 @@ interface Props {
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { lang } = await searchParams;
   return buildSeo({
-    title: "Поиск салонов красоты",
+    title: "Salony paznokci — wyszukiwarka i rezerwacja online",
     description:
-      "Найдите nail-салон рядом. Поиск по городу, услуге, мастеру. Маникюр, педикюр, наращивание, nail-арт. Онлайн-запись через Telegram.",
+      "Znajdź salon paznokci w pobliżu. Szukaj po mieście, usłudze i mistrzu. Manicure, pedicure, przedłużanie, zdobienia. Rezerwacja online przez Telegram.",
     path: "/search",
     keywords: [
-      "поиск салонов красоты",
-      "nail салон рядом",
-      "маникюр рядом",
-      "педикюр рядом",
-      "записаться онлайн",
-      "каталог салонов",
+      "salony paznokci",
+      "manicure w pobliżu",
+      "pedicure w pobliżu",
+      "salon paznokci online",
+      "rezerwacja online",
+      "katalog salonów paznokci",
     ],
     locale: langToOgLocale(lang),
   });

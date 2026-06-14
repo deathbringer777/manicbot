@@ -65,11 +65,15 @@ const SUPPORTED: ReadonlyArray<Lang> = ["ru", "ua", "en", "pl"];
 
 function pickLang(raw: string | string[] | undefined): Lang {
   const v = Array.isArray(raw) ? raw[0] : raw;
-  if (!v) return "ru";
+  // Default to PL: paramless (crawler) requests render the body in Polish, so
+  // the metadata must match — a mixed RU-title/PL-body page weakens ranking in
+  // both languages. PL is the Poland-market default used by every other public
+  // page; RU/UA/EN are still served via ?lang=.
+  if (!v) return "pl";
   const lc = String(v).toLowerCase();
   if ((SUPPORTED as readonly string[]).includes(lc)) return lc as Lang;
   if (lc === "uk") return "ua";
-  return "ru";
+  return "pl";
 }
 
 const BREADCRUMB_HOME: Record<Lang, string> = { ru: "Главная", ua: "Головна", en: "Home", pl: "Strona główna" };

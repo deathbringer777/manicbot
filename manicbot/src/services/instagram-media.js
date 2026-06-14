@@ -1,6 +1,6 @@
 /**
  * Instagram media import — fetch tenant's IG media list and download selected
- * photos to R2, inserting them into album_photos.
+ * photos to R2, inserting them into the tenant's photo album.
  *
  * Used by the two admin endpoints in adminKeyHttp.js:
  *   POST /admin/instagram/media  → fetchInstagramMedia

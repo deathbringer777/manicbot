@@ -204,11 +204,15 @@ describe('seo', () => {
       expect(txt).toMatch(/^Disallow: \/google\/$/m);
     });
 
-    it('disallows auth flow pages (to avoid thin-content duplicates)', () => {
-      expect(txt).toMatch(/^Disallow: \/login$/m);
-      expect(txt).toMatch(/^Disallow: \/forgot-password$/m);
-      expect(txt).toMatch(/^Disallow: \/reset-password$/m);
-      expect(txt).toMatch(/^Disallow: \/verify-email$/m);
+    it('does NOT disallow auth flow pages — they carry a noindex meta tag, so', () => {
+      // Blocking them in robots.txt would hide the noindex from Googlebot and
+      // cause "Indexed, though blocked by robots.txt" (observed on /login).
+      // Letting Google crawl them is how the noindex actually de-indexes them.
+      expect(txt).not.toMatch(/^Disallow: \/login$/m);
+      expect(txt).not.toMatch(/^Disallow: \/forgot-password$/m);
+      expect(txt).not.toMatch(/^Disallow: \/reset-password$/m);
+      expect(txt).not.toMatch(/^Disallow: \/verify-email$/m);
+      expect(txt).not.toMatch(/^Disallow: \/confirm-email-change$/m);
     });
 
     it('disallows dashboard-only surfaces', () => {

@@ -21,6 +21,6 @@ export default {
   cat_title: '📸 <b>Portfolio</b>\n\nWybierz kategorię:',
   cat_cap: '{e} <b>{svc}</b>\n💵 {p} {c} · ⏱ {d} {min}\n\n📷 {i} / {total}',
   cat_book: '📝 Umów tę usługę',
-  cat_back: '◀️ Kategorie',
+  cat_back: '◀️ Wstecz',
   cat_empty: '🖼 Brak zdjęć',
 };

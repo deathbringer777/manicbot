@@ -132,7 +132,7 @@ const BRIDGE_SCRIPT = `<script>
     // ?v cache-busts Safari's memory/disk cache so widget changes (autoplay
     // portfolio, trimmed preview menu) propagate immediately instead of waiting
     // out the 1h embed Cache-Control.
-    s.src = '/embed/demo-chat.js?v=5';
+    s.src = '/embed/demo-chat.js?v=6';
     s.setAttribute('data-slug', SLUG);
     s.setAttribute('data-target', '#' + targetId);
     s.setAttribute('data-lang', LANG);

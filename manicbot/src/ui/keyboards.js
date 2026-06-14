@@ -213,8 +213,11 @@ export function catPhotoKb(lg, svcId, idx, total) {
   if (idx < total - 1) nav.push({ text: '▶️', callback_data: CB.CAT_PHOTO + svcId + ':' + (idx + 1) });
   return { reply_markup: { inline_keyboard: [
     nav,
-    [{ text: t(lg, 'cat_book'), callback_data: CB.SERVICE + svcId }],
-    [{ text: t(lg, 'cat_back'), callback_data: CB.CATALOG }],
+    // Book + back share one row so the web widget renders them as an
+    // equal-width pair filling the card (a flex .mb-btn-row), instead of two
+    // single-button rows that coalesce into the gappy date-picker grid.
+    [{ text: t(lg, 'cat_book'), callback_data: CB.SERVICE + svcId },
+     { text: t(lg, 'cat_back'), callback_data: CB.CATALOG }],
   ] } };
 }
 

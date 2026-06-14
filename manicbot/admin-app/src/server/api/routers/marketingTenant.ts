@@ -108,10 +108,10 @@ export const marketingTenantRouter = createTRPCRouter({
   contactsList: protectedProcedure
     .input(z.object({
       tenantId: z.string().min(1),
-      // Cap raised 500 → 1000 to back the "Показать все" page-size option on
-      // the Contacts UI (select-all then covers the full loaded set). Tenants
-      // beyond 1000 contacts need true streaming pagination — flagged follow-up.
-      limit: z.number().int().min(1).max(1000).default(100),
+      // Cap raised to 2000 (was 1000) to back the "Показать все" page-size option
+      // on the Contacts UI (select-all then covers the full loaded set). Tenants
+      // beyond 2000 contacts need true streaming pagination — flagged follow-up.
+      limit: z.number().int().min(1).max(2000).default(100),
       offset: z.number().int().min(0).default(0),
       subscribedOnly: z.boolean().default(false),
       search: z.string().optional(),

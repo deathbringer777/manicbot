@@ -53,7 +53,7 @@ const FIELD_BASE =
 /** Server caps every bulk mutation at 500 ids/call — chunk larger selections. */
 const BULK_CHUNK = 500;
 /** "Показать все" ceiling — matches the contactsList limit cap (server side). */
-const MAX_PAGE = 1000;
+const MAX_PAGE = 2000;
 const PAGE_SIZES = [25, 50, 100] as const;
 type PageSize = (typeof PAGE_SIZES)[number] | "all";
 

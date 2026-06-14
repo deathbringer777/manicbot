@@ -283,9 +283,11 @@ export function SettingsShell({ activeSection, onSectionChange, children }: Sett
             </button>
           )}
 
-          {/* Fade edges */}
-          {canScrollLeft && <div className="pointer-events-none hidden lg:block absolute left-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-r from-white/95 dark:from-slate-900/95 to-transparent" />}
-          {canScrollRight && <div className="pointer-events-none hidden lg:block absolute right-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-l from-white/95 dark:from-slate-900/95 to-transparent" />}
+          {/* Fade edges — visible on every viewport so phone users get a clear
+              "more tabs →" signal that the strip scrolls. The round scroll
+              buttons stay desktop-only (touch users just swipe the strip). */}
+          {canScrollLeft && <div className="pointer-events-none block absolute left-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-r from-white/95 dark:from-slate-900/95 to-transparent" />}
+          {canScrollRight && <div className="pointer-events-none block absolute right-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-l from-white/95 dark:from-slate-900/95 to-transparent" />}
 
           <div
             ref={scrollRef}

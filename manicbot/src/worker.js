@@ -38,6 +38,7 @@ import { tryChatWeb } from './http/chatWebHttp.js';
 import { tryEmbed } from './http/embedHttp.js';
 import { tryDemoPage } from './http/demoPageHttp.js';
 import { isAdminAppPath, publicRedirectFor } from './http/adminAppProxy.js';
+import { canonicalHostRedirect } from './http/canonicalHostHttp.js';
 import { handleTrackRequest } from './http/trackHttp.js';
 import { handleSubscribeRequest } from './http/subscribeHttp.js';
 import { handleUnsubscribeRequest } from './http/unsubscribeHttp.js';
@@ -311,6 +312,19 @@ export default {
     }
     const url = new URL(request.url);
     try {
+    // Canonical host + scheme: 301 www→apex and http→https (GET/HEAD only) so
+    // crawlers consolidate on https://manicbot.com and the duplicate variants
+    // stay out of the index. Runs before everything else, including robots.txt.
+    const hostRedirect = canonicalHostRedirect(request);
+    if (hostRedirect) {
+      return addSecurityHeaders(
+        new Response(null, {
+          status: hostRedirect.status,
+          headers: { Location: hostRedirect.to },
+        }),
+      );
+    }
+
     // robots.txt — served BEFORE landing proxy so Workers own it.
     // SEO audit 2026-05-20 P0-4: HEAD must return 200 (empty body, same
     // headers) so Bing crawler + uptime monitors don't see soft-404.

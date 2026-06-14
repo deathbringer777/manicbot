@@ -4,16 +4,17 @@ import { todayStr, warsawNow } from '../utils/date.js';
 import { canUse } from '../billing/features.js';
 
 export function mainKb(lg, role = 'client', ctx = null) {
-  // Preview mode (landing iPhone mockup): render a tight 4-button menu that
-  // matches the marketing design — Записаться / Каталог работ / Прайс-лист /
-  // Мои записи. No language / contacts / support rows so the iPhone screen
-  // doesn't overflow with unrelated affordances.
+  // Preview mode (landing iPhone mockup): render a tight 3-button menu that
+  // matches the marketing design — Записаться / Каталог работ / Прайс-лист.
+  // "Мои записи" (CB.MY) is intentionally omitted: a fresh landing visitor has
+  // no booking history, so it would be dead weight. No language / contacts /
+  // support rows either, so the iPhone screen doesn't overflow with unrelated
+  // affordances.
   if (ctx?.previewMode && role === 'client') {
     return { reply_markup: { inline_keyboard: [
       [{ text: t(lg, 'm_book'), callback_data: CB.BOOK }],
       [{ text: t(lg, 'm_cat'),  callback_data: CB.CATALOG },
        { text: t(lg, 'm_prices'), callback_data: CB.PRICES }],
-      [{ text: t(lg, 'm_my'), callback_data: CB.MY }],
     ] } };
   }
 

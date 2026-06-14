@@ -158,10 +158,10 @@ describe('buildAISystemPrompt preview guardrail', () => {
 });
 
 describe('mainKb preview-mode layout', () => {
-  it('renders the 4-button landing layout for clients in preview', () => {
+  it('renders the 3-button landing layout (no "Moje wizyty") for clients in preview', () => {
     const kb = mainKb('ru', 'client', { previewMode: true });
     const rows = kb.reply_markup.inline_keyboard;
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2);
     // Row 0: Book
     expect(rows[0]).toHaveLength(1);
     expect(rows[0][0].callback_data).toBe('book');
@@ -169,11 +169,11 @@ describe('mainKb preview-mode layout', () => {
     expect(rows[1]).toHaveLength(2);
     const row1Cbs = rows[1].map(b => b.callback_data).sort();
     expect(row1Cbs).toEqual(['cat', 'prices']);
-    // Row 2: My appointments
-    expect(rows[2]).toHaveLength(1);
-    expect(rows[2][0].callback_data).toBe('my');
-    // No language / support / contacts rows (those appear in the full layout only)
+    // "Moje wizyty" (my) is dropped in the preview — a fresh landing visitor
+    // has no booking history, so the button is dead weight.
     const flat = rows.flat();
+    expect(flat.some(b => b.callback_data === 'my')).toBe(false);
+    // No language / support / contacts rows (those appear in the full layout only)
     expect(flat.some(b => b.callback_data === 'lang')).toBe(false);
     expect(flat.some(b => b.callback_data === 'support')).toBe(false);
     expect(flat.some(b => b.callback_data === 'cont')).toBe(false);
@@ -263,6 +263,16 @@ describe('DEMO_CHAT_SRC widget source', () => {
 
   it('defaults to preview-landing slug', () => {
     expect(DEMO_CHAT_SRC).toMatch(/preview-landing/);
+  });
+
+  it('auto-opens the classic-manicure portfolio after the welcome flow', () => {
+    // The preview plays a guided tour: once the staged welcome finishes it fires
+    // the same callback a "Manicure klasyczny" tap would (cc:classic:0 — the
+    // CB.CAT_PHOTO prefix + the first provisioned preview svcId, pinned by the
+    // svcIds assertion above), so the visitor sees photos without tapping.
+    // The one-shot guard prevents a re-fire on init retry.
+    expect(DEMO_CHAT_SRC).toMatch(/cc:classic:0/);
+    expect(DEMO_CHAT_SRC).toMatch(/_autoShown/);
   });
 
   it('is syntactically valid JavaScript (no SyntaxError in output)', () => {

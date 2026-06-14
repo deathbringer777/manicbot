@@ -129,8 +129,10 @@ const BRIDGE_SCRIPT = `<script>
     // read it even when document.currentScript is null (Safari dynamic script).
     window.__MB_BRIDGE__ = { title: 'Manic Bot', slug: SLUG, lang: LANG, target: '#' + targetId, showHeader: true };
     var s = document.createElement('script');
-    // ?v=3 cache-busts Safari's memory/disk cache so title + lang fixes propagate immediately.
-    s.src = '/embed/demo-chat.js?v=4';
+    // ?v cache-busts Safari's memory/disk cache so widget changes (autoplay
+    // portfolio, trimmed preview menu) propagate immediately instead of waiting
+    // out the 1h embed Cache-Control.
+    s.src = '/embed/demo-chat.js?v=5';
     s.setAttribute('data-slug', SLUG);
     s.setAttribute('data-target', '#' + targetId);
     s.setAttribute('data-lang', LANG);

@@ -181,6 +181,18 @@ export const DEMO_CHAT_SRC = `
   try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
   var POLL_MS = 3000;
   var HISTORY_CAP = 200;
+  // Guided-tour autoplay: on the marketing preview only, once the staged
+  // welcome flow finishes we auto-open the first portfolio category (classic
+  // manicure) so a visitor sees real nail photos without tapping anything.
+  // AUTOSHOW_CB is the exact callback the "Manicure klasyczny" button emits —
+  // CB.CAT_PHOTO ('cc:') + the preview's first service id + photo index 0 (see
+  // src/ui/keyboards.js#catListKb and the 'cc:' handler in callbacks.js).
+  // Gated to the preview slug so a generic embed never auto-navigates someone
+  // else's menu; the one-shot flag stops a re-fire on init retry.
+  var AUTOSHOW_SLUG = 'preview-landing';
+  var AUTOSHOW_CB = 'cc:classic:0';
+  var AUTOSHOW_DELAY_MS = 800;
+  var _autoShown = false;
 
   var root = document.querySelector(TARGET);
   if (!root) { console.warn('[mb-demo] target not found:', TARGET); return; }
@@ -782,6 +794,18 @@ export const DEMO_CHAT_SRC = `
 
       setHeaderTypingState(false);
       root.classList.remove('mb-init-pending');
+
+      // Guided-tour autoplay (preview only): once the welcome + menu have
+      // landed, reveal the classic-manicure portfolio so the visitor sees
+      // photos straight away. Reuses the exact callback a menu tap fires; the
+      // menu bubble stays above (we omit messageId, so the bot sends a fresh
+      // photo message rather than editing the menu). noFocus keeps the mobile
+      // keyboard shut on this non-user-initiated send.
+      if (SLUG === AUTOSHOW_SLUG && !_autoShown) {
+        _autoShown = true;
+        await sleep(AUTOSHOW_DELAY_MS);
+        await sendRaw({ callbackData: AUTOSHOW_CB }, { noFocus: true });
+      }
     } catch (e) {
       // Init failed — drop the welcome chrome state so the user isn't stuck
       // on a "typing…" header forever, and reveal the composer for a manual
@@ -834,7 +858,7 @@ export const DEMO_CHAT_SRC = `
     if (t) t.remove();
   }
 
-  async function sendRaw(payload) {
+  async function sendRaw(payload, opts) {
     if (sending || !sessionId) return;
     sending = true;
     sendBtn.disabled = true;
@@ -862,7 +886,13 @@ export const DEMO_CHAT_SRC = `
       console.error('[mb-demo] send failed:', e);
       showErrorBubble(T.netError);
     }
-    finally { sending = false; sendBtn.disabled = false; input.focus(); }
+    finally {
+      sending = false;
+      sendBtn.disabled = false;
+      // Skip focus for programmatic sends (autoplay) so we don't pop the iOS/
+      // Android soft keyboard when the visitor never touched the composer.
+      if (!(opts && opts.noFocus)) input.focus();
+    }
   }
 
   function renderUserEcho(text) {

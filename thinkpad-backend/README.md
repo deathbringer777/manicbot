@@ -14,6 +14,7 @@ runtime credentials stay in `~/manicbot-backend/.env` on the server
 | `blog-autopilot` | 02:00 + 14:00 | generates a long-form (~2000 words/language) blog draft via `claude -p` (i18n: write RU once, localize ua/en/pl) and sends a Telegram preview with **Читать / Publish / Revise / Skip** buttons; skips generation while a draft awaits approval |
 | `lead-scout` | every 30 min | scrapes one (district, query, source) slot of Warsaw nail salons |
 | `booksy-full` | 03:30 + 15:30 | full Booksy catalog crawl via JSON-LD with yield-anomaly alerts |
+| `gsc-monitor` | 08:00 daily | Google Search Console 7d-over-7d trend + sitemap status + index coverage of priority URLs → TG; no-ops until `GSC_SERVICE_ACCOUNT_JSON` is set |
 
 Blog publishing is button-driven: the tg-bot callback handler shells out to
 `crons/blog/publish.js --slug <slug> --action publish|skip|revise`.

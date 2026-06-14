@@ -35,6 +35,13 @@ module.exports = {
       watch: false,
     },
     {
+      name: 'gsc-monitor',
+      script: `${BASE}/crons/gsc-monitor.js`,
+      cron_restart: '0 8 * * *',      // 08:00 daily — Search Console 7d trend + index coverage → TG
+      autorestart: false,             // no-ops cleanly until GSC_SERVICE_ACCOUNT_JSON is set
+      watch: false,
+    },
+    {
       name: 'lead-scout',
       script: `${BASE}/crons/lead-scout/index.js`,
       cron_restart: '*/30 * * * *',   // every 30 min slot rotation (2× hourly)

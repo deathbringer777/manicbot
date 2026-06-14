@@ -165,6 +165,18 @@ describe("marketingTenantRouter.contactsList tenant scoping", () => {
     const caller = createCaller(makeTenantManagerCtx(db, "t_a") as never);
     await expect(caller.contactsList({ tenantId: "t_b" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("accepts a limit up to the 2000 cap and rejects above it (Показать все ceiling)", async () => {
+    // 2000 is the raised ceiling backing the "Показать все" page-size option;
+    // it must pass Zod validation and reach the query.
+    const { db } = createDbMock([[], [{ count: 0 }]]);
+    const caller = createCaller(makeTenantOwnerCtx(db, "t_a") as never);
+    await expect(caller.contactsList({ tenantId: "t_a", limit: 2000 })).resolves.toMatchObject({ total: 0 });
+    // One past the cap must be rejected by Zod (.max(2000)) before any DB work.
+    const { db: db2 } = createDbMock();
+    const caller2 = createCaller(makeTenantOwnerCtx(db2, "t_a") as never);
+    await expect(caller2.contactsList({ tenantId: "t_a", limit: 2001 })).rejects.toThrow();
+  });
 });
 
 describe("marketingTenantRouter.contactUpdate cross-tenant guard", () => {

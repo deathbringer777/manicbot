@@ -10,6 +10,25 @@ import { getFavoriteSuggest } from '../services/services.js';
 import { svcKb, calKb, timeKb } from './keyboards.js';
 import { showMyApts } from './screens.js';
 
+/**
+ * Web low-friction booking: collect name + phone only AFTER a slot is chosen.
+ * Stash the full selection in REG state (flow='book') so finishPhone() resumes
+ * straight to the confirmation card once registration completes.
+ * @param {object} slot { svcId, date?, time?, masterId? }
+ */
+export async function deferBookingRegistration(ctx, cid, lg, slot, from) {
+  await setState(ctx, cid, {
+    step: STEP.REG_NAME, flow: 'book',
+    svcId: slot.svcId,
+    date: slot.date || null,
+    time: slot.time || null,
+    masterId: slot.masterId ?? null,
+    tgUser: from?.username || null,
+    tgLang: from?.language_code || null,
+  });
+  return send(ctx, cid, t(lg, 'reg_enter_name'));
+}
+
 export async function startBooking(ctx, cid, from, bookingIntent = null) {
   const lg = await getLang(ctx, cid) || 'ru';
   const user = await getUser(ctx, cid);
@@ -21,12 +40,14 @@ export async function startBooking(ctx, cid, from, bookingIntent = null) {
     ...(bookingIntent.timeHint ? { time: bookingIntent.timeHint } : {}),
     ...(bookingIntent.masterId ? { masterId: bookingIntent.masterId } : {}),
   } : {};
-  if (!isRegComplete(user)) {
-    // Web channel — and any channel that gives us no genuine first_name
-    // (Instagram / WhatsApp) — has no real Telegram name to confirm. Skip
-    // REG_CONFIRM and prompt for a typed name directly. Confirming a
-    // fabricated '?' here is what drove the registration loop on IG/WA.
-    if (ctx.channel?.type === 'web' || !hasRealName(from)) {
+  // Web = low-friction: do NOT gate on registration up front. Let the visitor
+  // pick service → date → time first; name + phone are collected at the
+  // confirmation step (CB.TIME / startBookingWithService / CB.CONFIRM).
+  // Other channels keep the up-front gate (Telegram has a name to confirm;
+  // IG/WA route to REG_NAME — confirming a fabricated '?' drove a reg loop).
+  const isWeb = ctx.channel?.type === 'web';
+  if (!isWeb && !isRegComplete(user)) {
+    if (!hasRealName(from)) {
       await setState(ctx, cid, {
         step: STEP.REG_NAME, flow: 'book',
         tgUser: from?.username || null,
@@ -49,6 +70,10 @@ export async function startBooking(ctx, cid, from, bookingIntent = null) {
       ] },
     });
   }
+  // Registered, or web (deferred): jump straight in when the service is known.
+  if (intentFields.svcId) {
+    return startBookingWithService(ctx, cid, from, intentFields.svcId, intentFields.date || null, intentFields.time || null, intentFields.masterId ?? null);
+  }
   await send(ctx, cid, t(lg, 'choose_svc'), svcKb(ctx, lg));
 }
 
@@ -56,7 +81,9 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
   const lg = await getLang(ctx, cid) || 'ru';
   if (!ctx.svcIds?.has(svcId)) return startBooking(ctx, cid, from);
   const user = await getUser(ctx, cid);
-  if (!isRegComplete(user)) return startBooking(ctx, cid, from, { svcId, dateHint, timeHint, masterId });
+  // Web defers registration to the confirmation step; other channels gate up front.
+  const isWeb = ctx.channel?.type === 'web';
+  if (!isWeb && !isRegComplete(user)) return startBooking(ctx, cid, from, { svcId, dateHint, timeHint, masterId });
   const s = ctx.svc.find(x => x.id === svcId);
   if (!s) return startBooking(ctx, cid, from);
 
@@ -72,6 +99,11 @@ export async function startBookingWithService(ctx, cid, from, svcId, dateHint = 
     if (timeStr) {
       const slot = slots.includes(timeStr) ? timeStr : findClosestSlot(slots, timeStr);
       if (slot) {
+        // Full slot resolved from a free-text intent. Unregistered web visitors
+        // give name + phone here (deferred), then resume to the confirm card.
+        if (isWeb && !isRegComplete(user)) {
+          return deferBookingRegistration(ctx, cid, lg, { svcId, date: dateStr, time: slot, masterId: masterId ?? null }, from);
+        }
         await setState(ctx, cid, { step: 'conf', svcId, date: dateStr, time: slot, masterId: masterId ?? null });
         const confLines = isCorrectionSvc(svcId)
           ? [fill(t(lg, 'confirm_correction'), { svc: svcName(ctx, lg, svcId), dt: fmtDT(lg, dateStr, slot), name: escHtml(user?.name || '—'), phone: escHtml(user?.phone || '—') })]

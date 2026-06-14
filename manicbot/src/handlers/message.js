@@ -3,7 +3,7 @@ import { log } from '../utils/logger.js';
 import { nowSec } from '../utils/time.js';
 import { isInactive, canUse, getMastersLimit } from '../billing/features.js';
 import { showInactiveMessage } from '../ui/billing.js';
-import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows, isLooseOmnichannelGreeting, regPhonePrompt } from '../utils/helpers.js';
+import { escHtml, fill, t, svcName, isValidChatId, detectLang, instagramAiTriggerAllows, isLooseOmnichannelGreeting, regPhonePrompt, isLikelyRealName } from '../utils/helpers.js';
 import { isValidDate, isValidTime, fmtDate, fmtDT, resolveDateHint, resolveTimeHint, dateStrForOffset } from '../utils/date.js';
 import { kvGet, kvPut } from '../utils/kv.js';
 import { ticketFwdAckKey } from '../utils/kv-keys.js';
@@ -1501,6 +1501,9 @@ export async function onMsg(ctx, msg) {
   if (st.step === STEP.REG_NAME) {
     const cleaned = txt.replace(/<[^>]*>/g, '').trim();
     if (cleaned.length < 2 || cleaned.length > 50) return send(ctx, cid, t(lg, 'reg_name_err'));
+    // Reject objections / questions ("а зачем тебе", "нет", "why") so they don't
+    // get stored as the client's name. Conservative — real names still pass.
+    if (!isLikelyRealName(cleaned)) return send(ctx, cid, t(lg, 'reg_name_invalid'));
     st.step = STEP.REG_PHONE;
     st.name = cleaned;
     await setState(ctx, cid, st);

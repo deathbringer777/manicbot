@@ -17,6 +17,7 @@ import { InstagramConnect } from "./InstagramConnect";
 import { IGSendTestDialog } from "./IGSendTestDialog";
 import { SalonMasterPairingTable } from "./SalonMasterPairingTable";
 import { SalonOwnerPairingCard } from "./SalonOwnerPairingCard";
+import { FeaturedServiceSettings } from "./FeaturedServiceSettings";
 import { BotFatherGuide } from "~/components/settings/BotFatherGuide";
 import { MetaGuide } from "~/components/settings/MetaGuide";
 import { Send, Pause, Play, Trash2 } from "lucide-react";
@@ -664,6 +665,9 @@ function WebChatTab({ tenantId }: { tenantId: string }) {
           </button>
         </div>
       </section>
+
+      {/* Featured service shown under the welcome message in the web chat. */}
+      <FeaturedServiceSettings tenantId={tenantId} />
 
       {/* Chat URL — visible whenever a slug is set, regardless of chat on/off. */}
       {chatUrl && (

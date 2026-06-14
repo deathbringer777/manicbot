@@ -4,6 +4,7 @@ export default {
   reg_change: '✏️ Change name',
   reg_enter_name: '✏️ Enter your name:',
   reg_name_err: '❌ Enter a valid name (2-50 characters):',
+  reg_name_invalid: '🙂 That doesn\'t look like a name. Please tell me your name — e.g. Anna:',
   reg_phone: 'Great, <b>{n}</b>! 😊\n\n📱 Enter your phone number or press the button:\n\nPlease type your phone number (e.g. +48123456789):',
   // Channels without a Telegram reply-keyboard (web/Instagram/WhatsApp): no button to press.
   reg_phone_web: 'Great, <b>{n}</b>! 😊\n\n📱 Type your phone number in a reply (e.g. +48123456789):',

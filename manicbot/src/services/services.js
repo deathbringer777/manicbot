@@ -174,6 +174,77 @@ export async function setFavoriteSuggest(ctx, channel, enabled) {
   await setConfig(ctx, key, enabled === true);
 }
 
+// ── Featured service for the web-chat welcome card ───────────────────────────
+
+/**
+ * Warm-up gate: only auto-promote the "most popular" service once it has at
+ * least this many real bookings. Below it we keep the predictable default (the
+ * first service) so a single stray booking can't hijack the welcome card.
+ */
+export const MIN_BOOKINGS_FOR_FEATURED = 5;
+
+/** Active, non-hidden services that have at least one photo, in display order. */
+function featurableServices(ctx) {
+  return (ctx.svc || []).filter(
+    s => s.active !== false && s.hidden !== true && Array.isArray(s.photos) && s.photos.length > 0,
+  );
+}
+
+/**
+ * Most-booked featurable service for the tenant (all time). Counted in JS rather
+ * than SQL GROUP BY — the Worker test mock-db parser doesn't support GROUP BY,
+ * and salons are small so the projected `svc_id` column is cheap. Only real
+ * (non-cancelled, non-no-show) appointments count.
+ * @returns {Promise<{ svcId: string, count: number }|null>}
+ */
+async function topBookedFeaturableService(ctx) {
+  if (!ctx?.db || !ctx?.tenantId) return null;
+  const featurable = new Set(featurableServices(ctx).map(s => s.id));
+  if (!featurable.size) return null;
+  const rows = await dbAll(ctx,
+    'SELECT svc_id FROM appointments WHERE tenant_id = ? AND cancelled = 0 AND no_show = 0',
+    ctx.tenantId);
+  const counts = new Map();
+  for (const r of rows) {
+    if (!featurable.has(r.svc_id)) continue;
+    counts.set(r.svc_id, (counts.get(r.svc_id) || 0) + 1);
+  }
+  let best = null;
+  for (const [svcId, count] of counts) {
+    if (!best || count > best.count) best = { svcId, count };
+  }
+  return best;
+}
+
+/**
+ * Resolve which service to showcase under the web-chat welcome message.
+ * Priority: (1) the salon's manual pin (`featured_service_id`, unless 'auto'),
+ * (2) the most-booked service once it clears MIN_BOOKINGS_FOR_FEATURED,
+ * (3) the first active service with photos. Returns null when no service has
+ * photos (caller then skips the card). Resilient: any DB error falls back to (3).
+ * @returns {Promise<string|null>}
+ */
+export async function resolveFeaturedServiceId(ctx) {
+  const featurable = featurableServices(ctx);
+  if (!featurable.length) return null;
+  const firstId = featurable[0].id;
+
+  // 1) Manual pin always wins (when it still points at a valid service).
+  try {
+    const pinned = await getConfig(ctx, 'featured_service_id');
+    if (pinned && pinned !== 'auto' && featurable.some(s => s.id === pinned)) return pinned;
+  } catch { /* fall through to auto */ }
+
+  // 2) Most popular, gated by the warm-up threshold.
+  try {
+    const top = await topBookedFeaturableService(ctx);
+    if (top && top.count >= MIN_BOOKINGS_FOR_FEATURED) return top.svcId;
+  } catch { /* fall through to default */ }
+
+  // 3) Default: the first service with photos.
+  return firstId;
+}
+
 export async function loadAboutPhotos(ctx) {
   let stored = await getConfig(ctx, 'about_photos');
   if (stored && Array.isArray(stored) && stored.length > 0) {

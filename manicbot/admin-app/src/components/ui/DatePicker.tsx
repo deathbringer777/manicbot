@@ -294,7 +294,7 @@ export function DatePicker({
           ref={popRef}
           className={
             isMobile
-              ? "relative z-[1] w-[19rem] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-3 shadow-2xl shadow-black/20 dark:shadow-black/60"
+              ? "relative z-[1] w-full max-w-[32rem] rounded-t-2xl border-x border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/30 dark:shadow-black/70 animate-[datepicker-slide-up_180ms_ease-out]"
               : "absolute left-0 top-full mt-1.5 z-50 w-[19rem] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-3 shadow-2xl shadow-black/20 dark:shadow-black/60 animate-[datepicker-fade-in_120ms_ease-out]"
           }
         >
@@ -358,7 +358,7 @@ export function DatePicker({
 
           <div className="grid grid-cols-7 gap-1 px-1">
             {cells.map((c) => {
-              const base = "h-9 rounded-md text-sm tabular-nums flex items-center justify-center transition-colors";
+              const base = `${isMobile ? "h-11" : "h-9"} rounded-md text-sm tabular-nums flex items-center justify-center transition-colors`;
               let cls = "";
               if (c.disabled) {
                 cls = "text-slate-300 dark:text-slate-600 cursor-not-allowed";
@@ -422,7 +422,7 @@ export function DatePicker({
         );
         if (isMobile && typeof document !== "undefined") {
           return createPortal(
-            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[120] flex items-end justify-center">
               <div
                 className="absolute inset-0 bg-slate-900/40"
                 aria-hidden
@@ -439,6 +439,10 @@ export function DatePicker({
       <style jsx>{`
         @keyframes datepicker-fade-in {
           from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes datepicker-slide-up {
+          from { opacity: 0; transform: translateY(100%); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>

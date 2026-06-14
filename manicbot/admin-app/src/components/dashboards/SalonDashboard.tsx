@@ -23,7 +23,7 @@ import { AppointmentDetailPanel } from "~/components/dashboard-ui/AppointmentDet
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 import { QuickAddFab } from "~/components/dashboards/QuickAddFab";
 import { CalendarLeftRail, type StatusKey } from "~/components/dashboards/CalendarLeftRail";
-import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode } from "~/components/dashboards/CalendarViewSwitcher";
+import { CalendarViewSwitcher, type CalendarViewMode, normalizeViewMode, useMobileInitialDayView } from "~/components/dashboards/CalendarViewSwitcher";
 import { useMasterVisibility } from "~/lib/useMasterVisibility";
 import { useInWebShell } from "~/components/layout/WebShell";
 import { useLang } from "~/components/LangContext";
@@ -1536,6 +1536,8 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   // the word «Агенда». normalizeViewMode handles any persisted "agenda"
   // value coming back from URL params or localStorage.
   const [aptViewMode, setAptViewMode] = useState<CalendarViewMode>(() => normalizeViewMode("week"));
+  // Phones land on single-day instead of the horizontally-scrolling week grid.
+  useMobileInitialDayView(setAptViewMode);
   const [calViewDate, setCalViewDate] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [svcModal, setSvcModal] = useState<{ open: boolean; svc: any | null; initialData?: ServiceTemplate }>({ open: false, svc: null });

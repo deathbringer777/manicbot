@@ -24,6 +24,28 @@ import { t, type Lang } from "~/lib/i18n";
 
 export type CalendarViewMode = "day" | "week" | "calendar" | "list";
 
+/**
+ * On a phone (coarse pointer + narrow viewport) the 7-column week grid forces
+ * horizontal scrolling, so land on the single-day view instead — a single
+ * column with the same date-stepper, which reads like a native calendar app.
+ * Runs once on mount and only demotes the initial "week" landing; the user can
+ * still switch back to week (or any mode) via the switcher afterwards.
+ *
+ * SSR-safe: the effect is client-only, so the server still renders the initial
+ * "week" mode and there is no hydration mismatch (cf. useCoarsePointer).
+ */
+export function useMobileInitialDayView(setMode: (m: CalendarViewMode) => void) {
+  const doneRef = useRef(false);
+  useEffect(() => {
+    if (doneRef.current) return;
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    doneRef.current = true;
+    if (window.matchMedia("(hover: none) and (max-width: 768px)").matches) {
+      setMode("day");
+    }
+  }, [setMode]);
+}
+
 interface Option {
   mode: CalendarViewMode;
   icon: LucideIcon;

@@ -71,6 +71,11 @@ describe('isAdminAppPath', () => {
     // catch-all and route to the landing site (which doesn't have this file).
     // Used by WebShell + Shell sidebar logo + admin-app metadata.icons.
     ['/manicbot-mark-ui.png'],
+    // PWA manifest + maskable icon (admin-app app/manifest.ts). The landing's
+    // *.png catch-all + SPA fallback would otherwise shadow these, returning
+    // HTML instead of the manifest JSON / the PNG and breaking PWA install.
+    ['/manifest.webmanifest'],
+    ['/icon-maskable-512.png'],
   ])('proxies %s', (path) => {
     expect(isAdminAppPath(path)).toBe(true);
   });

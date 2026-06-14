@@ -14,6 +14,12 @@ export function isAdminAppPath(pathname) {
   // metadata.icons return the landing SPA fallback (HTML) instead of the PNG,
   // and Chrome renders the broken-image placeholder with the alt text.
   if (pathname === '/manicbot-mark-ui.png') return true;
+  // PWA manifest + maskable icon (admin-app app/manifest.ts + public/). Without
+  // these the landing's `*.png` catch-all / SPA fallback shadows them at the
+  // apex, returning HTML instead of the manifest JSON / the PNG — which breaks
+  // "Add to Home Screen". Keep in sync with admin-app/src/app/manifest.ts.
+  if (pathname === '/manifest.webmanifest') return true;
+  if (pathname === '/icon-maskable-512.png') return true;
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return true;
   if (pathname === '/login' || pathname === '/register' || pathname === '/tg') return true;
   if (pathname === '/forgot-password' || pathname === '/reset-password') return true;

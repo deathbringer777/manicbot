@@ -74,6 +74,13 @@ export const metadata: Metadata = {
     shortcut: "/manicbot-mark-ui.png?v=2",
     apple: "/manicbot-mark-ui.png?v=2",
   },
+  // iOS doesn't read the web manifest's display mode, so opt into standalone
+  // the Apple way too (pairs with app/manifest.ts for Android/Chrome).
+  appleWebApp: {
+    capable: true,
+    title: "ManicBot",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport: Viewport = {

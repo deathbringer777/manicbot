@@ -235,7 +235,7 @@ export default function EventsPageClient() {
 
         {/* Stats bar */}
         {!isLoading && allEvents.length > 0 && (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="glass-card rounded-xl p-3 text-center">
               <div className="text-lg font-bold text-slate-200">{stats.total}</div>
               <div className="text-[10px] text-slate-500 mt-0.5">{t("gmEvents.totalLabel", lang)}</div>

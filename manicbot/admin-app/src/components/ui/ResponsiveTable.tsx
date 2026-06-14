@@ -18,22 +18,26 @@ export function ResponsiveTable({
   children,
   className = "",
   minWidthClass = "min-w-[40rem]",
+  fadeFromClass = "from-[var(--background)]",
 }: {
   children: ReactNode;
   className?: string;
   /** Tailwind min-width applied to the inner track so columns don't crush. */
   minWidthClass?: string;
+  /** Gradient start color of the right-edge fade — set to match the surface the
+   *  table sits on (e.g. `from-white dark:from-slate-900` inside a card). */
+  fadeFromClass?: string;
 }) {
   return (
     <div className={`relative ${className}`}>
       <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
         <div className={minWidthClass}>{children}</div>
       </div>
-      {/* Right-edge scroll affordance. Fades to the page background so it blends
+      {/* Right-edge scroll affordance. Fades to the surface color so it blends
           in both themes. Hidden on >=sm where the table fits without scrolling. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[var(--background)] to-transparent sm:hidden"
+        className={`pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l ${fadeFromClass} to-transparent sm:hidden`}
       />
     </div>
   );

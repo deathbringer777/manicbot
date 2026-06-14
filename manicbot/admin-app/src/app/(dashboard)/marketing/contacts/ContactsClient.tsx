@@ -44,6 +44,7 @@ import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+import { ResponsiveTable } from "~/components/ui/ResponsiveTable";
 import { CreateListModal } from "~/components/marketing/CreateListModal";
 import Link from "next/link";
 
@@ -365,8 +366,8 @@ export default function ContactsClient() {
       ) : (
         <>
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[760px]">
+            <ResponsiveTable minWidthClass="min-w-[760px]" fadeFromClass="from-white dark:from-slate-900">
+              <table className="w-full text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 text-[10px] uppercase tracking-wide">
                   <tr>
                     <th className="w-10 px-3 py-2">
@@ -452,7 +453,7 @@ export default function ContactsClient() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </ResponsiveTable>
           </div>
 
           {canPage && (

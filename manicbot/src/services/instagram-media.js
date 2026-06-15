@@ -91,8 +91,12 @@ export async function fetchInstagramMedia(env, tenantId) {
 
 /**
  * Download selected IG media IDs to R2 and append them to album_photos.
- * Safe to call with the same IDs twice — R2 key is content-addressed (idempotent)
- * and the INSERT OR IGNORE guard deduplicates by photo_r2_key.
+ * Safe to call with the same IDs twice: the R2 key is content-addressed
+ * (identical bytes → identical key → no duplicate object) and, before each
+ * insert, we check for an existing row with the same photo_r2_key in this
+ * album and skip it. (INSERT OR IGNORE alone does NOT dedupe — album_photos'
+ * PK is (tenant_id, id) and `id` is a fresh UUID per call, so it never
+ * conflicts.) The same photo can still be imported into a *different* album.
  *
  * @param {object} env             Cloudflare Worker env (DB, ASSETS, BOT_ENCRYPTION_KEY)
  * @param {string} tenantId
@@ -166,6 +170,16 @@ export async function importInstagramPhotos(env, tenantId, albumId, mediaIds, wo
 
       // Content-addressed R2 key — same bytes → same key → idempotent
       const key = await buildAssetKey(tenantId, 'portfolio', bytes, ext);
+
+      // Idempotency guard: skip if this exact image is already in this album.
+      // The PK (tenant_id, id) can't catch this because `id` is random per call
+      // and there is no UNIQUE index on photo_r2_key, so INSERT OR IGNORE would
+      // happily create a duplicate gallery row on re-import.
+      const existing = await env.DB.prepare(
+        `SELECT id FROM album_photos WHERE tenant_id = ? AND album_id = ? AND photo_r2_key = ? LIMIT 1`,
+      ).bind(tenantId, albumId, key).first();
+      if (existing) continue;
+
       await env.ASSETS.put(key, bytes, { httpMetadata: { contentType } });
 
       const photoUrl = `${workerOrigin}/cdn/${key}`;

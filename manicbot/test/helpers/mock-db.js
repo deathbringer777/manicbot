@@ -265,6 +265,10 @@ export function createMockD1() {
             tenant_roles: ['tenant_id', 'chat_id'], services: ['tenant_id', 'svc_id'],
             tenant_config: ['tenant_id', 'key'], blocked_users: ['tenant_id', 'chat_id'],
             stripe_customers: ['customer_id'], appointments: ['id'],
+            // Migration 0104: album photos keyed on (tenant_id, id); `id` is a
+            // fresh UUID per insert, so re-import never conflicts on the PK
+            // (the service dedupes on photo_r2_key instead).
+            album_photos: ['tenant_id', 'id'],
             // Migration 0063: idempotency claim for fired reminders.
             plugin_reminder_fires: ['reminder_id', 'fires_at_epoch'],
             // Migration 0063: per-source dedup of bell notifications. The

@@ -27,11 +27,13 @@ import {
   marketingProviders,
   marketingConsentLog,
   marketingAutomations,
+  marketingConversions,
 } from "~/server/db/schema";
 import { listProviders } from "~/server/marketing/providers";
 import { runCampaignSend } from "~/server/marketing/sender";
 import { resolveAudience } from "~/server/marketing/audience";
 import { addContactsToSegment, removeContactsFromSegment, deleteContacts } from "~/server/marketing/segments";
+import { buildCampaignReport } from "~/server/marketing/report";
 
 const CHANNEL = z.enum(["email", "sms", "whatsapp"]);
 const CAMPAIGN_STATUS = z.enum(["draft", "scheduled", "sending", "sent", "paused", "failed"]);
@@ -682,6 +684,54 @@ export const marketingTenantRouter = createTRPCRouter({
         bounced: byStatus.bounced ?? 0,
         total,
       };
+    }),
+
+  /**
+   * Brevo-style campaign report — tenant-scoped. Correct CUMULATIVE funnel from
+   * the set-once timestamp columns (opened-then-clicked counts in both stages),
+   * derived rates, and conversions count. Every aggregate is gated by the
+   * campaign's tenant: the sends roll-up innerJoins `marketing_campaigns` on
+   * `tenant_id`, and `marketing_conversions` carries its own `tenant_id`.
+   */
+  campaignReport: protectedProcedure
+    .input(z.object({ tenantId: z.string().min(1), id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+
+      const cmp = await ctx.db.select({
+        id: marketingCampaigns.id,
+        name: marketingCampaigns.name,
+        status: marketingCampaigns.status,
+        channel: marketingCampaigns.channel,
+        segmentId: marketingCampaigns.segmentId,
+        scheduledAt: marketingCampaigns.scheduledAt,
+        startedAt: marketingCampaigns.startedAt,
+        finishedAt: marketingCampaigns.finishedAt,
+        statsJson: marketingCampaigns.statsJson,
+      }).from(marketingCampaigns)
+        .where(and(eq(marketingCampaigns.id, input.id), eq(marketingCampaigns.tenantId, input.tenantId)))
+        .limit(1);
+      if (!cmp[0]) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const agg = await ctx.db.select({
+        total:      sql<number>`count(*)`,
+        queued:     sql<number>`sum(case when ${marketingSends.status} = 'queued' then 1 else 0 end)`,
+        sent:       sql<number>`sum(case when ${marketingSends.sentAt}       is not null then 1 else 0 end)`,
+        delivered:  sql<number>`sum(case when ${marketingSends.deliveredAt}  is not null then 1 else 0 end)`,
+        opened:     sql<number>`sum(case when ${marketingSends.openedAt}     is not null then 1 else 0 end)`,
+        clicked:    sql<number>`sum(case when ${marketingSends.clickedAt}    is not null then 1 else 0 end)`,
+        bounced:    sql<number>`sum(case when ${marketingSends.bouncedAt}    is not null then 1 else 0 end)`,
+        complained: sql<number>`sum(case when ${marketingSends.complainedAt} is not null then 1 else 0 end)`,
+        failed:     sql<number>`sum(case when ${marketingSends.status} = 'failed' then 1 else 0 end)`,
+      }).from(marketingSends)
+        .innerJoin(marketingCampaigns, eq(marketingSends.campaignId, marketingCampaigns.id))
+        .where(and(eq(marketingSends.campaignId, input.id), eq(marketingCampaigns.tenantId, input.tenantId)));
+
+      const conv = await ctx.db.select({ c: sql<number>`count(*)` })
+        .from(marketingConversions)
+        .where(and(eq(marketingConversions.campaignId, input.id), eq(marketingConversions.tenantId, input.tenantId)));
+
+      return buildCampaignReport(cmp[0], agg[0]!, Number(conv[0]?.c ?? 0));
     }),
 
   /** Per-recipient sends detail — paginated. */

@@ -996,6 +996,37 @@ CREATE INDEX IF NOT EXISTS idx_mkt_sends_provider_msg ON marketing_sends(provide
 -- 0051: campaign progress page reads (campaign_id, status) together.
 CREATE INDEX IF NOT EXISTS idx_msend_campaign_status ON marketing_sends(campaign_id, status);
 
+-- 0123: first-party click log feeding conversion attribution. Written by the
+-- signed /r/<token> redirect; ip_hash is salted, never the raw IP.
+CREATE TABLE IF NOT EXISTS marketing_link_clicks (
+  id           TEXT PRIMARY KEY,
+  tenant_id    TEXT NOT NULL,
+  campaign_id  TEXT NOT NULL,
+  send_id      TEXT,
+  contact_id   INTEGER,
+  url          TEXT NOT NULL,
+  clicked_at   INTEGER NOT NULL,
+  ip_hash      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mlc_campaign ON marketing_link_clicks(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_mlc_contact ON marketing_link_clicks(tenant_id, contact_id, clicked_at);
+
+-- 0123: attributed click -> appointment, deduped per appointment by
+-- phaseMarketingConversions. UNIQUE(campaign_id, appointment_id) = idempotent.
+CREATE TABLE IF NOT EXISTS marketing_conversions (
+  id             TEXT PRIMARY KEY,
+  tenant_id      TEXT NOT NULL,
+  campaign_id    TEXT NOT NULL,
+  send_id        TEXT,
+  contact_id     INTEGER,
+  appointment_id TEXT,
+  value_cents    INTEGER,
+  converted_at   INTEGER NOT NULL,
+  created_at     INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mconv_appt ON marketing_conversions(campaign_id, appointment_id);
+CREATE INDEX IF NOT EXISTS idx_mconv_campaign ON marketing_conversions(campaign_id);
+
 CREATE TABLE IF NOT EXISTS marketing_automations (
   id TEXT PRIMARY KEY,
   tenant_id TEXT,

@@ -42,6 +42,7 @@ import { canonicalHostRedirect } from './http/canonicalHostHttp.js';
 import { handleTrackRequest } from './http/trackHttp.js';
 import { handleSubscribeRequest } from './http/subscribeHttp.js';
 import { handleUnsubscribeRequest } from './http/unsubscribeHttp.js';
+import { handleClickRedirect } from './http/clickRedirectHttp.js';
 import { handleConfirmSubscriptionRequest } from './http/confirmSubscriptionHttp.js';
 import { handleNewsletterUnsubscribeRequest } from './http/newsletterUnsubscribeHttp.js';
 import { handleHealthRequest } from './http/healthHttp.js';
@@ -406,6 +407,16 @@ export default {
     ) {
       const token = url.pathname.slice('/u/'.length).split('/')[0] ?? '';
       const res = await handleUnsubscribeRequest(request, token, env);
+      return addSecurityHeaders(res);
+    }
+
+    // Public click-tracking redirect. `/r/{token}` wraps every http(s) link in
+    // a campaign email (signed token → 302 to the original destination). Logs
+    // the click for conversion attribution. Public by design — token-only, no
+    // auth; the destination is inside the signed token (open-redirect-safe).
+    if (request.method === 'GET' && url.pathname.startsWith('/r/')) {
+      const token = url.pathname.slice('/r/'.length).split('/')[0] ?? '';
+      const res = await handleClickRedirect(request, token, env, executionCtx);
       return addSecurityHeaders(res);
     }
 

@@ -18,6 +18,7 @@
 
 import { dbAll, dbGet, dbRun } from '../../utils/db.js';
 import { log } from '../../utils/logger.js';
+import { rewriteLinksForTracking } from './linkRewrite.js';
 
 const INLINE_CAP = 500;
 
@@ -382,11 +383,29 @@ export async function runCampaignSend(ctx, tenantId, campaignId, opts = {}) {
       { salonName, unsubscribeUrl: unsubUrl, locale: tpl.locale || 'ru' },
     );
 
+    // First-party click tracking: rewrite the email's links through the signed
+    // /r/ redirect. Fail-open (rewriteLinksForTracking returns the original
+    // HTML on any error) — a tracking glitch must never block a send.
+    let html = rendered.html;
+    if (channel === 'email') {
+      const trackingSecret = (ctx?.CLICK_TOKEN_SECRET || '').trim();
+      if (trackingSecret && ctx?.CLICK_TRACKING_ENABLED !== '0') {
+        html = await rewriteLinksForTracking(rendered.html, {
+          origin: publicOrigin(ctx),
+          campaignId,
+          sendId,
+          tenantId,
+          contactId: row.id,
+          secret: trackingSecret,
+        });
+      }
+    }
+
     const result = channel === 'email'
       ? await sendResendEmail(ctx, {
           to: recipient,
           subject: rendered.subject || tpl.name,
-          html: rendered.html,
+          html,
           text: rendered.text,
         })
       : await sendBrevoSms(ctx, { to: recipient, text: rendered.text });

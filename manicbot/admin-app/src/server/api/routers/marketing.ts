@@ -21,11 +21,13 @@ import {
   marketingProviders,
   marketingConsentLog,
   marketingAutomations,
+  marketingConversions,
 } from "~/server/db/schema";
 import { listProviders, getProvider } from "~/server/marketing/providers";
 import type { ProviderName } from "~/server/marketing/providers";
 import { runCampaignSend } from "~/server/marketing/sender";
 import { resolveAudience } from "~/server/marketing/audience";
+import { buildCampaignReport } from "~/server/marketing/report";
 
 const CHANNEL = z.enum(["email", "sms", "whatsapp"]);
 const CAMPAIGN_STATUS = z.enum(["draft", "scheduled", "sending", "sent", "paused", "failed"]);
@@ -362,6 +364,49 @@ export const marketingRouter = createTRPCRouter({
         bounced: byStatus.bounced ?? 0,
         total,
       };
+    }),
+
+  /**
+   * Brevo-style campaign report — God Mode. Correct CUMULATIVE funnel computed
+   * from the set-once timestamp columns (so opened-then-clicked counts in both
+   * stages, unlike the status-bucket `campaignStats`), plus derived rates and a
+   * conversions count. See `~/server/marketing/report.ts`.
+   */
+  campaignReport: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const cmp = await ctx.db.select({
+        id: marketingCampaigns.id,
+        name: marketingCampaigns.name,
+        status: marketingCampaigns.status,
+        channel: marketingCampaigns.channel,
+        segmentId: marketingCampaigns.segmentId,
+        scheduledAt: marketingCampaigns.scheduledAt,
+        startedAt: marketingCampaigns.startedAt,
+        finishedAt: marketingCampaigns.finishedAt,
+        statsJson: marketingCampaigns.statsJson,
+      }).from(marketingCampaigns)
+        .where(eq(marketingCampaigns.id, input.id)).limit(1);
+      if (!cmp[0]) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const agg = await ctx.db.select({
+        total:      sql<number>`count(*)`,
+        queued:     sql<number>`sum(case when ${marketingSends.status} = 'queued' then 1 else 0 end)`,
+        sent:       sql<number>`sum(case when ${marketingSends.sentAt}       is not null then 1 else 0 end)`,
+        delivered:  sql<number>`sum(case when ${marketingSends.deliveredAt}  is not null then 1 else 0 end)`,
+        opened:     sql<number>`sum(case when ${marketingSends.openedAt}     is not null then 1 else 0 end)`,
+        clicked:    sql<number>`sum(case when ${marketingSends.clickedAt}    is not null then 1 else 0 end)`,
+        bounced:    sql<number>`sum(case when ${marketingSends.bouncedAt}    is not null then 1 else 0 end)`,
+        complained: sql<number>`sum(case when ${marketingSends.complainedAt} is not null then 1 else 0 end)`,
+        failed:     sql<number>`sum(case when ${marketingSends.status} = 'failed' then 1 else 0 end)`,
+      }).from(marketingSends)
+        .where(eq(marketingSends.campaignId, input.id));
+
+      const conv = await ctx.db.select({ c: sql<number>`count(*)` })
+        .from(marketingConversions)
+        .where(eq(marketingConversions.campaignId, input.id));
+
+      return buildCampaignReport(cmp[0], agg[0]!, Number(conv[0]?.c ?? 0));
     }),
 
   /** Per-recipient sends detail — God Mode, paginated. */

@@ -111,6 +111,16 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # RESEND_API_KEY=re_...
 # RESEND_FROM=ManicBot <noreply@manicbot.com>
 
+# ─── MARKETING — click tracking & conversions (migration 0123) ────────────────
+# HMAC secret signing the /r/<token> click-redirect links in campaign emails.
+# Same value MUST be set on BOTH the Worker and the admin-app (Pages). Without
+# it, link rewriting is skipped (emails still send; clicks/conversions stay 0).
+# CLICK_TOKEN_SECRET=min_32_char_random_secret
+# Set to "0" to disable link rewriting without unsetting the secret.
+# CLICK_TRACKING_ENABLED=1
+# Worker origin used to build /r/ and /u/ links (defaults to https://manicbot.com).
+# WORKER_PUBLIC_URL=https://manicbot.com
+
 # ─── ANTHROPIC ────────────────────────────────────────────────────────────────
 
 # Anthropic Claude API key — used by marketing caption generator

@@ -90,6 +90,9 @@ export const PHASE_WINDOWS = Object.freeze({
   // PR-A marketing send dispatch — tight window because we want scheduled
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
   marketingDispatch: 60,
+  // Conversion attribution sweep (migration 0123): correlate tracked clicks to
+  // bookings. Not time-critical — 10 min keeps the per-tenant scan rate low.
+  marketingConversions: 10 * 60,
   pluginCron: 10 * 60,        // 10 min
   // Platform operator campaigns (migration 0100): tight window so scheduled /
   // recurring sends and the monthly-report/subscription-reminder automations
@@ -1296,6 +1299,84 @@ export async function phaseMarketingDispatch(ctx, nowMs) {
   }
 }
 
+/**
+ * Attribution window: a booking counts as a campaign conversion only if the
+ * client clicked the campaign within this many days before booking.
+ */
+export const CONVERSION_WINDOW_DAYS = 7;
+
+/**
+ * Conversion attribution sweep (migration 0123) — last-click model.
+ *
+ * For each recent booking, resolve the booking's marketing contact (via
+ * users.marketing_contact_id), find the MOST RECENT tracked click by that
+ * contact in the window before the booking, and record one conversion for that
+ * click's campaign. Decoupled from the booking hot path; idempotent via an
+ * existence check + the UNIQUE(campaign_id, appointment_id) index, so re-runs
+ * never double-count. Runs per-tenant (ctx.tenantId), like the dispatch phase.
+ *
+ * @param {any} ctx
+ * @param {number=} nowMs
+ */
+export async function phaseMarketingConversions(ctx, nowMs) {
+  if (!ctx?.db || !ctx?.tenantId) return;
+  const MAX_PER_TICK = 100;
+  const windowSec = CONVERSION_WINDOW_DAYS * 24 * 60 * 60;
+  const nowS = Math.floor((nowMs ?? Date.now()) / 1000);
+  const since = nowS - windowSec;
+
+  let appts = [];
+  try {
+    appts = await dbAll(ctx,
+      `SELECT id, chat_id, created_at FROM appointments
+       WHERE tenant_id = ? AND created_at >= ?
+       ORDER BY created_at DESC
+       LIMIT ${MAX_PER_TICK}`,
+      ctx.tenantId, since);
+  } catch (e) {
+    log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)),
+      { action: 'marketing_conversions_query' });
+    return;
+  }
+
+  for (const appt of appts) {
+    try {
+      if (appt.chat_id == null) continue;
+
+      // Resolve the booking's marketing contact (direct FK on the user row).
+      const user = await dbGet(ctx,
+        'SELECT marketing_contact_id FROM users WHERE tenant_id = ? AND chat_id = ? LIMIT 1',
+        ctx.tenantId, appt.chat_id);
+      const contactId = user?.marketing_contact_id;
+      if (contactId == null) continue;
+
+      // Most recent tracked click by this contact in the pre-booking window.
+      const click = await dbGet(ctx,
+        `SELECT campaign_id, send_id, clicked_at FROM marketing_link_clicks
+         WHERE tenant_id = ? AND contact_id = ? AND clicked_at <= ? AND clicked_at >= ?
+         ORDER BY clicked_at DESC LIMIT 1`,
+        ctx.tenantId, contactId, appt.created_at, appt.created_at - windowSec);
+      if (!click) continue;
+
+      // Idempotency: skip if this booking already converted (explicit check
+      // backs up the UNIQUE index so the mock and prod agree).
+      const existing = await dbGet(ctx,
+        'SELECT id FROM marketing_conversions WHERE tenant_id = ? AND campaign_id = ? AND appointment_id = ? LIMIT 1',
+        ctx.tenantId, click.campaign_id, appt.id);
+      if (existing) continue;
+
+      await dbRun(ctx,
+        `INSERT OR IGNORE INTO marketing_conversions
+           (id, tenant_id, campaign_id, send_id, contact_id, appointment_id, value_cents, converted_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+        crypto.randomUUID(), ctx.tenantId, click.campaign_id, click.send_id ?? null,
+        contactId, appt.id, appt.created_at, nowS);
+    } catch (e) {
+      log.warn('handlers.cron', { action: 'marketing_conversion_attribute', appointmentId: appt.id, error: e?.message });
+    }
+  }
+}
+
 // ─── Phase 8: plugin cron dispatch ──────────────────────────────────────
 /**
  * Drive cron-backed plugins for this tenant. For every enabled
@@ -1514,6 +1595,9 @@ export async function handleCron(ctx) {
     // whose scheduled_at <= now, plus rebooks any campaign stuck in
     // status='sending' for >30min (crashed mid-fan-out).
     await runPhase(ctx, 'marketingDispatch', () => phaseMarketingDispatch(ctx, now));
+    // Conversion attribution (migration 0123): last-click — match each recent
+    // booking to the campaign the client most recently clicked before booking.
+    await runPhase(ctx, 'marketingConversions', () => phaseMarketingConversions(ctx, now));
     // Platform operator campaigns (migration 0100): deliver due announcements /
     // monthly reports / subscription reminders to THIS tenant's owner(s) across
     // the selected channels. Idempotent via platform_campaign_deliveries.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { MarketingShell } from "../MarketingShell";
 import { api } from "~/trpc/react";
 import { Mail, Plus, Send, Trash2, Clock, CheckCircle2, XCircle } from "lucide-react";
@@ -187,9 +188,9 @@ export default function CampaignsClient() {
               return (
                 <li
                   key={row.id}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs"
+                  className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 px-3 py-2 text-xs transition hover:border-violet-300 dark:hover:border-violet-700"
                 >
-                  <div className="min-w-0">
+                  <Link href={`/marketing/campaigns/${row.id}`} className="min-w-0 flex-1 cursor-pointer">
                     <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">
                       {row.name}
                     </div>
@@ -206,7 +207,7 @@ export default function CampaignsClient() {
                         </span>
                       )}
                     </div>
-                  </div>
+                  </Link>
                   <div className="flex items-center gap-1 shrink-0">
                     {canSend && (
                       <button

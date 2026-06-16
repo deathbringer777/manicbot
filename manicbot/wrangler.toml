@@ -90,6 +90,8 @@ MARKETING_IG_TENANT_ID = "t_1c305v2g5011"
 #   wrangler secret put STRIPE_PRICE_PRO_MONTHLY   # price_...
 #   wrangler secret put STRIPE_PRICE_MAX_MONTHLY   # price_...
 #   wrangler secret put CLOUDFLARE_ACCOUNT_ID
+#   wrangler secret put CLICK_TOKEN_SECRET         # ≥32 chars; signs /r/ click links (migration 0123)
+#                                                    # SAME value must be set on the admin-app (Pages).
 #
 # Без STRIPE_SECRET_KEY и STRIPE_WEBHOOK_SECRET Stripe webhooks вернут 400/401.
 # Без STRIPE_PRICE_* кнопки оплаты не будут отображаться (canCheckout = false).

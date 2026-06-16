@@ -2,22 +2,22 @@ export const runtime = "edge";
 
 import type { Metadata } from "next";
 import { buildSeo, langToOgLocale } from "~/lib/seo";
-import { RulesClient } from "./RulesClient";
+import { PrivacyClient } from "./PrivacyClient";
 
 type Props = { searchParams: Promise<{ lang?: string | string[] }> };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { lang } = await searchParams;
   return buildSeo({
-    title: "Zasady korzystania",
+    title: "Polityka prywatności",
     description:
-      "Zasady korzystania z platformy ManicBot: rodzaje kont, prawa i obowiązki użytkownika, zasady akceptowalnego użycia oraz program poleceń. ManicBot udostępnia oprogramowanie — politykę salonu ustala sam salon.",
-    path: "/rules",
+      "Polityka prywatności ManicBot: jakie dane przetwarzamy i w jakim celu, role administratora i podmiotu przetwarzającego, odbiorcy danych, okres przechowywania oraz prawa użytkownika zgodnie z RODO.",
+    path: "/privacy",
     noIndex: false,
     locale: langToOgLocale(lang),
   });
 }
 
-export default function RulesPage() {
-  return <RulesClient />;
+export default function PrivacyPage() {
+  return <PrivacyClient />;
 }

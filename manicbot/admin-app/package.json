@@ -70,6 +70,9 @@
     "vitest": "^4.1.1",
     "wrangler": "^4.92.0"
   },
+  "overrides": {
+    "ws": "^8.21.0"
+  },
   "ct3aMetadata": {
     "initVersion": "7.40.0"
   },

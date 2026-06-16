@@ -103,7 +103,7 @@ export function TimeReservationDialog({
     },
   });
 
-  const formValid = (allMasters || masterId != null) && /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time) && durationMin > 0;
+  const formValid = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time) && durationMin > 0;
   const submitDisabled = !formValid || create.isPending || createMany.isPending;
 
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -111,7 +111,7 @@ export function TimeReservationDialog({
     setErr(null);
     if (submitDisabled) return;
     const base = { type: "reservation" as const, date, time, durationMin, reason: reason.trim() || undefined };
-    if (allMasters) {
+    if (allMasters || masterId == null) {
       const ids = (masters.data ?? []).map((m) => m.chatId);
       if (ids.length === 0) { setErr(t("appointments.manual.pickPlaceholder", lang)); return; }
       createMany.mutate({ tenantId, masterIds: ids, ...base });

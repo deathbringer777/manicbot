@@ -313,6 +313,15 @@ export const DEMO_CHAT_SRC = `
     // siblings and lets each chip shrink to whatever the wrapped label needs,
     // so a 2-button row ("Записаться" + "◀ Главное меню") never overflows.
     '.mb-btn-row:not(.mb-btn-row-solo):not(.mb-btn-row-grid) .mb-btn{flex:1 1 0;min-width:0}' +
+    // Catalog "back" chip (callback_data 'cat') in a multi-button card row →
+    // a compact square icon on the LEFT instead of a full-width labelled chip.
+    // White like its siblings (--mb-btn-bg), with a thin chevron tinted the
+    // muted block grey (--mb-muted). Higher specificity than the flex:1 rule
+    // above (one extra class) so it keeps its fixed 40px square and never
+    // stretches to share the row evenly. align-self:center keeps it a true
+    // square even when the paired "book" chip wraps to two lines.
+    '.mb-btn-row:not(.mb-btn-row-solo):not(.mb-btn-row-grid) .mb-btn.mb-btn-back{flex:0 0 40px;width:40px;min-width:40px;height:40px;padding:0;gap:0;align-self:center;color:var(--mb-muted)}' +
+    '.mb-btn-back svg{width:17px;height:17px;display:block}' +
     // Photo carousel — replaces the Telegram-style [◀️] [n/m] [▶️] nav row
     // with a native iPhone-style overlay (chevron arrows on hover/focus +
     // pill-shaped dots indicator). Tapping the chevrons / dots dispatches
@@ -1039,7 +1048,7 @@ export const DEMO_CHAT_SRC = `
       var i = 0;
       var rows = m.buttons;
       var hasAny = false;
-      function makeBtn(b) {
+      function makeBtn(b, isBack) {
         var btn;
         if (b.url) {
           btn = document.createElement('a');
@@ -1048,8 +1057,16 @@ export const DEMO_CHAT_SRC = `
           btn = document.createElement('button');
           btn.type = 'button';
         }
-        btn.className = 'mb-btn';
-        btn.textContent = b.text;
+        btn.className = 'mb-btn' + (isBack ? ' mb-btn-back' : '');
+        if (isBack) {
+          // Icon-only square: a thin left chevron via inline SVG (currentColor
+          // = --mb-muted). Keep the original label as the accessible name so
+          // screen readers still announce "Wstecz" / "Назад" / "Back".
+          btn.setAttribute('aria-label', b.text);
+          btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>';
+        } else {
+          btn.textContent = b.text;
+        }
         if (b.callback_data) {
           btn.addEventListener('click', function (ev) {
             ev.preventDefault();
@@ -1075,7 +1092,21 @@ export const DEMO_CHAT_SRC = `
         var rowEl = document.createElement('div');
         rowEl.className = 'mb-btn-row';
         if (row.length === 1) rowEl.classList.add('mb-btn-row-solo');
-        row.forEach(function (b) { rowEl.appendChild(makeBtn(b)); });
+        // In a multi-button card row (e.g. [Umów tę usługę, ◀ Wstecz]), turn the
+        // catalog "back" chip (callback_data 'cat') into a compact square arrow
+        // and float it to the LEFT. Solo back rows keep their full label.
+        var backIdx = -1;
+        if (row.length > 1) {
+          for (var bk = 0; bk < row.length; bk++) {
+            if (row[bk] && row[bk].callback_data === 'cat') { backIdx = bk; break; }
+          }
+        }
+        if (backIdx !== -1) {
+          rowEl.appendChild(makeBtn(row[backIdx], true));
+          row.forEach(function (b, bi) { if (bi !== backIdx) rowEl.appendChild(makeBtn(b)); });
+        } else {
+          row.forEach(function (b) { rowEl.appendChild(makeBtn(b)); });
+        }
         btnWrap.appendChild(rowEl);
         hasAny = true;
         i++;

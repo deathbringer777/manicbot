@@ -63,3 +63,39 @@ describe('demoChat .mb-btn — button text wraps instead of overflowing', () => 
     );
   });
 });
+
+describe('demoChat — catalog "back" chip renders as a compact square arrow', () => {
+  it('defines a fixed 40px square .mb-btn-back rule with higher specificity than flex:1', () => {
+    // Must out-specify the multi-button flex:1 rule (one extra class) so the
+    // square keeps a fixed width instead of stretching to share the row.
+    expect(DEMO_CHAT_SRC).toContain(
+      '.mb-btn-row:not(.mb-btn-row-solo):not(.mb-btn-row-grid) .mb-btn.mb-btn-back{flex:0 0 40px;width:40px;min-width:40px;height:40px;padding:0;gap:0;align-self:center;color:var(--mb-muted)}'
+    );
+  });
+
+  it('tints the chevron with the muted block grey, not a hard emoji colour', () => {
+    // Arrow colour follows --mb-muted (the block grey), and the glyph is an
+    // inline stroked SVG (currentColor) — NOT a coloured ◀️ emoji that would
+    // ignore `color`.
+    expect(DEMO_CHAT_SRC).toMatch(/\.mb-btn-back svg\{[^}]*width:17px/);
+    expect(DEMO_CHAT_SRC).toContain('stroke="currentColor"');
+  });
+
+  it('detects the catalog back chip by callback_data and renders it first (left)', () => {
+    // Detection is by callback_data === 'cat' (CB.CATALOG), so "Главное меню"
+    // (CB.MAIN) and other backs are untouched, and only multi-button rows
+    // (the service card) get the square treatment.
+    expect(DEMO_CHAT_SRC).toMatch(/row\[bk\]\.callback_data === 'cat'/);
+    expect(DEMO_CHAT_SRC).toMatch(/makeBtn\(row\[backIdx\], true\)/);
+    // makeBtn gains an isBack arg that swaps the label for the chevron SVG
+    // while keeping the original text as the accessible name.
+    expect(DEMO_CHAT_SRC).toMatch(/function makeBtn\(b, isBack\)/);
+    expect(DEMO_CHAT_SRC).toMatch(/setAttribute\('aria-label', b\.text\)/);
+  });
+
+  it('only squares back chips inside multi-button rows, never solo back rows', () => {
+    // The detection loop is guarded by row.length > 1 so a standalone "Wstecz"
+    // row in the catalog list keeps its full label.
+    expect(DEMO_CHAT_SRC).toMatch(/if \(row\.length > 1\) \{\s*for \(var bk/);
+  });
+});

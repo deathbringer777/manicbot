@@ -1688,6 +1688,12 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const deleteBlock = api.appointmentBlocks.delete.useMutation({
     onSuccess: () => { void blocksQuery.refetch(); },
   });
+  const createBlockSingle = api.appointmentBlocks.create.useMutation({
+    onSuccess: () => { void blocksQuery.refetch(); },
+  });
+  const createBlockMany = api.appointmentBlocks.createMany.useMutation({
+    onSuccess: () => { void blocksQuery.refetch(); },
+  });
   const mastersList = api.salon.getMasters.useQuery(
     { tenantId },
     {
@@ -2397,9 +2403,18 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               blocks={blockRows}
               onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
               onCreateAt={(info) => {
-                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
-                if (info.modifier === "shift") setTimeReservationOpen(true);
-                else setManualBookingOpen(true);
+                if (info.modifier === "shift") {
+                  const base = { type: "reservation" as const, date: info.date, time: info.time, durationMin: info.durationMin, reason: info.title || undefined };
+                  if (info.masterId != null) {
+                    createBlockSingle.mutate({ tenantId, masterId: info.masterId, ...base });
+                  } else {
+                    const ids = (mastersList.data ?? []).map((m: any) => m.chatId);
+                    if (ids.length > 0) createBlockMany.mutate({ tenantId, masterIds: ids, ...base });
+                  }
+                } else {
+                  setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
+                  setManualBookingOpen(true);
+                }
               }}
               onMoveAppointment={handleMoveAppointment}
               onMoveBlock={handleMoveBlock}
@@ -2434,9 +2449,14 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               blocks={blockRows}
               onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
               onCreateAt={(info) => {
-                setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
-                if (info.modifier === "shift") setTimeReservationOpen(true);
-                else setManualBookingOpen(true);
+                if (info.modifier === "shift") {
+                  const base = { type: "reservation" as const, date: info.date, time: info.time, durationMin: info.durationMin, reason: info.title || undefined };
+                  const ids = (mastersList.data ?? []).map((m: any) => m.chatId);
+                  if (ids.length > 0) createBlockMany.mutate({ tenantId, masterIds: ids, ...base });
+                } else {
+                  setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
+                  setManualBookingOpen(true);
+                }
               }}
               onMoveAppointment={handleMoveAppointment}
               onMoveBlock={handleMoveBlock}

@@ -355,3 +355,44 @@ body.driver-tour-active .overflow-hidden {
 .home-widget-board .react-grid-item:hover .react-resizable-handle-se::after {
   filter: brightness(1.4);
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Widget board — slim, theme-aware scrollbars.
+   Scrollable widget cards use `overflow-y-auto`; the browser's default
+   scrollbar renders as a bright/white bar in dark mode, showing up as ugly
+   vertical stripes on the right edge of the cards. Replace it with a subtle
+   translucent bar that adapts to the theme. Scoped to the board so the rest
+   of the app keeps its native scrollbars. */
+.home-widget-board,
+.home-widget-board * {
+  scrollbar-width: thin;                              /* Firefox */
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;  /* thumb / track */
+}
+.home-widget-board ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.home-widget-board ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.home-widget-board ::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.18);
+  border-radius: 9999px;
+}
+.home-widget-board ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.28);
+}
+:root.dark .home-widget-board,
+:root.dark .home-widget-board *,
+.dark .home-widget-board,
+.dark .home-widget-board * {
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+:root.dark .home-widget-board ::-webkit-scrollbar-thumb,
+.dark .home-widget-board ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+:root.dark .home-widget-board ::-webkit-scrollbar-thumb:hover,
+.dark .home-widget-board ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.26);
+}

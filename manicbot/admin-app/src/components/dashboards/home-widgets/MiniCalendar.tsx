@@ -101,7 +101,7 @@ export function MiniCalendar({
               href={`/appointments?date=${iso}`}
               className={`relative flex flex-col items-center justify-center rounded-lg h-9 text-xs transition-all group ${
                 isToday(day)
-                  ? "bg-[#1a1a2e] dark:bg-accent-500 text-white font-bold shadow-sm"
+                  ? "bg-accent-500 text-white font-bold shadow-sm"
                   : count > 0
                   ? "hover:bg-accent-500/20 text-[#374151] dark:text-slate-200"
                   : "hover:bg-[#f3f4f6] dark:hover:bg-white/[0.05] text-[#6b7280] dark:text-slate-500"
@@ -126,7 +126,7 @@ export function MiniCalendar({
 
       <div className="mt-3 flex items-center gap-3 text-[10px] text-[#9ca3af]">
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-[#1a1a2e] dark:bg-accent-500" />
+          <div className="w-3 h-3 rounded bg-accent-500" />
           <span>{t("gmHome.todayLegend", lang)}</span>
         </div>
         <div className="flex items-center gap-1">

@@ -13,7 +13,7 @@
  * the parent. The row's main click still opens the detail modal. The default
  * (non-selectable) render is unchanged — a single clickable card.
  */
-import { Phone, Mail, Send, Instagram, Ban, Star, Check } from "lucide-react";
+import { Phone, Mail, Send, Instagram, Ban, Star, Check, AlertTriangle } from "lucide-react";
 import { resolveAvatarEmoji } from "~/lib/clientAvatar";
 
 export interface ClientRowData {
@@ -27,6 +27,8 @@ export interface ClientRowData {
   lifetimeVisits: number;
   lastVisitAt: number | null;
   isBlockedGlobal: number;
+  // 0124: per-client no-show counter — drives the unreliable-client flag.
+  noShowCount?: number | null;
   // 0072 avatar fields. Either may be null — UI falls back to the default emoji.
   avatarEmoji?: string | null;
   avatarUrl?: string | null;
@@ -123,6 +125,17 @@ export function ClientRow({ c, onClick, selectable = false, selected = false, on
               className="h-3.5 w-3.5 shrink-0 text-rose-400"
               aria-label="blocked"
             />
+          )}
+          {(c.noShowCount ?? 0) > 0 && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600 dark:text-orange-400"
+              title={`${c.noShowCount} ${"no-shows"}`}
+              aria-label="no-shows"
+              data-testid={`client-no-show-${c.chatId}`}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {c.noShowCount}
+            </span>
           )}
         </div>
 

@@ -238,6 +238,9 @@ interface ClientRow {
   emailOptIn: number | null;
   lifetimeVisits: number;
   lastVisitAt: number | null;
+  // 0124: per-client no-show counter (bumped only on CLIENT no-show). Drives
+  // the unreliable-client flag + rebooking warning. select() already returns it.
+  noShowCount: number;
   registeredAt: number | null;
   updatedAt: number | null;
   deletedAt: number | null;

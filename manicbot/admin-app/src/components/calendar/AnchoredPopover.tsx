@@ -22,7 +22,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { GripHorizontal, RotateCcw } from "lucide-react";
 import { useAnchoredPosition, type AnchorRect } from "~/lib/calendar/useAnchoredPosition";
+import { useFloatingDialog } from "~/lib/calendar/useFloatingDialog";
+import type { AppointmentDialogRect } from "~/lib/useDashboardPrefs";
 
 interface Props {
   /** Captured rect of the anchor element (clicked block / drag-release point). */
@@ -42,6 +45,20 @@ interface Props {
   className?: string;
   testId?: string;
   ariaLabel?: string;
+  /**
+   * Google-Calendar-style drag + resize (desktop only). When `boundsRef` is
+   * supplied the popover gains a drag grip + corner resize handle and is
+   * clamped to that element (the calendar work area). `floatingValue` is the
+   * persisted rect (work-area coords); `onFloatingChange` fires on each
+   * drag/resize commit; `onFloatingReset` clears it back to anchored.
+   */
+  boundsRef?: React.RefObject<HTMLElement | null>;
+  floatingValue?: AppointmentDialogRect | null;
+  onFloatingChange?: (rect: AppointmentDialogRect) => void;
+  onFloatingReset?: () => void;
+  /** Localized labels for the drag/reset affordances. */
+  dragLabel?: string;
+  resetLabel?: string;
 }
 
 export function AnchoredPopover({
@@ -54,6 +71,12 @@ export function AnchoredPopover({
   className,
   testId,
   ariaLabel,
+  boundsRef,
+  floatingValue = null,
+  onFloatingChange,
+  onFloatingReset,
+  dragLabel,
+  resetLabel,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -68,6 +91,21 @@ export function AnchoredPopover({
   }, []);
 
   const pos = useAnchoredPosition(anchorRect, !isMobile, width, heightEstimate);
+
+  // Drag/resize is opt-in (boundsRef supplied) and desktop-only. The hook
+  // returns a `style` override when a floating rect is active (saved value or
+  // a live gesture); otherwise the anchored positioning below is used.
+  const dragEnabled = !!boundsRef && !isMobile;
+  const floating = useFloatingDialog({
+    enabled: dragEnabled,
+    boundsRef: boundsRef ?? { current: null },
+    panelRef,
+    value: floatingValue,
+    onCommit: (rect) => onFloatingChange?.(rect),
+    anchoredLeft: pos?.left ?? -9999,
+    anchoredTop: pos?.top ?? -9999,
+    width,
+  });
 
   useEffect(() => {
     if (!closeOnOutside) return;
@@ -114,6 +152,60 @@ export function AnchoredPopover({
         className={`relative w-full max-w-sm ${surface} ${className ?? ""}`}
       >
         {children}
+      </div>
+    </div>
+  ) : dragEnabled ? (
+    // Draggable + resizable floating dialog (Google-Calendar style). Owns its
+    // own scroll: a grip header + the scrollable body + a corner resize grip,
+    // so the header never scrolls away when a fixed height is in effect.
+    <div
+      ref={panelRef}
+      data-testid={testId}
+      aria-label={ariaLabel}
+      style={
+        floating.style ?? {
+          position: "fixed",
+          left: pos?.left ?? -9999,
+          top: pos?.top ?? -9999,
+          width,
+        }
+      }
+      className={`z-50 flex flex-col overflow-hidden ${surface}`}
+    >
+      <div
+        {...floating.dragHandleProps}
+        className="relative flex shrink-0 items-center justify-center border-b border-slate-200 py-1.5 text-slate-400 hover:text-slate-600 dark:border-white/10 dark:hover:text-white/70"
+        title={dragLabel}
+        aria-label={dragLabel}
+        data-testid="popover-drag-handle"
+      >
+        <GripHorizontal className="h-4 w-4" />
+        {floatingValue && onFloatingReset && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onFloatingReset}
+            title={resetLabel}
+            aria-label={resetLabel}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+            data-testid="popover-reset"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <div className={`min-h-0 flex-1 overflow-y-auto ${className ?? ""}`}>
+        {children}
+      </div>
+      <div
+        {...floating.resizeHandleProps}
+        className="absolute bottom-0 right-0 flex h-4 w-4 items-end justify-end p-0.5 text-slate-400"
+        data-testid="popover-resize-handle"
+        aria-hidden
+      >
+        <svg viewBox="0 0 10 10" className="h-2.5 w-2.5">
+          <path d="M9 1 L9 9 L1 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
       </div>
     </div>
   ) : (

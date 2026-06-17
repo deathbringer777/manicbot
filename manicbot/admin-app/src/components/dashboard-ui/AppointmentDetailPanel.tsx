@@ -24,6 +24,7 @@ import { STATUS_STYLES } from "~/components/dashboard-ui/AptCard";
 import { ClientDetailModal } from "~/components/salon/tabs/clients/ClientDetailModal";
 import { AnchoredPopover } from "~/components/calendar/AnchoredPopover";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
+import type { AppointmentDialogRect } from "~/lib/useDashboardPrefs";
 
 /**
  * Explicit shape for an appointment row passed into the detail panel.
@@ -49,6 +50,8 @@ export interface SelectedAppointment {
   userPhone?: string | null;
   userTg?: string | null;
   chatId?: number | null;
+  /** 0124: client's lifetime no-show count — drives the unreliable-client flag. */
+  noShowCount?: number | null;
 }
 
 interface MasterOption {
@@ -79,6 +82,16 @@ interface Props {
    * still want the panel to behave as a plain anchored card at the cursor.
    */
   anchorRect?: AnchorRect | null;
+  /**
+   * Calendar work-area element to clamp a draggable/resizable popover within.
+   * When provided (desktop), read mode becomes a Google-Calendar-style floating
+   * dialog: drag by the grip, resize from the corner, position remembered via
+   * `dialogRect` + `onDialogRectChange`. Omitted ⇒ plain anchored popover.
+   */
+  boundsRef?: React.RefObject<HTMLElement | null>;
+  dialogRect?: AppointmentDialogRect | null;
+  onDialogRectChange?: (rect: AppointmentDialogRect) => void;
+  onDialogReset?: () => void;
 }
 
 function svcDisplayName(s: ServiceOption | undefined, lang: Lang): string {
@@ -117,6 +130,10 @@ export function AppointmentDetailPanel({
   onClose,
   onChanged,
   anchorRect,
+  boundsRef,
+  dialogRect = null,
+  onDialogRectChange,
+  onDialogReset,
 }: Props) {
   type Mode = "read" | "edit";
   const [mode, setMode] = useState<Mode>("read");
@@ -208,6 +225,16 @@ export function AppointmentDetailPanel({
     return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : nowSec;
   })();
   const canMarkDone = aptStartSec <= nowSec;
+
+  // Grace gate for "client no-show": the button stays disabled until a grace
+  // window after the appointment START has elapsed (per-tenant policy, default
+  // 15 min) — mirrors the server guard in salon.markNoShow. The client may
+  // simply be running late. Master no-show is never grace-gated.
+  const noShowPolicy = api.salon.getNoShowPolicy.useQuery({ tenantId });
+  const graceMin = noShowPolicy.data?.graceMinutes ?? 15;
+  const canMarkClientNoShow = aptStartSec * 1000 + graceMin * 60_000 <= Date.now();
+  const clientNoShowCount = selected.noShowCount ?? 0;
+
   const statusBusy =
     confirmApt.isPending
     || markDoneMut.isPending
@@ -333,7 +360,10 @@ export function AppointmentDetailPanel({
           )}
           <button
             type="button"
-            onClick={onClose}
+            // In edit mode the "X" returns to the read detail card (same as
+            // "Отмена") instead of tearing the whole panel down — the user
+            // expects to land back on the appointment they were viewing.
+            onClick={mode === "edit" ? cancelEdit : onClose}
             className={ICON_BTN}
             title={t("common.close", lang)}
             aria-label={t("common.close", lang)}
@@ -377,6 +407,17 @@ export function AppointmentDetailPanel({
             <div className="sm:col-span-2 flex items-start gap-2 rounded-lg bg-rose-500/10 px-3 py-2 text-[12px] text-rose-700 dark:text-rose-300">
               <MessageSquare className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               <span>{selected.cancelReason}</span>
+            </div>
+          )}
+          {/* Unreliable-client flag — surfaces prior no-shows right on the
+              appointment so the owner sees the risk without opening the profile. */}
+          {clientNoShowCount > 0 && (
+            <div
+              className="sm:col-span-2 flex items-center gap-2 rounded-lg bg-orange-500/10 px-3 py-2 text-[12px] font-medium text-orange-700 dark:text-orange-300"
+              data-testid="panel-no-show-flag"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>{clientNoShowCount} {t("salon.noShow.noun", lang)} · {t("salon.noShow.flagTitle", lang)}</span>
             </div>
           )}
           {/* Open the full client card (Profile / History / Blocks) over the
@@ -499,10 +540,12 @@ export function AppointmentDetailPanel({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              disabled={statusBusy}
+              disabled={statusBusy || !canMarkClientNoShow}
+              title={!canMarkClientNoShow ? t("salon.day.panel.noShowGrace", lang) : undefined}
               onClick={() => markNoShow.mutate({ tenantId, id: String(selected.id), noShowBy: "client" })}
               className="inline-flex w-full min-h-11 items-center justify-center gap-1.5 rounded-lg bg-orange-500/15 px-3 py-1.5 text-xs font-medium text-orange-700 dark:text-orange-300 hover:bg-orange-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="panel-client-no-show"
+              data-can-mark-no-show={canMarkClientNoShow ? "1" : "0"}
             >
               <UserX className="h-3.5 w-3.5" />
               {markNoShow.isPending && markNoShow.variables?.noShowBy === "client"
@@ -584,8 +627,10 @@ export function AppointmentDetailPanel({
             {cardBody}
           </div>
         </div>
-      ) : confirmDelete ? null : (
-        // Delete confirm is full-screen — don't leave the read popover layered.
+      ) : (confirmDelete || openClient) ? null : (
+        // Delete confirm AND the client card are full-screen overlays — hide the
+        // read popover entirely while either is up (it reappears on close) so
+        // the user doesn't see the detail card layered beside/behind the modal.
         <AnchoredPopover
           anchorRect={anchorRect ?? null}
           onClose={onClose}
@@ -593,6 +638,12 @@ export function AppointmentDetailPanel({
           testId="appointment-detail-popover"
           ariaLabel={selected.userName ?? t("salon.day.panel.client", lang)}
           className="max-h-[80vh] overflow-y-auto p-4"
+          boundsRef={boundsRef}
+          floatingValue={dialogRect}
+          onFloatingChange={onDialogRectChange}
+          onFloatingReset={onDialogReset}
+          dragLabel={t("salon.day.panel.dragHint", lang)}
+          resetLabel={t("salon.day.panel.resetPosition", lang)}
         >
           {cardBody}
         </AnchoredPopover>

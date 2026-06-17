@@ -1497,7 +1497,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const inWeb = useInWebShell();
-  const { prefs: dashPrefs } = useDashboardPrefs();
+  const { prefs: dashPrefs, setAppointmentDialog } = useDashboardPrefs();
 
   const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "analytics", "promo_codes", "staff"];
   const urlTab = searchParams.get("tab");
@@ -2431,6 +2431,9 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               onUpdated={() => {
                 void utils.salon.getAppointments.invalidate();
               }}
+              dialogRect={dashPrefs.appointmentDialog}
+              onDialogRectChange={setAppointmentDialog}
+              onDialogReset={() => setAppointmentDialog(null)}
             />
           )}
 
@@ -2473,6 +2476,9 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               onUpdated={() => {
                 void utils.salon.getAppointments.invalidate();
               }}
+              dialogRect={dashPrefs.appointmentDialog}
+              onDialogRectChange={setAppointmentDialog}
+              onDialogReset={() => setAppointmentDialog(null)}
             />
           )}
 

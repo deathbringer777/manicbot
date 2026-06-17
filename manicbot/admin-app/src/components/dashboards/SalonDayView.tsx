@@ -32,6 +32,7 @@ import { t, type Lang } from "~/lib/i18n";
 import { useNowTicker } from "~/lib/useNowTicker";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
 import { AppointmentDetailPanel, type SelectedAppointment } from "~/components/dashboard-ui/AppointmentDetailPanel";
+import type { AppointmentDialogRect } from "~/lib/useDashboardPrefs";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
@@ -165,6 +166,15 @@ interface Props {
   /** Rendered in the header, right of the prev/today/next nav — the calendar
    *  view switcher lives here instead of on its own row above the grid. */
   headerRight?: ReactNode;
+  /**
+   * Floating-dialog persistence (owner dashboard only). When `onDialogRectChange`
+   * is supplied the appointment detail popover becomes draggable/resizable,
+   * clamped to this view's scroll area, remembering `dialogRect`. Omitted by
+   * God-Mode / master callers → the popover stays anchored.
+   */
+  dialogRect?: AppointmentDialogRect | null;
+  onDialogRectChange?: (rect: AppointmentDialogRect) => void;
+  onDialogReset?: () => void;
 }
 
 /**
@@ -272,6 +282,9 @@ export function SalonDayView({
   onUpdated,
   singleColumnMode = false,
   headerRight,
+  dialogRect = null,
+  onDialogRectChange,
+  onDialogReset,
 }: Props) {
   // Drag-to-reschedule — single hook owns the cross-column ghost state.
   // Both the date+master pair are resolved from the column under the
@@ -1189,12 +1202,17 @@ export function SalonDayView({
               userPhone: selectedApt.userPhone ?? null,
               userTg: selectedApt.userTg ?? null,
               chatId: selectedApt.chatId ?? null,
+              noShowCount: typeof selectedApt.noShowCount === "number" ? selectedApt.noShowCount : 0,
             } satisfies SelectedAppointment
           }
           masters={masters.map((m) => ({ chatId: m.chatId, name: m.name }))}
           services={services}
           lang={lang}
           anchorRect={selectedRect}
+          boundsRef={onDialogRectChange ? scrollerRef : undefined}
+          dialogRect={dialogRect}
+          onDialogRectChange={onDialogRectChange}
+          onDialogReset={onDialogReset}
           onClose={() => setSelectedApt(null)}
           onChanged={() => {
             onUpdated?.();

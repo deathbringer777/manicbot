@@ -595,14 +595,26 @@ export const salonRouter = createTRPCRouter({
           throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_mark_no_show_in_grace" });
         }
       }
-      await ctx.db.update(appointments).set({
+      // Idempotency gate: flip a not-yet-no-show row (noShow 0→1) and only
+      // dispatch to the Worker when THIS call actually claimed the flip. A
+      // double-click / tRPC retry / network re-delivery re-runs the mutation,
+      // but the conditional UPDATE then claims nothing — so the client's
+      // no_show_count is never double-bumped and the no-show message is never
+      // re-sent (`.returning()` over a 0-row UPDATE is empty).
+      const flipped = await ctx.db.update(appointments).set({
         noShow: 1,
         noShowBy: input.noShowBy,
         status: "no_show",
         cancelReason: input.comment ? sanitizeText(input.comment, 500) : null,
-      }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
-      const action = input.noShowBy === "client" ? "no_show_client" : "no_show_master";
-      notifyWorker(action, input.id, input.tenantId, null).catch(() => {});
+      }).where(and(
+        eq(appointments.id, input.id),
+        eq(appointments.tenantId, input.tenantId),
+        eq(appointments.noShow, 0),
+      )).returning({ id: appointments.id });
+      if (flipped.length > 0) {
+        const action = input.noShowBy === "client" ? "no_show_client" : "no_show_master";
+        notifyWorker(action, input.id, input.tenantId, null).catch(() => {});
+      }
       return { success: true };
     }),
 

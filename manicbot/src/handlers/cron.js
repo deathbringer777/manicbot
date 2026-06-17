@@ -1029,6 +1029,11 @@ const RETENTION_PRUNES = Object.freeze([
   { table: 'permission_elevation_codes', where: "expires_at < strftime('%s','now','-7 days')" },
   { table: 'stripe_events',              where: "received_at < strftime('%s','now','-90 days')" },
   { table: 'marketing_sends',            where: "status = 'delivered' AND sent_at < strftime('%s','now','-90 days')" },
+  // First-party click log (migration 0123). The funnel reads the set-once
+  // timestamp columns on marketing_sends and conversions are written within
+  // CONVERSION_WINDOW_DAYS (7d), so 180d of raw clicks is generous headroom
+  // while keeping this append-only table from growing unbounded.
+  { table: 'marketing_link_clicks',      where: "clicked_at < strftime('%s','now','-180 days')" },
 ]);
 
 /**
@@ -1337,6 +1342,19 @@ export async function phaseMarketingConversions(ctx, nowMs) {
     log.error('handlers.cron', e instanceof Error ? e : new Error(String(e?.message)),
       { action: 'marketing_conversions_query' });
     return;
+  }
+
+  // Observability: a full page means there may be more in-window bookings than
+  // this tick can attribute. Newest-first prioritizes the freshest (most likely
+  // to convert) bookings; older overflow is surfaced here rather than silently
+  // dropped. Follow-up if a real tenant ever trips this: a per-tenant
+  // high-water-mark cursor so every booking is scanned exactly once.
+  if (appts.length >= MAX_PER_TICK) {
+    log.warn('handlers.cron', {
+      action: 'marketing_conversions_cap_hit',
+      tenantId: ctx.tenantId,
+      cap: MAX_PER_TICK,
+    });
   }
 
   for (const appt of appts) {

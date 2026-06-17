@@ -412,13 +412,23 @@ export const masterRouter = createTRPCRouter({
           throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_mark_no_show_in_grace" });
         }
       }
-      await ctx.db.update(appointments).set({
+      // Idempotency gate (mirrors salon.markNoShow): flip a not-yet-no-show row
+      // (noShow 0→1) and dispatch only when THIS call claimed the flip, so a
+      // double-mark / retry can't double-count no_show_count or re-message the
+      // client. `.returning()` over a 0-row UPDATE is empty.
+      const flipped = await ctx.db.update(appointments).set({
         noShow: 1,
         noShowBy: input.noShowBy,
         status: "no_show",
-      }).where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)));
-      const action = input.noShowBy === "client" ? "no_show_client" : "no_show_master";
-      notifyWorker(action, input.id, input.tenantId, null).catch(() => {});
+      }).where(and(
+        eq(appointments.id, input.id),
+        eq(appointments.tenantId, input.tenantId),
+        eq(appointments.noShow, 0),
+      )).returning({ id: appointments.id });
+      if (flipped.length > 0) {
+        const action = input.noShowBy === "client" ? "no_show_client" : "no_show_master";
+        notifyWorker(action, input.id, input.tenantId, null).catch(() => {});
+      }
       return { success: true };
     }),
 

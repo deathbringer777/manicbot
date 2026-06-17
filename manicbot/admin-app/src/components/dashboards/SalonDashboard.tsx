@@ -1694,6 +1694,24 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const createBlockMany = api.appointmentBlocks.createMany.useMutation({
     onSuccess: () => { void blocksQuery.refetch(); },
   });
+  // Shift-drag "time reservation" fanned out to every master. Centralizes the
+  // chatId mapping + the empty-roster guard so neither calendar view silently
+  // no-ops when the salon has no masters yet (previously the `ids.length > 0`
+  // check just dropped the action with no feedback).
+  function reserveTimeForAllMasters(base: {
+    type: "reservation";
+    date: string;
+    time: string;
+    durationMin: number;
+    reason?: string;
+  }) {
+    const ids = (mastersList.data ?? []).map((m) => m.chatId);
+    if (ids.length === 0) {
+      toast.error(t("salon.noMasters", lang));
+      return;
+    }
+    createBlockMany.mutate({ tenantId, masterIds: ids, ...base });
+  }
   const mastersList = api.salon.getMasters.useQuery(
     { tenantId },
     {
@@ -2408,8 +2426,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
                   if (info.masterId != null) {
                     createBlockSingle.mutate({ tenantId, masterId: info.masterId, ...base });
                   } else {
-                    const ids = (mastersList.data ?? []).map((m: any) => m.chatId);
-                    if (ids.length > 0) createBlockMany.mutate({ tenantId, masterIds: ids, ...base });
+                    reserveTimeForAllMasters(base);
                   }
                 } else {
                   setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
@@ -2454,8 +2471,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               onCreateAt={(info) => {
                 if (info.modifier === "shift") {
                   const base = { type: "reservation" as const, date: info.date, time: info.time, durationMin: info.durationMin, reason: info.title || undefined };
-                  const ids = (mastersList.data ?? []).map((m: any) => m.chatId);
-                  if (ids.length > 0) createBlockMany.mutate({ tenantId, masterIds: ids, ...base });
+                  reserveTimeForAllMasters(base);
                 } else {
                   setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
                   setManualBookingOpen(true);

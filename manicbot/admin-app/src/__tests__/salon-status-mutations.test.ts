@@ -180,7 +180,8 @@ describe("salonRouter status mutations — close adminProcedure regression", () 
   describe("markNoShow", () => {
     it("fires notifyWorker no_show_client once the grace window has elapsed", async () => {
       // SELECT ts → past start; SELECT tenant_config → none → default 15-min grace.
-      const dbMock = createDbMock([[{ ts: PAST_TS }], []]);
+      // updateReturnings [{id}] = the conditional UPDATE claimed the flip 0→1.
+      const dbMock = createDbMock([[{ ts: PAST_TS }], []], [[{ id: "apt_1" }]]);
       const caller = ownerCaller(dbMock.db);
 
       await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" });
@@ -201,7 +202,7 @@ describe("salonRouter status mutations — close adminProcedure regression", () 
 
     it("honours a custom graceMinutes from the tenant policy", async () => {
       // 5-min-ago start, but tenant grace is 0 → allowed.
-      const dbMock = createDbMock([[{ ts: RECENT_TS }], [{ value: JSON.stringify({ graceMinutes: 0 }) }]]);
+      const dbMock = createDbMock([[{ ts: RECENT_TS }], [{ value: JSON.stringify({ graceMinutes: 0 }) }]], [[{ id: "apt_1" }]]);
       const caller = ownerCaller(dbMock.db);
 
       await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" });
@@ -210,12 +211,35 @@ describe("salonRouter status mutations — close adminProcedure regression", () 
     });
 
     it("does NOT grace-gate a master no-show (fires immediately)", async () => {
-      const dbMock = createDbMock();
+      const dbMock = createDbMock([], [[{ id: "apt_2" }]]);
       const caller = ownerCaller(dbMock.db);
 
       await caller.markNoShow({ tenantId: TENANT, id: "apt_2", noShowBy: "master" });
 
       expect(notifyWorker).toHaveBeenCalledWith("no_show_master", "apt_2", TENANT, null);
+    });
+
+    // ── Idempotency: a re-mark of an already-no-show row claims nothing, so the
+    //    Worker dispatch (no_show_count bump + client message) must NOT re-fire.
+    it("does NOT re-fire notifyWorker when a master no-show row is already no_show", async () => {
+      // updateReturnings [] = conditional UPDATE matched 0 rows (already 1).
+      const dbMock = createDbMock([], [[]]);
+      const caller = ownerCaller(dbMock.db);
+
+      const result = await caller.markNoShow({ tenantId: TENANT, id: "apt_2", noShowBy: "master" });
+
+      expect(result).toEqual({ success: true });
+      expect(notifyWorker).not.toHaveBeenCalled();
+    });
+
+    it("does NOT double-count a CLIENT no-show re-mark (grace passed, row already no_show)", async () => {
+      // grace gate passes (PAST_TS, no policy), but the flip claims 0 rows.
+      const dbMock = createDbMock([[{ ts: PAST_TS }], []], [[]]);
+      const caller = ownerCaller(dbMock.db);
+
+      await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" });
+
+      expect(notifyWorker).not.toHaveBeenCalled();
     });
   });
 

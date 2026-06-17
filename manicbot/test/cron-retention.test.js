@@ -17,6 +17,7 @@ const RETENTION_TABLES = [
   'permission_elevation_codes',
   'stripe_events',
   'marketing_sends',
+  'marketing_link_clicks',
 ];
 
 function makeKv() {

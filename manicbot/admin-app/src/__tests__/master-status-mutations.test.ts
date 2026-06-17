@@ -114,7 +114,8 @@ describe("masterRouter status mutations", () => {
 
     it("fires notifyWorker no_show_client (owner caller) once grace elapsed", async () => {
       // owner skips the IDOR select; grace gate does SELECT ts then tenant_config.
-      const dbMock = createDbMock([[{ ts: PAST_TS }], []]);
+      // updateReturnings [{id}] = the conditional UPDATE claimed the flip 0→1.
+      const dbMock = createDbMock([[{ ts: PAST_TS }], []], [[{ id: "apt_1" }]]);
       const caller = ownerCaller(dbMock.db);
 
       await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" });
@@ -133,12 +134,23 @@ describe("masterRouter status mutations", () => {
     });
 
     it("master no-show is not grace-gated (owner caller)", async () => {
-      const dbMock = createDbMock();
+      const dbMock = createDbMock([], [[{ id: "apt_1" }]]);
       const caller = ownerCaller(dbMock.db);
 
       await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "master" });
 
       expect(notifyWorker).toHaveBeenCalledWith("no_show_master", "apt_1", TENANT, null);
+    });
+
+    it("does NOT re-fire notifyWorker when the row is already no_show (idempotent re-mark)", async () => {
+      // updateReturnings [] = conditional UPDATE matched 0 rows (already no_show).
+      const dbMock = createDbMock([], [[]]);
+      const caller = ownerCaller(dbMock.db);
+
+      const result = await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "master" });
+
+      expect(result).toEqual({ success: true });
+      expect(notifyWorker).not.toHaveBeenCalled();
     });
   });
 });

@@ -108,7 +108,9 @@ export async function dispatchAppointmentAutomation(ctx, apt, eventType, opts = 
         await ctx.db.prepare(
           'UPDATE users SET no_show_count = no_show_count + 1 ' +
           'WHERE tenant_id = ? AND chat_id = ?'
-        ).bind(ctx.tenantId, apt.chatId).run().catch(() => undefined);
+        ).bind(ctx.tenantId, apt.chatId).run().catch((e) =>
+          log.warn('appointmentAutomations', { action: 'no_show_count_bump_failed', error: e?.message }),
+        );
       }
       sideEffects = true;
     }

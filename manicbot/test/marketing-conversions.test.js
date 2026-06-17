@@ -6,8 +6,9 @@
  * marketing-dispatch.test.js pattern). The mock honours the
  * UNIQUE(campaign_id, appointment_id) idempotency contract.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { phaseMarketingConversions, CONVERSION_WINDOW_DAYS } from '../src/handlers/cron.js';
+import { log } from '../src/utils/logger.js';
 
 const WINDOW = CONVERSION_WINDOW_DAYS * 24 * 60 * 60;
 
@@ -130,5 +131,25 @@ describe('phaseMarketingConversions', () => {
   it('no-ops without a tenant or db', async () => {
     await expect(phaseMarketingConversions({ db: null, tenantId: 't_a' }, NOW_MS)).resolves.toBeUndefined();
     await expect(phaseMarketingConversions({ db: makeDb(), tenantId: null }, NOW_MS)).resolves.toBeUndefined();
+  });
+
+  it('warns (no silent drop) when the per-tick cap is saturated', async () => {
+    const apptAt = NOW_S - 3600;
+    // A full page (100) of in-window bookings — no users/clicks so none attribute,
+    // but the saturated cap must surface a warning instead of dropping silently.
+    const appts = Array.from({ length: 100 }, (_, i) => ({
+      id: `apt_${i}`, tenant_id: 't_a', chat_id: 1000 + i, created_at: apptAt - i,
+    }));
+    const db = makeDb({ appts });
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    try {
+      await phaseMarketingConversions({ db, tenantId: 't_a' }, NOW_MS);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'handlers.cron',
+        expect.objectContaining({ action: 'marketing_conversions_cap_hit', tenantId: 't_a' }),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

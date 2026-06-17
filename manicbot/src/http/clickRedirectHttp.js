@@ -71,7 +71,11 @@ export async function handleClickRedirect(request, token, env, executionCtx) {
       const ctx = envCtx(env);
       if (!ctx?.db) return;
       const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for');
-      const ipHash = await hashIp(ip, secret);
+      // Domain-separate the IP-hash salt from the HMAC signing key. The same
+      // CLICK_TOKEN_SECRET signs redirect tokens, so deriving the salt with a
+      // distinct prefix keeps the two uses cryptographically independent rather
+      // than feeding the raw signing key straight into the hash.
+      const ipHash = await hashIp(ip, `ip-hash:${secret}`);
       const nowS = Math.floor(Date.now() / 1000);
       await dbRun(
         ctx,

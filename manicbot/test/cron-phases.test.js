@@ -117,13 +117,13 @@ describe('phaseCleanup (P1-1)', () => {
 });
 
 describe('phaseRetention (P1-10)', () => {
-  it('issues 6 retention DELETE SQLs with strftime() guards', async () => {
+  it('issues 7 retention DELETE SQLs with strftime() guards', async () => {
     const db = makeDb();
     const kv = makeKv();
     const ctx = { db, tenantId: 't_1', globalKv: kv };
     await phaseRetention(ctx, 't_1', Date.now());
     const sqls = db.deletes.map(d => d.sql);
-    expect(sqls).toHaveLength(6);
+    expect(sqls).toHaveLength(7);
     expect(sqls.some(s => /DELETE FROM audit_log.*-180 days/i.test(s))).toBe(true);
     // error_log retention was widened 30 → 90 days during the pre-prod
     // hardening pass (matches stripe_events / marketing_sends retention).
@@ -132,6 +132,7 @@ describe('phaseRetention (P1-10)', () => {
     expect(sqls.some(s => /DELETE FROM permission_elevation_codes.*-7 days/i.test(s))).toBe(true);
     expect(sqls.some(s => /DELETE FROM stripe_events.*-90 days/i.test(s))).toBe(true);
     expect(sqls.some(s => /DELETE FROM marketing_sends.*-90 days/i.test(s))).toBe(true);
+    expect(sqls.some(s => /DELETE FROM marketing_link_clicks.*-180 days/i.test(s))).toBe(true);
   });
 
   it('uses the correct timestamp column per table', async () => {
@@ -158,12 +159,13 @@ describe('phaseRetention (P1-10)', () => {
     expect(raw).toBeTruthy();
     const events = JSON.parse(raw);
     const prunedEvents = events.filter(e => e.type === 'cron.retention.pruned');
-    expect(prunedEvents.length).toBe(6);
+    expect(prunedEvents.length).toBe(7);
     const tables = prunedEvents.map(e => e.data?.table).sort();
     expect(tables).toEqual([
       'analytics_events',
       'audit_log',
       'error_log',
+      'marketing_link_clicks',
       'marketing_sends',
       'permission_elevation_codes',
       'stripe_events',
@@ -187,8 +189,8 @@ describe('phaseRetention (P1-10)', () => {
     // Tenant events land in per-tenant key (fix #5 RMW fix).
     const events = JSON.parse(kv.store.get('adminlog:tenant:t_1') ?? '[]');
     expect(events.some(e => e.type === 'cron.phase.error')).toBe(true);
-    // 5 successful prunes + 1 failure event = 6 total events
-    expect(events.filter(e => e.type === 'cron.retention.pruned').length).toBe(5);
+    // 6 successful prunes (audit_log throws) out of 7 retention tables.
+    expect(events.filter(e => e.type === 'cron.retention.pruned').length).toBe(6);
   });
 
   it('returns silently when ctx.db is missing', async () => {

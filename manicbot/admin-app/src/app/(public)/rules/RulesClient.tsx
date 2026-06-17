@@ -6,62 +6,86 @@ import type { Lang } from "~/lib/i18n";
 
 interface Section {
   title: string;
+  intro?: string;
   items: string[];
 }
 
-const UI: Record<Lang, { kicker: string; title: string; updated: string; sections: Section[] }> = {
+interface RulesUi {
+  kicker: string;
+  title: string;
+  updated: string;
+  lead: string;
+  sections: Section[];
+}
+
+const UI: Record<Lang, RulesUi> = {
   ru: {
     kicker: "Правила",
     title: "Правила пользования",
-    updated: "Последнее обновление: май 2026",
+    updated: "Последнее обновление: июнь 2026",
+    lead: "ManicBot — это программный сервис (платформа) для салонов красоты и частных мастеров. Эти правила объясняют, кто и как может пользоваться сервисом. Полное обязывающее соглашение — на странице /terms, обработка данных — на странице /privacy.",
     sections: [
       {
-        title: "1. Регистрация и аккаунт",
+        title: "1. О сервисе, кто может пользоваться и типы аккаунтов",
+        intro:
+          "ManicBot предоставляет только программное обеспечение, которое помогает салонам и мастерам автоматизировать онлайн-запись, общение с клиентами и управление через Telegram, WhatsApp, Instagram и веб-виджет. Сами услуги салона ManicBot не оказывает.",
         items: [
-          "Для записи через бот необходимо подтвердить своё имя в Telegram.",
-          "Один аккаунт Telegram соответствует одному профилю клиента.",
-          "Владельцы салонов регистрируют бизнес-аккаунт через панель администратора.",
+          "Бизнес-аккаунт — для владельца салона или независимого (частного) мастера; регистрируется через панель администратора и после пробного периода требует активной подписки.",
+          "Профиль клиента — создаётся автоматически, когда клиент записывается через бот; один аккаунт мессенджера (например, Telegram) соответствует одному профилю клиента.",
+          "Для использования сервиса необходимо достичь совершеннолетия (или иметь согласие законного представителя) и указывать достоверные данные.",
         ],
       },
       {
-        title: "2. Запись и отмена",
+        title: "2. Права пользователя",
         items: [
-          "Запись доступна на свободные слоты в расписании мастера.",
-          "Отмена возможна не позднее чем за 2 часа до начала сеанса.",
-          "Систематические неявки могут привести к временной блокировке записи.",
+          "Пользоваться сервисом в пределах выбранного тарифа и настоящих правил.",
+          "Получать доступ к своим персональным данным, выгружать их и запрашивать удаление — подробнее на странице /privacy.",
+          "Обращаться в поддержку через встроенную систему поддержки и страницу /support.",
         ],
       },
       {
-        title: "3. Ответственность пользователей",
+        title: "3. Обязанности и запрещённые действия",
         items: [
-          "Запрещено указывать заведомо ложные данные при регистрации.",
-          "Запрещено злоупотреблять системой поддержки или AI-ассистентом.",
-          "Запрещено пытаться получить доступ к чужим данным или аккаунтам.",
+          "Указывать достоверные данные, беречь доступ к своему аккаунту и отвечать за действия, совершённые под ним.",
+          "Не злоупотреблять системой поддержки и AI-ассистентом (спам, заведомое введение в заблуждение, попытки получить чужие данные).",
+          "Не пытаться получить доступ к данным или аккаунтам других пользователей или салонов.",
+          "Не извлекать данные автоматически (scraping), не декомпилировать, не перегружать и не вмешиваться в работу сервиса.",
+          "Не использовать сервис для незаконного, мошеннического или вредоносного контента и для рассылки спама.",
+          "Соблюдать правила платформ, через которые вы подключаетесь (Telegram, Meta / WhatsApp / Instagram и др.).",
         ],
       },
       {
-        title: "4. Данные и конфиденциальность",
+        title: "4. Политику салона определяет сам салон",
+        intro:
+          "ManicBot — это только инструмент. Каждый салон или мастер самостоятельно настраивает свою работу в приложении и несёт за неё полную ответственность.",
         items: [
-          "Персональные данные обрабатываются в соответствии с политикой конфиденциальности.",
-          "Данные записей хранятся для обеспечения истории визитов.",
-          "Подробнее — на странице /privacy.",
+          "Перечень услуг, цены, график и расписание устанавливает салон, а не ManicBot.",
+          "Политику отмен, неявок, предоплаты и переноса записей каждый салон определяет индивидуально с помощью инструментов приложения — ManicBot не устанавливает и не навязывает единое правило отмены.",
+          "Договор об оказании услуги заключается между клиентом и салоном. ManicBot не является его стороной и не отвечает за оказанные услуги, их качество, оплату или споры между клиентом и салоном.",
         ],
       },
       {
         title: "5. Реферальная программа",
         items: [
-          "Программа доступна владельцам салонов и независимым (личным) мастерам с активной подпиской.",
-          "Приглашённый друг получает 20% off первого месяца или 10% off годовой подписки при первой оплате по реферальной ссылке.",
-          "Пригласивший получает 1 бесплатный месяц подписки за каждого подтверждённого друга — приглашённый считается подтверждённым только после успешной оплаты первого счёта (не пробного периода).",
+          "Программа доступна владельцам салонов и независимым (частным) мастерам с активной подпиской.",
+          "Приглашённый получает 20% скидки на первый месяц или 10% на годовую подписку при первой оплате по реферальной ссылке.",
+          "Пригласивший получает 1 бесплатный месяц за каждого подтверждённого друга — друг считается подтверждённым только после успешной оплаты первого счёта (не пробного периода).",
           "Лимит — 6 бесплатных месяцев в течение скользящего года. Если приглашённый запросит возврат или отменит подписку в первый месяц, награда отменяется.",
           "Самоприглашение, фейковые регистрации и спам в публичных каналах запрещены и ведут к аннулированию награды и блокировке кода.",
         ],
       },
       {
-        title: "6. Изменения правил",
+        title: "6. Данные и обязывающее соглашение",
         items: [
-          "Платформа оставляет за собой право обновлять правила.",
-          "Продолжение пользования сервисом означает согласие с текущей версией правил.",
+          "Персональные данные обрабатываются так, как описано в Политике конфиденциальности (/privacy).",
+          "Полное соглашение, регулирующее использование ManicBot, — это Условия использования (/terms). При любом противоречии преимущество имеют Условия использования.",
+        ],
+      },
+      {
+        title: "7. Изменения правил",
+        items: [
+          "Мы можем обновлять эти правила; дата обновления указывается вверху страницы.",
+          "Продолжение пользования сервисом после обновления означает согласие с действующей версией правил.",
         ],
       },
     ],
@@ -69,111 +93,141 @@ const UI: Record<Lang, { kicker: string; title: string; updated: string; section
   ua: {
     kicker: "Правила",
     title: "Правила користування",
-    updated: "Останнє оновлення: травень 2026",
+    updated: "Останнє оновлення: червень 2026",
+    lead: "ManicBot — це програмний сервіс (платформа) для салонів краси та приватних майстрів. Ці правила пояснюють, хто і як може користуватися сервісом. Повна обовʼязкова угода — на сторінці /terms, обробка даних — на сторінці /privacy.",
     sections: [
       {
-        title: "1. Реєстрація та акаунт",
+        title: "1. Про сервіс, хто може користуватися та типи акаунтів",
+        intro:
+          "ManicBot надає лише програмне забезпечення, яке допомагає салонам і майстрам автоматизувати онлайн-запис, спілкування з клієнтами та управління через Telegram, WhatsApp, Instagram і вебвіджет. Самі послуги салону ManicBot не надає.",
         items: [
-          "Для запису через бот необхідно підтвердити своє ім'я в Telegram.",
-          "Один акаунт Telegram відповідає одному профілю клієнта.",
-          "Власники салонів реєструють бізнес-акаунт через панель адміністратора.",
+          "Бізнес-акаунт — для власника салону або незалежного (приватного) майстра; реєструється через панель адміністратора і після пробного періоду потребує активної підписки.",
+          "Профіль клієнта — створюється автоматично, коли клієнт записується через бот; один акаунт месенджера (наприклад, Telegram) відповідає одному профілю клієнта.",
+          "Для користування сервісом необхідно досягти повноліття (або мати згоду законного представника) і вказувати достовірні дані.",
         ],
       },
       {
-        title: "2. Запис та скасування",
+        title: "2. Права користувача",
         items: [
-          "Запис доступний на вільні слоти в розкладі майстра.",
-          "Скасування можливе не пізніше ніж за 2 години до початку сеансу.",
-          "Систематичні неявки можуть призвести до тимчасового блокування запису.",
+          "Користуватися сервісом у межах обраного тарифу та цих правил.",
+          "Отримувати доступ до своїх персональних даних, вивантажувати їх і запитувати видалення — детальніше на сторінці /privacy.",
+          "Звертатися в підтримку через вбудовану систему підтримки та сторінку /support.",
         ],
       },
       {
-        title: "3. Відповідальність користувачів",
+        title: "3. Обовʼязки та заборонені дії",
         items: [
-          "Заборонено вказувати завідомо неправдиві дані при реєстрації.",
-          "Заборонено зловживати системою підтримки або AI-асистентом.",
-          "Заборонено намагатися отримати доступ до чужих даних або акаунтів.",
+          "Вказувати достовірні дані, берегти доступ до свого акаунта та відповідати за дії, вчинені під ним.",
+          "Не зловживати системою підтримки та AI-асистентом (спам, свідоме введення в оману, спроби отримати чужі дані).",
+          "Не намагатися отримати доступ до даних або акаунтів інших користувачів чи салонів.",
+          "Не вилучати дані автоматично (scraping), не декомпілювати, не перевантажувати і не втручатися в роботу сервісу.",
+          "Не використовувати сервіс для незаконного, шахрайського чи шкідливого контенту та для розсилання спаму.",
+          "Дотримуватися правил платформ, через які ви підключаєтеся (Telegram, Meta / WhatsApp / Instagram тощо).",
         ],
       },
       {
-        title: "4. Дані та конфіденційність",
+        title: "4. Політику салону визначає сам салон",
+        intro:
+          "ManicBot — це лише інструмент. Кожен салон або майстер самостійно налаштовує свою роботу в застосунку і несе за неї повну відповідальність.",
         items: [
-          "Персональні дані обробляються відповідно до політики конфіденційності.",
-          "Дані записів зберігаються для забезпечення історії відвідувань.",
-          "Детальніше — на сторінці /privacy.",
+          "Перелік послуг, ціни, графік і розклад встановлює салон, а не ManicBot.",
+          "Політику скасувань, неявок, передоплати та перенесення записів кожен салон визначає індивідуально за допомогою інструментів застосунку — ManicBot не встановлює і не нав'язує єдине правило скасування.",
+          "Договір про надання послуги укладається між клієнтом і салоном. ManicBot не є його стороною і не відповідає за надані послуги, їхню якість, оплату чи спори між клієнтом і салоном.",
         ],
       },
       {
         title: "5. Реферальна програма",
         items: [
-          "Програма доступна власникам салонів та незалежним (особистим) майстрам з активною підпискою.",
-          "Запрошений друг отримує 20% off першого місяця або 10% off річної підписки при першій оплаті за реферальним посиланням.",
-          "Запрошувач отримує 1 безкоштовний місяць підписки за кожного підтвердженого друга — друг вважається підтвердженим лише після успішної оплати першого рахунку (не пробного періоду).",
+          "Програма доступна власникам салонів та незалежним (приватним) майстрам з активною підпискою.",
+          "Запрошений отримує 20% знижки на перший місяць або 10% на річну підписку при першій оплаті за реферальним посиланням.",
+          "Запрошувач отримує 1 безкоштовний місяць за кожного підтвердженого друга — друг вважається підтвердженим лише після успішної оплати першого рахунку (не пробного періоду).",
           "Ліміт — 6 безкоштовних місяців протягом ковзного року. Якщо запрошений запросить повернення коштів або скасує підписку в перший місяць, винагорода скасовується.",
           "Самозапрошення, фіктивні реєстрації та спам у публічних каналах заборонені та ведуть до скасування винагороди й блокування коду.",
         ],
       },
       {
-        title: "6. Зміни правил",
+        title: "6. Дані та обовʼязкова угода",
         items: [
-          "Платформа залишає за собою право оновлювати правила.",
-          "Продовження користування сервісом означає згоду з поточною версією правил.",
+          "Персональні дані обробляються так, як описано в Політиці конфіденційності (/privacy).",
+          "Повна угода, що регулює використання ManicBot, — це Умови використання (/terms). За будь-якого протиріччя перевагу мають Умови використання.",
+        ],
+      },
+      {
+        title: "7. Зміни правил",
+        items: [
+          "Ми можемо оновлювати ці правила; дата оновлення зазначається вгорі сторінки.",
+          "Продовження користування сервісом після оновлення означає згоду з чинною версією правил.",
         ],
       },
     ],
   },
   en: {
     kicker: "Rules",
-    title: "Terms of Use",
-    updated: "Last updated: May 2026",
+    title: "Rules of Use",
+    updated: "Last updated: June 2026",
+    lead: "ManicBot is a software service (platform) for beauty salons and independent masters. These rules explain who may use the service and how. The full binding agreement is on the /terms page, and data handling is described on the /privacy page.",
     sections: [
       {
-        title: "1. Registration & Account",
+        title: "1. About the service, who can use it, and account types",
+        intro:
+          "ManicBot provides software only — tools that help salons and masters automate online booking, client communication and management through Telegram, WhatsApp, Instagram and the web widget. ManicBot does not provide the salon services themselves.",
         items: [
-          "To book through the bot you must confirm your Telegram name.",
-          "One Telegram account corresponds to one client profile.",
-          "Salon owners register a business account through the admin panel.",
+          "Business account — for a salon owner or an independent (personal) master; registered through the admin panel and, after the trial period, requires an active subscription.",
+          "Client profile — created automatically when a client books through the bot; one messenger account (e.g. Telegram) corresponds to one client profile.",
+          "To use the service you must be of the age of majority (or have a legal guardian's consent) and provide accurate information.",
         ],
       },
       {
-        title: "2. Booking & Cancellation",
+        title: "2. Your rights",
         items: [
-          "Booking is available for open slots in the master's schedule.",
-          "Cancellation is allowed no later than 2 hours before the session.",
-          "Repeated no-shows may result in a temporary booking suspension.",
+          "Use the service within the limits of your chosen plan and these rules.",
+          "Access, export and request deletion of your personal data — see the /privacy page.",
+          "Contact support through the built-in support system and the /support page.",
         ],
       },
       {
-        title: "3. User Responsibilities",
+        title: "3. Your obligations and prohibited actions",
         items: [
-          "Providing deliberately false information during registration is prohibited.",
-          "Abusing the support system or AI assistant is prohibited.",
-          "Attempting to access other users' data or accounts is prohibited.",
+          "Provide accurate information, keep your account access secure, and remain responsible for activity under your account.",
+          "Do not abuse the support system or the AI assistant (spam, deliberate deception, attempts to obtain other people's data).",
+          "Do not attempt to access the data or accounts of other users or salons.",
+          "Do not scrape, decompile, overload, or otherwise interfere with the service.",
+          "Do not use the service for unlawful, fraudulent or harmful content, or to send spam.",
+          "Comply with the rules of the platforms you connect through (Telegram, Meta / WhatsApp / Instagram, etc.).",
         ],
       },
       {
-        title: "4. Data & Privacy",
+        title: "4. Each salon sets its own policies",
+        intro:
+          "ManicBot is only a tool. Each salon or master independently configures how they run their business in the app and is fully responsible for it.",
         items: [
-          "Personal data is processed in accordance with the privacy policy.",
-          "Booking data is stored to maintain visit history.",
-          "See /privacy for details.",
+          "Services, prices, working hours and schedule are set by the salon, not by ManicBot.",
+          "Cancellation, no-show, prepayment and rescheduling policies are decided by each salon individually using the app's tools — ManicBot does not set or enforce any single cancellation rule.",
+          "The agreement to provide a service is between the client and the salon. ManicBot is not a party to it and is not responsible for the services rendered, their quality, payment, or any dispute between a client and a salon.",
         ],
       },
       {
-        title: "5. Referral Program",
+        title: "5. Referral program",
         items: [
-          "The program is available to salon owners and independent (personal-tenant) masters with an active subscription.",
-          "The invited friend gets 20% off their first month or 10% off the yearly plan on their first paid invoice through the referral link.",
-          "The inviter gets 1 free month of subscription per confirmed friend — a friend counts as confirmed only after a successful first paid invoice (not the trial).",
+          "The program is available to salon owners and independent (personal) masters with an active subscription.",
+          "The invited friend gets 20% off the first month or 10% off the yearly plan on their first paid invoice through the referral link.",
+          "The inviter gets 1 free month per confirmed friend — a friend counts as confirmed only after a successful first paid invoice (not the trial).",
           "The cap is 6 free months per rolling year. If the invited friend issues a refund or cancels within the first month, the reward is reversed.",
-          "Self-referrals, fake registrations, and spam on public channels are prohibited and result in reward cancellation and code suspension.",
+          "Self-referrals, fake registrations and spam on public channels are prohibited and result in reward cancellation and code suspension.",
         ],
       },
       {
-        title: "6. Changes to Rules",
+        title: "6. Data and the binding agreement",
         items: [
-          "The platform reserves the right to update these rules.",
-          "Continued use of the service means you accept the current version of the rules.",
+          "Personal data is processed as described in the Privacy Policy (/privacy).",
+          "The full agreement governing the use of ManicBot is the Terms of Service (/terms). In case of any conflict, the Terms of Service prevail.",
+        ],
+      },
+      {
+        title: "7. Changes to these rules",
+        items: [
+          "We may update these rules; the update date is shown at the top of the page.",
+          "Continued use of the service after an update means you accept the current version.",
         ],
       },
     ],
@@ -181,55 +235,70 @@ const UI: Record<Lang, { kicker: string; title: string; updated: string; section
   pl: {
     kicker: "Zasady",
     title: "Zasady korzystania",
-    updated: "Ostatnia aktualizacja: maj 2026",
+    updated: "Ostatnia aktualizacja: czerwiec 2026",
+    lead: "ManicBot to usługa programistyczna (platforma) dla salonów kosmetycznych i niezależnych mistrzów. Niniejsze zasady wyjaśniają, kto i jak może korzystać z serwisu. Pełna wiążąca umowa znajduje się na stronie /terms, a przetwarzanie danych opisano na stronie /privacy.",
     sections: [
       {
-        title: "1. Rejestracja i konto",
+        title: "1. O serwisie, kto może korzystać i rodzaje kont",
+        intro:
+          "ManicBot udostępnia wyłącznie oprogramowanie — narzędzia, które pomagają salonom i mistrzom automatyzować rezerwacje online, komunikację z klientami oraz zarządzanie przez Telegram, WhatsApp, Instagram i widżet internetowy. ManicBot nie świadczy samych usług salonu.",
         items: [
-          "Aby zapisac sie przez bota, nalezy potwierdzic swoje imie w Telegram.",
-          "Jedno konto Telegram odpowiada jednemu profilowi klienta.",
-          "Wlasciciele salonow rejestruja konto biznesowe przez panel administracyjny.",
+          "Konto biznesowe — dla właściciela salonu lub niezależnego (osobistego) mistrza; rejestrowane przez panel administracyjny i po okresie próbnym wymaga aktywnej subskrypcji.",
+          "Profil klienta — tworzony automatycznie, gdy klient rezerwuje przez bota; jedno konto komunikatora (np. Telegram) odpowiada jednemu profilowi klienta.",
+          "Aby korzystać z serwisu, należy być osobą pełnoletnią (lub mieć zgodę opiekuna prawnego) oraz podawać prawdziwe dane.",
         ],
       },
       {
-        title: "2. Rezerwacja i anulowanie",
+        title: "2. Prawa użytkownika",
         items: [
-          "Rezerwacja jest dostepna na wolne sloty w grafiku mistrza.",
-          "Anulowanie jest mozliwe nie pozniej niz 2 godziny przed sesja.",
-          "Systematyczne nieobecnosci moga skutkowac tymczasowa blokada rezerwacji.",
+          "Korzystanie z serwisu w granicach wybranego planu i niniejszych zasad.",
+          "Dostęp do swoich danych osobowych, ich eksport i żądanie usunięcia — szczegóły na stronie /privacy.",
+          "Kontakt z pomocą przez wbudowany system wsparcia oraz stronę /support.",
         ],
       },
       {
-        title: "3. Odpowiedzialnosc uzytkownikow",
+        title: "3. Obowiązki i działania zabronione",
         items: [
-          "Podawanie celowo falszywych danych podczas rejestracji jest zabronione.",
-          "Naduzywanie systemu wsparcia lub asystenta AI jest zabronione.",
-          "Proba uzyskania dostepu do danych lub kont innych uzytkownikow jest zabroniona.",
+          "Podawanie prawdziwych danych, dbanie o dostęp do swojego konta i odpowiedzialność za działania wykonane na koncie.",
+          "Zakaz nadużywania systemu wsparcia i asystenta AI (spam, celowe wprowadzanie w błąd, próby uzyskania cudzych danych).",
+          "Zakaz prób uzyskania dostępu do danych lub kont innych użytkowników albo salonów.",
+          "Zakaz automatycznego pobierania danych (scraping), dekompilacji, przeciążania i ingerencji w działanie serwisu.",
+          "Zakaz wykorzystywania serwisu do treści niezgodnych z prawem, oszukańczych lub szkodliwych oraz do rozsyłania spamu.",
+          "Przestrzeganie zasad platform, przez które się łączysz (Telegram, Meta / WhatsApp / Instagram itp.).",
         ],
       },
       {
-        title: "4. Dane i prywatnosc",
+        title: "4. Politykę salonu ustala sam salon",
+        intro:
+          "ManicBot to wyłącznie narzędzie. Każdy salon lub mistrz samodzielnie konfiguruje sposób prowadzenia swojej działalności w aplikacji i ponosi za to pełną odpowiedzialność.",
         items: [
-          "Dane osobowe sa przetwarzane zgodnie z polityka prywatnosci.",
-          "Dane rezerwacji sa przechowywane w celu prowadzenia historii wizyt.",
-          "Szczegoly na stronie /privacy.",
+          "Zakres usług, ceny, godziny pracy i grafik ustala salon, a nie ManicBot.",
+          "Politykę anulowania, nieobecności, przedpłat i przekładania wizyt każdy salon ustala indywidualnie za pomocą narzędzi aplikacji — ManicBot nie ustala ani nie narzuca jednej reguły anulowania.",
+          "Umowa o wykonanie usługi jest zawierana między klientem a salonem. ManicBot nie jest jej stroną i nie odpowiada za wykonane usługi, ich jakość, płatność ani spory między klientem a salonem.",
         ],
       },
       {
-        title: "5. Program polecen",
+        title: "5. Program poleceń",
         items: [
-          "Program jest dostepny dla wlascicieli salonow i niezaleznych (osobistych) mistrzow z aktywna subskrypcja.",
-          "Zaproszony znajomy otrzymuje 20% znizki w pierwszym miesiacu lub 10% znizki rocznie przy pierwszej oplacie za pomoca linku polecajacego.",
-          "Polecajacy otrzymuje 1 darmowy miesiac subskrypcji za kazdego potwierdzonego znajomego — znajomy jest potwierdzony dopiero po pomyslnej pierwszej platnosci (nie po okresie probnym).",
-          "Limit to 6 darmowych miesiecy w roku kroczacym. Jesli zaproszony zazada zwrotu lub anuluje w pierwszym miesiacu, nagroda jest cofnieta.",
-          "Samopolecenia, fikcyjne rejestracje i spam w kanalach publicznych sa zabronione i skutkuja anulowaniem nagrody oraz blokada kodu.",
+          "Program jest dostępny dla właścicieli salonów i niezależnych (osobistych) mistrzów z aktywną subskrypcją.",
+          "Zaproszony otrzymuje 20% zniżki na pierwszy miesiąc lub 10% na subskrypcję roczną przy pierwszej płatności przez link polecający.",
+          "Polecający otrzymuje 1 darmowy miesiąc za każdego potwierdzonego znajomego — znajomy jest potwierdzony dopiero po pomyślnej płatności za pierwszą fakturę (nie po okresie próbnym).",
+          "Limit to 6 darmowych miesięcy w roku kroczącym. Jeśli zaproszony zażąda zwrotu lub anuluje subskrypcję w pierwszym miesiącu, nagroda zostaje cofnięta.",
+          "Samopolecenia, fikcyjne rejestracje i spam w kanałach publicznych są zabronione i skutkują anulowaniem nagrody oraz blokadą kodu.",
         ],
       },
       {
-        title: "6. Zmiany zasad",
+        title: "6. Dane i wiążąca umowa",
         items: [
-          "Platforma zastrzega sobie prawo do aktualizacji zasad.",
-          "Dalsze korzystanie z serwisu oznacza akceptacje aktualnej wersji zasad.",
+          "Dane osobowe są przetwarzane zgodnie z Polityką prywatności (/privacy).",
+          "Pełną umową regulującą korzystanie z ManicBot jest Regulamin (/terms). W razie jakiejkolwiek sprzeczności pierwszeństwo ma Regulamin.",
+        ],
+      },
+      {
+        title: "7. Zmiany zasad",
+        items: [
+          "Możemy aktualizować niniejsze zasady; data aktualizacji jest podana u góry strony.",
+          "Dalsze korzystanie z serwisu po aktualizacji oznacza akceptację aktualnej wersji zasad.",
         ],
       },
     ],
@@ -249,12 +318,20 @@ export function RulesClient() {
         </span>
         <h1 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">{ui.title}</h1>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{ui.updated}</p>
+        <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          {ui.lead}
+        </p>
       </div>
 
       <div className="space-y-8">
         {ui.sections.map((section) => (
           <div key={section.title}>
             <h2 className="text-lg font-bold mb-3">{section.title}</h2>
+            {section.intro && (
+              <p className="mb-3 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                {section.intro}
+              </p>
+            )}
             <ul className="space-y-2 text-slate-700 dark:text-slate-300">
               {section.items.map((item, i) => (
                 <li key={i} className="flex gap-2 text-sm leading-relaxed">

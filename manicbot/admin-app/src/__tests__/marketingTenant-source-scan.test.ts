@@ -83,6 +83,7 @@ describe("marketingTenant.ts source scan: invariants per procedure", () => {
         "campaignAudiencePreview",
         "campaignCreate",
         "campaignDelete",
+        "campaignReport",
         "campaignSendNow",
         "campaignSendsList",
         "campaignStats",

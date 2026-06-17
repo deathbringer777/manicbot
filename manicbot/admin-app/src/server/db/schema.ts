@@ -1071,6 +1071,39 @@ export const marketingSends = sqliteTable("marketing_sends", {
   index("idx_msend_campaign_status").on(t.campaignId, t.status),
 ]);
 
+// 0123: first-party per-click log feeding conversion attribution. Written by
+// the signed /r/<token> Worker redirect; ip_hash is salted, never the raw IP.
+export const marketingLinkClicks = sqliteTable("marketing_link_clicks", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  campaignId: text("campaign_id").notNull(),
+  sendId: text("send_id"),
+  contactId: integer("contact_id"),
+  url: text("url").notNull(),
+  clickedAt: integer("clicked_at").notNull(),
+  ipHash: text("ip_hash"),
+}, (t) => [
+  index("idx_mlc_campaign").on(t.campaignId),
+  index("idx_mlc_contact").on(t.tenantId, t.contactId, t.clickedAt),
+]);
+
+// 0123: attributed click -> appointment, deduped per appointment by the
+// phaseMarketingConversions cron (unique on campaign_id + appointment_id).
+export const marketingConversions = sqliteTable("marketing_conversions", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  campaignId: text("campaign_id").notNull(),
+  sendId: text("send_id"),
+  contactId: integer("contact_id"),
+  appointmentId: text("appointment_id"),
+  valueCents: integer("value_cents"),
+  convertedAt: integer("converted_at").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_mconv_appt").on(t.campaignId, t.appointmentId),
+  index("idx_mconv_campaign").on(t.campaignId),
+]);
+
 export const marketingAutomations = sqliteTable("marketing_automations", {
   id: text("id").primaryKey(),
   tenantId: text("tenant_id"),

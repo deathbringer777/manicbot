@@ -7,7 +7,8 @@
  *     ReferralsSection.tsx points to /rules. If this page does NOT have
  *     a "Referral program" section the link is a dead end.
  *   * "Changes to Rules" stays the last section so the doc shape matches
- *     legal-doc convention. The referral block is section 5, "Changes" is 6.
+ *     legal-doc convention. The referral block is section 5, "Changes" is 7
+ *     (section 6 is "Data & binding agreement").
  *   * Each locale carries its own translated section title + body.
  */
 import { describe, it, expect } from "vitest";
@@ -36,34 +37,34 @@ describe("RulesClient — Referral program section", () => {
     {
       lang: "ru",
       sectionTitle: "5. Реферальная программа",
-      monthToken: "май",
-      discountSnippet: "20% off",
+      monthToken: "июнь",
+      discountSnippet: "20% скидки",
       rewardSnippet: "1 бесплатный месяц",
-      changesTitle: "6. Изменения правил",
+      changesTitle: "7. Изменения правил",
     },
     {
       lang: "ua",
       sectionTitle: "5. Реферальна програма",
-      monthToken: "травень",
-      discountSnippet: "20% off",
+      monthToken: "червень",
+      discountSnippet: "20% знижки",
       rewardSnippet: "1 безкоштовний місяць",
-      changesTitle: "6. Зміни правил",
+      changesTitle: "7. Зміни правил",
     },
     {
       lang: "en",
-      sectionTitle: "5. Referral Program",
-      monthToken: "May",
+      sectionTitle: "5. Referral program",
+      monthToken: "June",
       discountSnippet: "20% off",
       rewardSnippet: "1 free month",
-      changesTitle: "6. Changes to Rules",
+      changesTitle: "7. Changes to these rules",
     },
     {
       lang: "pl",
-      sectionTitle: "5. Program polecen",
-      monthToken: "maj",
-      discountSnippet: "20% znizki",
-      rewardSnippet: "1 darmowy miesiac",
-      changesTitle: "6. Zmiany zasad",
+      sectionTitle: "5. Program poleceń",
+      monthToken: "czerwiec",
+      discountSnippet: "20% zniżki",
+      rewardSnippet: "1 darmowy miesiąc",
+      changesTitle: "7. Zmiany zasad",
     },
   ];
 
@@ -89,9 +90,9 @@ describe("RulesClient — Referral program section", () => {
       const h2s = container.querySelectorAll("h2");
       expect(h2s[h2s.length - 1]?.textContent).toBe(changesTitle);
 
-      // 5. Old "5. Changes / Изменения / ..." must NOT linger — pins clean renumber.
+      // 5. Old "6. Changes / Изменения / ..." must NOT linger — pins clean renumber.
       const stale = within(container).queryByRole("heading", {
-        name: changesTitle.replace(/^6\./, "5."),
+        name: changesTitle.replace(/^7\./, "6."),
         level: 2,
       });
       expect(stale).toBeNull();

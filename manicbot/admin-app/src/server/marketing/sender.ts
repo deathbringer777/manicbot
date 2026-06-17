@@ -29,6 +29,10 @@ import { pickProvider } from "~/server/marketing/providers";
 import { resolveAudience, type ResolvedContact } from "./audience";
 import { renderTemplate } from "./templateRender";
 import { getUnsubscribeUrl } from "./unsubscribeUrl";
+import { rewriteLinksForTracking } from "./linkRewrite";
+import { getRuntimeEnv } from "~/server/runtimeEnv";
+
+const TRACKING_FALLBACK_ORIGIN = "https://manicbot.com";
 
 type DbInstance = ReturnType<typeof import("~/server/db").getDb>;
 
@@ -197,11 +201,29 @@ export async function runCampaignSend(args: RunCampaignSendArgs): Promise<RunCam
         },
       );
 
+      // First-party click tracking: rewrite the email's links through the
+      // signed Worker /r/ redirect. Fail-open — never block a send on this.
+      let html = rendered.html;
+      if (channel === "email") {
+        const trackingSecret = (getRuntimeEnv("CLICK_TOKEN_SECRET") ?? "").trim();
+        if (trackingSecret && getRuntimeEnv("CLICK_TRACKING_ENABLED") !== "0") {
+          const origin = (getRuntimeEnv("WORKER_PUBLIC_URL") ?? TRACKING_FALLBACK_ORIGIN).replace(/\/+$/, "");
+          html = await rewriteLinksForTracking(rendered.html, {
+            origin,
+            campaignId: c.id,
+            sendId: sendRowId,
+            tenantId: effectiveTenantId,
+            contactId: contact.id,
+            secret: trackingSecret,
+          });
+        }
+      }
+
       const result = channel === "email"
         ? await provider.sendEmail!({
             to: recipient,
             subject: rendered.subject || tpl.name,
-            html: rendered.html,
+            html,
           })
         : await provider.sendSms!({
             to: recipient,

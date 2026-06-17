@@ -1,10 +1,13 @@
 /**
  * Server-rendered legal pages required by Meta App Review:
- *   - /privacy          — Privacy Policy
+ *   - /privacy          — Privacy Policy (also carries the Google OAuth
+ *                          "Limited Use" disclosure for sensitive scopes)
  *   - /data-deletion    — User Data Deletion Instructions (Meta requires
  *                          a public URL that explains, in static HTML,
  *                          how end-users can request deletion of their data)
- *   - /terms            — Terms of Service
+ *
+ * /terms moved to the admin-app multilingual Regulamin (served via
+ * isAdminAppPath); it is no longer handled here.
  *
  * These MUST be static HTML for Meta reviewers and automated crawlers —
  * they don't execute JS; if they hit a SPA shell they see no content and
@@ -281,44 +284,14 @@ function dataDeletionPage(request) {
   );
 }
 
-function termsPage(request) {
-  return htmlResponse(
-    'Terms of Service',
-    `<h1>Terms of Service</h1>
-<p class="meta">Effective date: 2026-05-16</p>
-
-<h2>1. Service</h2>
-<p>ManicBot provides an automated booking assistant that nail salons install on their Telegram, Instagram, WhatsApp, and web channels. Salons subscribe on the Start (45 zł), Pro (60 zł), or Max (90 zł) monthly plans.</p>
-
-<h2>2. Account</h2>
-<p>Salons register at <a href="https://manicbot.com/register">manicbot.com/register</a> with email + password. End-customers do not register — they interact via their social account and we use only the platform-provided identifier.</p>
-
-<h2>3. Payment</h2>
-<p>Subscription billing is handled by Stripe. A 7-day free trial is offered. Failed payments enter a 7-day grace period before the bot pauses. Cancel any time — your data is retained for 90 days then deleted unless you re-subscribe.</p>
-
-<h2>4. Acceptable use</h2>
-<p>You may not use ManicBot to send spam, harass users, distribute illegal content, or violate the Terms of the platforms we integrate with (Meta, Telegram, etc.). We will suspend accounts that do.</p>
-
-<h2>5. Liability</h2>
-<p>ManicBot is provided "as is". We are not liable for missed appointments, AI mistakes in booking suggestions, or downtime of upstream services (Meta, Telegram, Cloudflare). Maximum liability is the last 12 months of subscription fees you paid us.</p>
-
-<h2>6. Changes</h2>
-<p>We may update these Terms with 30 days' email notice. Continued use after the effective date constitutes acceptance.</p>
-
-<h2>7. Referral program</h2>
-<p>Active subscribers can share a referral link. The invited salon gets 20% off their first month (or 10% off yearly). The inviter receives one free month of subscription per confirmed referral — confirmed means the invited salon paid their first invoice past the trial. The cap is 6 free months per rolling year. Rewards are reversed if the invited salon refunds or cancels within the first month. Self-referrals, fake accounts, and public-channel spam result in reward cancellation and code suspension.</p>
-
-<h2>8. Contact</h2>
-<p><a href="mailto:support@manicbot.com">support@manicbot.com</a></p>`,
-    request,
-  );
-}
-
 /**
  * Try to handle one of the legal pages. Returns null if the path doesn't
- * match, or if the path is /privacy or /terms AND the requester looks
- * like a real browser (in which case the landing SPA serves the page
- * with the full Header/Footer design — see manicbot-analysis/src/pages/LegalPage.tsx).
+ * match, or if the path is /privacy AND the requester looks like a real
+ * browser (in which case the landing SPA serves the page with the full
+ * Header/Footer design — see manicbot-analysis/src/pages/LegalPage.tsx).
+ *
+ * /terms is intentionally NOT handled here — it is served by the admin-app
+ * multilingual Regulamin via isAdminAppPath.
  *
  * @param {Request} request
  * @param {URL} url
@@ -337,11 +310,10 @@ export function tryLegalPages(request, url) {
     case '/data-deletion.html':
       // No SPA route — always static.
       return dataDeletionPage(request);
-    case '/terms':
-    case '/terms/':
-    case '/terms.html':
-      if (looksLikeBrowser(request)) return null;
-      return termsPage(request);
+    // NOTE: /terms is no longer handled here — it is served by the admin-app
+    // multilingual Regulamin (routed via isAdminAppPath, which short-circuits
+    // before this handler). /privacy stays here for the Google OAuth
+    // "Limited Use" disclosure required by the active verification submission.
     default:
       return null;
   }

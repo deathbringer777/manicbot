@@ -13,6 +13,9 @@ describe('isAdminAppPath', () => {
     ['/register'],
     ['/help'],
     ['/help/'],
+    // /terms → admin-app multilingual Regulamin (replaces the legacy Worker
+    // static page). /privacy intentionally stays on the Worker (see below).
+    ['/terms'],
     ['/tg'],
     ['/_next/static/chunks/foo.js'],
     ['/api/trpc/x.y'],
@@ -82,6 +85,9 @@ describe('isAdminAppPath', () => {
 
   it.each([
     ['/'],           // root → landing page, NOT admin-app
+    // /privacy stays on the Worker static page (Google OAuth "Limited Use"
+    // disclosure for the active verification) — must NOT proxy to admin-app.
+    ['/privacy'],
     ['/webhook'],
     ['/webhook/bot123'],
     ['/admin/migrate'],

@@ -25,6 +25,12 @@ export function isAdminAppPath(pathname) {
   if (pathname === '/forgot-password' || pathname === '/reset-password') return true;
   if (pathname === '/verify-email' || pathname === '/confirm-email-change') return true;
   if (pathname === '/rules') return true;
+  // /terms → admin-app multilingual Regulamin (Terms of Service). Replaces the
+  // legacy English static page the Worker used to serve via legalPagesHttp.
+  // NOTE: /privacy is deliberately NOT proxied here — it stays on the Worker
+  // static page (src/http/legalPagesHttp.js), which carries the Google API
+  // "Limited Use" disclosure required by the active Google OAuth verification.
+  if (pathname === '/terms') return true;
   if (pathname === '/help' || pathname.startsWith('/help/')) return true;
   if (pathname === '/blog' || pathname.startsWith('/blog/')) return true;
   if (pathname.startsWith('/_next/')) return true;

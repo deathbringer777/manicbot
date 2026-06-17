@@ -7,9 +7,10 @@
  * happened in production on 2026-05-14 before this fix.
  *
  * Real browsers (Mozilla UA, no crawler signature) get null for
- * /privacy and /terms so the landing SPA can render LegalPage.tsx
- * with the full Header / Footer design. /data-deletion is always
- * static — the SPA has no route for it.
+ * /privacy so the landing SPA can render LegalPage.tsx with the full
+ * Header / Footer design. /data-deletion is always static — the SPA has
+ * no route for it. /terms moved to the admin-app multilingual Regulamin
+ * (routed via isAdminAppPath) and is no longer handled here.
  */
 import { describe, it, expect } from 'vitest';
 import { tryLegalPages } from '../src/http/legalPagesHttp.js';
@@ -38,10 +39,21 @@ describe('tryLegalPages', () => {
     expect(tryLegalPages(req('/privacy', 'POST'), new URL('https://manicbot.com/privacy'))).toBeNull();
   });
 
+  it('no longer handles /terms (now served by admin-app Regulamin) — null for bot AND browser', () => {
+    // bot-like (no UA)
+    expect(tryLegalPages(req('/terms'), new URL('https://manicbot.com/terms'))).toBeNull();
+    expect(tryLegalPages(req('/terms.html'), new URL('https://manicbot.com/terms.html'))).toBeNull();
+    // browser
+    expect(
+      tryLegalPages(req('/terms', 'GET', { 'user-agent': CHROME_UA }), new URL('https://manicbot.com/terms')),
+    ).toBeNull();
+    // HEAD (crawler probe) — also null now
+    expect(tryLegalPages(req('/terms', 'HEAD'), new URL('https://manicbot.com/terms'))).toBeNull();
+  });
+
   describe.each([
     ['/privacy', 'Privacy Policy', 'Privacy Policy'],
     ['/data-deletion', 'Data Deletion', 'User Data Deletion Instructions'],
-    ['/terms', 'Terms', 'Terms of Service'],
   ])('%s', (path, label, h1) => {
     it(`GET (no UA, like Meta crawler) → 200 with static ${label} HTML`, async () => {
       const res = tryLegalPages(req(path), new URL(`https://manicbot.com${path}`));
@@ -119,9 +131,6 @@ describe('tryLegalPages', () => {
       ['/privacy', CHROME_UA, 'Chrome'],
       ['/privacy', FIREFOX_UA, 'Firefox'],
       ['/privacy', SAFARI_IOS_UA, 'Safari iOS'],
-      ['/terms', CHROME_UA, 'Chrome'],
-      ['/terms', FIREFOX_UA, 'Firefox'],
-      ['/terms', SAFARI_IOS_UA, 'Safari iOS'],
     ])('%s with %s UA → null (SPA renders LegalPage)', (path, ua) => {
       const res = tryLegalPages(
         req(path, 'GET', { 'user-agent': ua }),
@@ -141,21 +150,6 @@ describe('tryLegalPages', () => {
         tryLegalPages(
           req('/privacy.html', 'GET', { 'user-agent': CHROME_UA }),
           new URL('https://manicbot.com/privacy.html'),
-        ),
-      ).toBeNull();
-    });
-
-    it('also honors trailing slash and .html for browsers on /terms', () => {
-      expect(
-        tryLegalPages(
-          req('/terms/', 'GET', { 'user-agent': CHROME_UA }),
-          new URL('https://manicbot.com/terms/'),
-        ),
-      ).toBeNull();
-      expect(
-        tryLegalPages(
-          req('/terms.html', 'GET', { 'user-agent': CHROME_UA }),
-          new URL('https://manicbot.com/terms.html'),
         ),
       ).toBeNull();
     });
@@ -202,34 +196,4 @@ describe('tryLegalPages', () => {
     expect(body).toMatch(/calendar\.readonly/);
   });
 
-  // Referral program ToS — referral footer in /settings?section=referrals
-  // links to /rules (admin SPA, 4 lang) AND to the static /terms for Meta
-  // crawlers. Both must stay in sync — these assertions pin the static side.
-  describe('Terms — Referral program section', () => {
-    it('Effective date is bumped to 2026-05-16', async () => {
-      const res = tryLegalPages(req('/terms'), new URL('https://manicbot.com/terms'));
-      const body = await res.text();
-      expect(body).toContain('Effective date: 2026-05-16');
-    });
-
-    it('contains a "Referral program" section with the reward & clawback terms', async () => {
-      const res = tryLegalPages(req('/terms'), new URL('https://manicbot.com/terms'));
-      const body = await res.text();
-      expect(body).toContain('<h2>7. Referral program</h2>');
-      // Core reward terms (so removing them on a rewrite fails the test loud)
-      expect(body).toMatch(/20% off their first month/);
-      expect(body).toMatch(/one free month/i);
-      expect(body).toMatch(/6 free months/);
-      expect(body).toMatch(/Rewards are reversed/i);
-      expect(body).toMatch(/Self-referrals/i);
-    });
-
-    it('Contact section is renumbered to 8.', async () => {
-      const res = tryLegalPages(req('/terms'), new URL('https://manicbot.com/terms'));
-      const body = await res.text();
-      expect(body).toContain('<h2>8. Contact</h2>');
-      // Old "7. Contact" must be gone — guards against half-renumbered states.
-      expect(body).not.toContain('<h2>7. Contact</h2>');
-    });
-  });
 });

@@ -96,6 +96,9 @@ CREATE TABLE IF NOT EXISTS users (
   deleted_at INTEGER,
   lifetime_visits INTEGER NOT NULL DEFAULT 0,
   last_visit_at INTEGER,
+  -- 0124: per-client no-show counter. Bumped only on CLIENT no-show (not
+  -- master). Drives the unreliable-client flag + no-show policy engine.
+  no_show_count INTEGER NOT NULL DEFAULT 0,
   -- 0072: client avatar (emoji + photo). UI shows photo when avatar_url
   -- is set, otherwise the saved emoji, otherwise a default '👩'.
   avatar_emoji TEXT,

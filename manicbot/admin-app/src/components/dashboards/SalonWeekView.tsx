@@ -25,6 +25,7 @@ import { ChevronLeft, ChevronRight, CalendarDays, Lock } from "lucide-react";
 import { t, type Lang } from "~/lib/i18n";
 import { AptCard } from "~/components/dashboard-ui/AptCard";
 import { AppointmentDetailPanel, type SelectedAppointment } from "~/components/dashboard-ui/AppointmentDetailPanel";
+import type { AppointmentDialogRect } from "~/lib/useDashboardPrefs";
 import type { AnchorRect } from "~/lib/calendar/useAnchoredPosition";
 import { DragCreateLayer } from "~/components/calendar/DragCreateLayer";
 import { CreateSlotPopover } from "~/components/calendar/CreateSlotPopover";
@@ -107,6 +108,10 @@ interface Props {
   /** Rendered in the header, right of the prev/today/next nav — the calendar
    *  view switcher lives here so it no longer needs its own row above the grid. */
   headerRight?: ReactNode;
+  /** Floating-dialog persistence (owner dashboard only) — see SalonDayView. */
+  dialogRect?: AppointmentDialogRect | null;
+  onDialogRectChange?: (rect: AppointmentDialogRect) => void;
+  onDialogReset?: () => void;
 }
 
 /**
@@ -180,6 +185,9 @@ export function SalonWeekView({
   services,
   onUpdated,
   headerRight,
+  dialogRect = null,
+  onDialogRectChange,
+  onDialogReset,
 }: Props) {
   // Drag-to-reschedule — one hook instance owns the cross-column ghost
   // state. The Week view doesn't pin masters to columns, so commit will
@@ -847,8 +855,13 @@ export function SalonWeekView({
               userPhone: selectedApt.userPhone ?? null,
               userTg: selectedApt.userTg ?? null,
               chatId: selectedApt.chatId ?? null,
+              noShowCount: typeof selectedApt.noShowCount === "number" ? selectedApt.noShowCount : 0,
             } satisfies SelectedAppointment
           }
+          boundsRef={onDialogRectChange ? scrollerRef : undefined}
+          dialogRect={dialogRect}
+          onDialogRectChange={onDialogRectChange}
+          onDialogReset={onDialogReset}
           masters={masters.map((m) => ({ chatId: m.chatId, name: m.name }))}
           services={services}
           lang={lang}

@@ -96,6 +96,9 @@ export const users = sqliteTable("users", {
   deletedAt: integer("deleted_at"),
   lifetimeVisits: integer("lifetime_visits").notNull().default(0),
   lastVisitAt: integer("last_visit_at"),
+  // 0124: per-client no-show counter. Bumped only on CLIENT no-show (not
+  // master). Drives the unreliable-client flag + no-show policy engine.
+  noShowCount: integer("no_show_count").notNull().default(0),
   // 0072: client avatar — emoji and/or uploaded photo. UI shows the photo
   // when avatarUrl is set, otherwise the saved emoji, otherwise '👩'.
   avatarEmoji: text("avatar_emoji"),

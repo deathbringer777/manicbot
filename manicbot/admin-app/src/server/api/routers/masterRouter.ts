@@ -11,9 +11,11 @@ import {
   bots,
   masterPairingCodes,
   webUsers,
+  tenantConfig,
 } from "~/server/db/schema";
 import { eq, and, gte, lte, desc, inArray, isNull, gt } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { NO_SHOW_POLICY_KEY, normalizeNoShowPolicy } from "~/server/policy/noShowPolicy";
 import { sanitizeText } from "~/server/security/sanitize";
 import { isHttpsUrl } from "~/server/lib/url";
 import {
@@ -387,6 +389,28 @@ export const masterRouter = createTRPCRouter({
           throw new TRPCError({ code: "FORBIDDEN", message: "Unassigned appointment — only the salon owner can mark it" });
         }
         await assertCallerIsMaster(ctx, input.tenantId, apt.masterId);
+      }
+      // Grace gate — only for CLIENT no-shows (mirrors salon.markNoShow). The
+      // window is per-tenant (`no_show_policy.graceMinutes`, default 15);
+      // appointments.ts is epoch MILLISECONDS.
+      if (input.noShowBy === "client") {
+        const [tsRow] = await ctx.db
+          .select({ ts: appointments.ts })
+          .from(appointments)
+          .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
+          .limit(1);
+        if (!tsRow) throw new TRPCError({ code: "NOT_FOUND", message: "Appointment not found" });
+        const cfgRow = await ctx.db.select().from(tenantConfig)
+          .where(and(eq(tenantConfig.tenantId, input.tenantId), eq(tenantConfig.key, NO_SHOW_POLICY_KEY)))
+          .limit(1);
+        let graceMinutes = 15;
+        const raw = cfgRow[0]?.value;
+        if (raw != null) {
+          try { graceMinutes = normalizeNoShowPolicy(JSON.parse(raw)).graceMinutes; } catch { /* default */ }
+        }
+        if (tsRow.ts != null && tsRow.ts + graceMinutes * 60_000 > Date.now()) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_mark_no_show_in_grace" });
+        }
       }
       await ctx.db.update(appointments).set({
         noShow: 1,

@@ -78,6 +78,7 @@ vi.mock("~/components/salon/SalonPublishBody", () => ({ SalonPublishBody: () => 
 vi.mock("~/components/salon/AutoConfirmSettings", () => ({ AutoConfirmSettings: () => React.createElement("div", { "data-testid": "body-autoconfirm" }) }));
 vi.mock("~/components/salon/AutoSuggestFavoriteSettings", () => ({ AutoSuggestFavoriteSettings: () => React.createElement("div", { "data-testid": "body-favorite" }) }));
 vi.mock("~/components/salon/PostVisitFollowupSettings", () => ({ PostVisitFollowupSettings: () => React.createElement("div", { "data-testid": "body-post-visit-followup" }) }));
+vi.mock("~/components/salon/NoShowLatePolicySettings", () => ({ NoShowLatePolicySettings: () => React.createElement("div", { "data-testid": "body-no-show-policy" }) }));
 vi.mock("~/components/salon/SalonCalendarSection", () => ({ SalonCalendarSection: () => React.createElement("div", { "data-testid": "body-calendar" }) }));
 
 import { MySalonSection } from "~/components/settings/sections/MySalonSection";

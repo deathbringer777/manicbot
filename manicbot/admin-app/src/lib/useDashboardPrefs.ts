@@ -48,6 +48,22 @@ export interface DashboardPrefs {
    * `tenants` column threading.
    */
   homeWidgets: HomeWidgetItem[];
+  /**
+   * Remembered position + size of the floating appointment dialog on the
+   * calendar (Google-Calendar-style drag/resize). NULL ⇒ the dialog anchors to
+   * the clicked block. Once the user drags/resizes it, the chosen rect (in the
+   * calendar work-area's own coordinates) is persisted and restored next open.
+   * Lives in the schemaless ui-prefs blob — no migration.
+   */
+  appointmentDialog: AppointmentDialogRect | null;
+}
+
+/** Persisted floating-dialog rect, in calendar work-area coordinates. */
+export interface AppointmentDialogRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export const MAX_PINNED_TABS = 5;
@@ -78,6 +94,7 @@ const DEFAULTS: DashboardPrefs = {
   bottomNavOrder: [],
   bottomNavLayout: "default",
   homeWidgets: [],
+  appointmentDialog: null,
 };
 
 function load(tenantId?: string | null, profileKey?: string): DashboardPrefs {
@@ -396,6 +413,11 @@ export function useDashboardPrefs() {
     update({ homeWidgets: [] });
   }, [update]);
 
+  /** Persist (or clear, with null) the floating appointment-dialog rect. */
+  const setAppointmentDialog = useCallback((rect: AppointmentDialogRect | null) => {
+    update({ appointmentDialog: rect });
+  }, [update]);
+
   return {
     prefs,
     toggleTab,
@@ -410,6 +432,7 @@ export function useDashboardPrefs() {
     removeHomeWidget,
     setHomeWidgetOpts,
     resetHomeWidgets,
+    setAppointmentDialog,
   };
 }
 

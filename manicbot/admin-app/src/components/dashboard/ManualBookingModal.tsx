@@ -6,6 +6,7 @@ import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t, type Lang } from "~/lib/i18n";
 import { Select } from "~/components/ui/Select";
+import { evaluateNoShowPolicy } from "~/server/policy/noShowPolicy";
 
 // 0074: sentinel value for the "Random master" option in the Select.
 // Keeping it as a stable string lets the existing controlled-Select
@@ -128,6 +129,21 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
     if (!s) return null;
     return s.manual?.masterId ?? s.derived?.masterId ?? null;
   }, [favoriteSuggestion.data]);
+
+  // 0123 — surface the no-show reliability of an EXISTING selected client so
+  // the owner sees "this person has missed N appointments" before rebooking,
+  // plus the tenant's configured recommendation (confirm / prepay / blocked).
+  // Informational only on the manual surface — the owner can still book.
+  const noShowPolicy = api.salon.getNoShowPolicy.useQuery({ tenantId });
+  const noShowWarning = useMemo(() => {
+    if (selectedClientChatIdNum == null) return null;
+    const c = clients.data?.find((x) => x.chatId === selectedClientChatIdNum) as
+      | { noShowCount?: number | null }
+      | undefined;
+    const count = c?.noShowCount ?? 0;
+    if (count <= 0) return null;
+    return evaluateNoShowPolicy(noShowPolicy.data ?? null, { noShowCount: count });
+  }, [selectedClientChatIdNum, clients.data, noShowPolicy.data]);
 
   // Reset the auto-apply guard on every client change.
   useEffect(() => {
@@ -295,6 +311,24 @@ export function ManualBookingModal({ tenantId, defaultMasterId, defaultDate, def
               ]}
             />
           </div>
+
+          {noShowWarning && (
+            <div
+              className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-[12px] text-orange-700 dark:text-orange-300"
+              data-testid="mb-no-show-warning"
+            >
+              <p className="font-semibold">⚠ {noShowWarning.noShowCount} {t("salon.noShow.noun", lang)}</p>
+              <p className="mt-0.5">
+                {noShowWarning.decision === "blocked"
+                  ? t("salon.noShow.blocked", lang)
+                  : noShowWarning.decision === "require_prepayment"
+                    ? t("salon.noShow.requirePrepay", lang)
+                    : noShowWarning.decision === "require_confirm"
+                      ? t("salon.noShow.requireConfirm", lang)
+                      : t("salon.noShow.rebookWarn", lang)}
+              </p>
+            </div>
+          )}
 
           {!clientChatId && (
             <div className="space-y-2">

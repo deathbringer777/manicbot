@@ -110,17 +110,35 @@ describe("masterRouter status mutations", () => {
   });
 
   describe("markNoShow", () => {
-    it("fires notifyWorker no_show_client (owner caller)", async () => {
+    const RECENT_TS = Date.now() - 5 * 60 * 1000; // inside default 15-min grace
+
+    it("fires notifyWorker no_show_client (owner caller) once grace elapsed", async () => {
+      // owner skips the IDOR select; grace gate does SELECT ts then tenant_config.
+      const dbMock = createDbMock([[{ ts: PAST_TS }], []]);
+      const caller = ownerCaller(dbMock.db);
+
+      await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" });
+
+      expect(notifyWorker).toHaveBeenCalledWith("no_show_client", "apt_1", TENANT, null);
+    });
+
+    it("rejects a CLIENT no-show inside the grace window (owner caller)", async () => {
+      const dbMock = createDbMock([[{ ts: RECENT_TS }], []]);
+      const caller = ownerCaller(dbMock.db);
+
+      await expect(
+        caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" }),
+      ).rejects.toThrow(/cannot_mark_no_show_in_grace/);
+      expect(notifyWorker).not.toHaveBeenCalled();
+    });
+
+    it("master no-show is not grace-gated (owner caller)", async () => {
       const dbMock = createDbMock();
       const caller = ownerCaller(dbMock.db);
 
-      await caller.markNoShow({
-        tenantId: TENANT,
-        id: "apt_1",
-        noShowBy: "client",
-      });
+      await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "master" });
 
-      expect(notifyWorker).toHaveBeenCalledWith("no_show_client", "apt_1", TENANT, null);
+      expect(notifyWorker).toHaveBeenCalledWith("no_show_master", "apt_1", TENANT, null);
     });
   });
 });

@@ -55,6 +55,7 @@ vi.mock("~/trpc/react", () => ({
       markDone: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       markNoShow: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       cancelAppointment: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      getNoShowPolicy: { useQuery: () => ({ data: null, isLoading: false }) },
     },
   },
 }));

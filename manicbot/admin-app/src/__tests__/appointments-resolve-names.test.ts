@@ -63,7 +63,7 @@ const BOOTSTRAP_SQL: string[] = [
     tags TEXT, marketing_contact_id INTEGER, email_opt_in INTEGER, email_prompt_last_at INTEGER,
     email_prompt_count INTEGER NOT NULL DEFAULT 0, is_blocked_global INTEGER NOT NULL DEFAULT 0,
     blocked_global_reason TEXT, blocked_global_at INTEGER, updated_at INTEGER, deleted_at INTEGER,
-    lifetime_visits INTEGER NOT NULL DEFAULT 0, last_visit_at INTEGER, avatar_emoji TEXT,
+    lifetime_visits INTEGER NOT NULL DEFAULT 0, last_visit_at INTEGER, no_show_count INTEGER NOT NULL DEFAULT 0, avatar_emoji TEXT,
     avatar_url TEXT, avatar_r2_key TEXT, favorite_master_id INTEGER
   )`,
   `CREATE TABLE services (

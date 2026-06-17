@@ -43,6 +43,11 @@ import {
   deriveWorkDaysFromSchedule,
 } from "~/lib/workHours";
 import { MASTER_SCHEDULE_POLICIES } from "~/lib/masterSchedulePolicy";
+import {
+  NO_SHOW_POLICY_KEY,
+  DEFAULT_NO_SHOW_POLICY,
+  normalizeNoShowPolicy,
+} from "~/server/policy/noShowPolicy";
 import { getTenantMetrics } from "~/server/metrics/tenant";
 import { t } from "~/lib/i18n";
 import { sanitizeText } from "~/server/security/sanitize";
@@ -73,6 +78,30 @@ import { checkRateLimit } from "~/server/auth/rateLimit";
 import type { Lang } from "~/lib/i18n";
 
 const tenantIdInput = z.object({ tenantId: z.string() });
+
+/** Parse a raw `tenant_config.no_show_policy` value into a normalized policy. */
+function parseNoShowPolicyValue(raw: string | null | undefined) {
+  if (raw == null) return normalizeNoShowPolicy(null);
+  try {
+    return normalizeNoShowPolicy(JSON.parse(raw));
+  } catch {
+    return normalizeNoShowPolicy(null);
+  }
+}
+
+/** Zod schema for the editable no-show policy (mirrors NoShowPolicy). */
+const noShowPolicyInput = z.object({
+  graceMinutes: z.number().int().min(0).max(240),
+  notifyClient: z.boolean(),
+  notifyTone: z.enum(["neutral", "firm", "off"]),
+  afterCount: z.number().int().min(0).max(50),
+  prepayment: z.enum(["none", "deposit50", "deposit100", "cash"]),
+  penaltyAmount: z.number().int().min(0).max(1_000_000),
+  autoAction: z.enum(["none", "require_confirm", "auto_block"]),
+  lateness: z.enum(["none", "neutral", "strict"]),
+  lateGraceMinutes: z.number().int().min(0).max(240),
+  refund: z.enum(["none", "neutral", "strict"]),
+});
 
 /**
  * Referral attach helper (PR-B).
@@ -542,6 +571,30 @@ export const salonRouter = createTRPCRouter({
     }))
     .mutation(async ({ ctx, input }) => {
       await assertTenantOwner(ctx, input.tenantId);
+      // Grace gate — only for CLIENT no-shows. A salon can't fairly call a
+      // client a no-show until a grace window after the appointment START has
+      // elapsed (they may simply be running late). The window is per-tenant
+      // (`no_show_policy.graceMinutes`, default 15). Master no-shows aren't
+      // time-gated. Mirrors the `cannot_mark_done_before_start` pattern;
+      // appointments.ts is epoch MILLISECONDS.
+      if (input.noShowBy === "client") {
+        const [row] = await ctx.db
+          .select({ ts: appointments.ts })
+          .from(appointments)
+          .where(and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId)))
+          .limit(1);
+        if (!row) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "appointment_not_found" });
+        }
+        const cfgRow = await ctx.db.select().from(tenantConfig)
+          .where(and(eq(tenantConfig.tenantId, input.tenantId), eq(tenantConfig.key, NO_SHOW_POLICY_KEY)))
+          .limit(1);
+        const policy = parseNoShowPolicyValue(cfgRow[0]?.value);
+        const graceMs = policy.graceMinutes * 60_000;
+        if (row.ts != null && row.ts + graceMs > Date.now()) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "cannot_mark_no_show_in_grace" });
+        }
+      }
       await ctx.db.update(appointments).set({
         noShow: 1,
         noShowBy: input.noShowBy,
@@ -1700,6 +1753,38 @@ export const salonRouter = createTRPCRouter({
       const value = JSON.stringify(input.enabled);
       await ctx.db.insert(tenantConfig)
         .values({ tenantId: input.tenantId, key, value })
+        .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
+      return { success: true };
+    }),
+
+  /**
+   * Read the per-tenant no-show & lateness policy. Stored as one JSON value in
+   * `tenant_config` under `no_show_policy`; the Worker twin
+   * (`src/services/policy/noShowPolicy.js`) reads the same key for the
+   * client-notification decision. Returns neutral defaults when unset.
+   */
+  getNoShowPolicy: tenantOwnerProcedure
+    .input(tenantIdInput)
+    .query(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const row = await ctx.db.select().from(tenantConfig)
+        .where(and(eq(tenantConfig.tenantId, input.tenantId), eq(tenantConfig.key, NO_SHOW_POLICY_KEY)))
+        .limit(1);
+      return parseNoShowPolicyValue(row[0]?.value) ?? DEFAULT_NO_SHOW_POLICY;
+    }),
+
+  /**
+   * Persist the per-tenant no-show & lateness policy. The whole object is
+   * stored as a single JSON value (the policy is read atomically by both the
+   * grace gate and the Worker notify path, so a blob beats per-field keys).
+   */
+  setNoShowPolicy: tenantOwnerProcedure
+    .input(z.object({ tenantId: z.string(), policy: noShowPolicyInput }))
+    .mutation(async ({ ctx, input }) => {
+      await assertTenantOwner(ctx, input.tenantId);
+      const value = JSON.stringify(normalizeNoShowPolicy(input.policy));
+      await ctx.db.insert(tenantConfig)
+        .values({ tenantId: input.tenantId, key: NO_SHOW_POLICY_KEY, value })
         .onConflictDoUpdate({ target: [tenantConfig.tenantId, tenantConfig.key], set: { value } });
       return { success: true };
     }),

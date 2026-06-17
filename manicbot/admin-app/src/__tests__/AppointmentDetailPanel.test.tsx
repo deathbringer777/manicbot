@@ -59,6 +59,11 @@ vi.mock("~/trpc/react", () => ({
       cancelAppointment: {
         useMutation: () => ({ mutate: cancelAptMutate, isPending: false }),
       },
+      getNoShowPolicy: {
+        // Default grace (15 min); baseSelected is in 2020 so the grace window
+        // has long passed → the client no-show button stays enabled.
+        useQuery: () => ({ data: { graceMinutes: 15 }, isLoading: false }),
+      },
     },
   },
 }));

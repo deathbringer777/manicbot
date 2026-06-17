@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
-  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, FolderOpen, Users, Sparkles,
+  Loader2, Store, Clock, Images, Palette, Globe, CheckCircle2, Star, CalendarDays, ExternalLink, FolderOpen, Users, Sparkles, ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
 import { api } from "~/trpc/react";
@@ -24,6 +24,7 @@ import { SalonPublishBody } from "~/components/salon/SalonPublishBody";
 import { AutoConfirmSettings } from "~/components/salon/AutoConfirmSettings";
 import { AutoSuggestFavoriteSettings } from "~/components/salon/AutoSuggestFavoriteSettings";
 import { PostVisitFollowupSettings } from "~/components/salon/PostVisitFollowupSettings";
+import { NoShowLatePolicySettings } from "~/components/salon/NoShowLatePolicySettings";
 import { SalonCalendarSection } from "~/components/salon/SalonCalendarSection";
 
 /**
@@ -280,6 +281,15 @@ export function MySalonSection() {
               desc={t("salon.postVisitFollowup.desc", lang)}
             >
               <PostVisitFollowupSettings tenantId={effectiveTenantId} bare />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={ShieldAlert}
+              iconClass="text-orange-400"
+              title={t("salon.noShowPolicy.title", lang)}
+              desc={t("salon.noShowPolicy.desc", lang)}
+            >
+              <NoShowLatePolicySettings tenantId={effectiveTenantId} bare />
             </CollapsibleSection>
           </>
         )}

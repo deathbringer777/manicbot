@@ -174,32 +174,87 @@ describe("salonRouter status mutations — close adminProcedure regression", () 
     });
   });
 
-  // ── markNoShow (existing) extended to assert notifyWorker fires ───────────
+  // ── markNoShow — client variant is grace-gated; master variant isn't ──────
+  const RECENT_TS = Date.now() - 5 * 60 * 1000; // 5 min ago — inside default 15-min grace
+
   describe("markNoShow", () => {
-    it("fires notifyWorker no_show_client for client variant", async () => {
-      const dbMock = createDbMock();
+    it("fires notifyWorker no_show_client once the grace window has elapsed", async () => {
+      // SELECT ts → past start; SELECT tenant_config → none → default 15-min grace.
+      const dbMock = createDbMock([[{ ts: PAST_TS }], []]);
       const caller = ownerCaller(dbMock.db);
 
-      await caller.markNoShow({
-        tenantId: TENANT,
-        id: "apt_1",
-        noShowBy: "client",
-      });
+      await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" });
 
       expect(notifyWorker).toHaveBeenCalledWith("no_show_client", "apt_1", TENANT, null);
     });
 
-    it("fires notifyWorker no_show_master for master variant", async () => {
+    it("rejects a CLIENT no-show inside the grace window", async () => {
+      const dbMock = createDbMock([[{ ts: RECENT_TS }], []]);
+      const caller = ownerCaller(dbMock.db);
+
+      await expect(
+        caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" }),
+      ).rejects.toThrow(/cannot_mark_no_show_in_grace/);
+      expect(dbMock.updateCalls).toHaveLength(0);
+      expect(notifyWorker).not.toHaveBeenCalled();
+    });
+
+    it("honours a custom graceMinutes from the tenant policy", async () => {
+      // 5-min-ago start, but tenant grace is 0 → allowed.
+      const dbMock = createDbMock([[{ ts: RECENT_TS }], [{ value: JSON.stringify({ graceMinutes: 0 }) }]]);
+      const caller = ownerCaller(dbMock.db);
+
+      await caller.markNoShow({ tenantId: TENANT, id: "apt_1", noShowBy: "client" });
+
+      expect(notifyWorker).toHaveBeenCalledWith("no_show_client", "apt_1", TENANT, null);
+    });
+
+    it("does NOT grace-gate a master no-show (fires immediately)", async () => {
       const dbMock = createDbMock();
       const caller = ownerCaller(dbMock.db);
 
-      await caller.markNoShow({
-        tenantId: TENANT,
-        id: "apt_2",
-        noShowBy: "master",
-      });
+      await caller.markNoShow({ tenantId: TENANT, id: "apt_2", noShowBy: "master" });
 
       expect(notifyWorker).toHaveBeenCalledWith("no_show_master", "apt_2", TENANT, null);
+    });
+  });
+
+  // ── no-show policy read/write (tenant_config blob) ────────────────────────
+  describe("no-show policy", () => {
+    it("setNoShowPolicy stores a normalized JSON blob under no_show_policy", async () => {
+      const dbMock = createDbMock();
+      const caller = ownerCaller(dbMock.db);
+
+      await caller.setNoShowPolicy({
+        tenantId: TENANT,
+        policy: {
+          graceMinutes: 20, notifyClient: false, notifyTone: "firm", afterCount: 3,
+          prepayment: "deposit50", penaltyAmount: 100, autoAction: "require_confirm",
+          lateness: "strict", lateGraceMinutes: 10, refund: "neutral",
+        },
+      });
+
+      const ins = dbMock.insertCalls[0]?.values as { key: string; value: string };
+      expect(ins.key).toBe("no_show_policy");
+      expect(JSON.parse(ins.value)).toMatchObject({ graceMinutes: 20, notifyClient: false, prepayment: "deposit50" });
+    });
+
+    it("getNoShowPolicy returns a stored + normalized policy", async () => {
+      const dbMock = createDbMock([[{ value: JSON.stringify({ graceMinutes: 30, notifyTone: "bogus" }) }]]);
+      const caller = ownerCaller(dbMock.db);
+
+      const policy = await caller.getNoShowPolicy({ tenantId: TENANT });
+      expect(policy.graceMinutes).toBe(30);
+      expect(policy.notifyTone).toBe("neutral"); // garbage enum → default
+    });
+
+    it("getNoShowPolicy returns neutral defaults when unset", async () => {
+      const dbMock = createDbMock([[]]);
+      const caller = ownerCaller(dbMock.db);
+
+      const policy = await caller.getNoShowPolicy({ tenantId: TENANT });
+      expect(policy.graceMinutes).toBe(15);
+      expect(policy.notifyClient).toBe(true);
     });
   });
 

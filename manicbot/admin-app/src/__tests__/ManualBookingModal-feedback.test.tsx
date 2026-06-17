@@ -45,6 +45,7 @@ vi.mock("~/trpc/react", () => ({
       getAutoSuggestFavoriteSettings: {
         useQuery: () => ({ data: { web: true, telegram: true }, isLoading: false }),
       },
+      getNoShowPolicy: { useQuery: () => ({ data: null, isLoading: false }) },
     },
     clients: {
       // 0074 — manual + derived favorite-master lookup for the picked client.

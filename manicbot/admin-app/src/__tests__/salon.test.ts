@@ -578,7 +578,9 @@ describe("salonRouter", () => {
   // ── markNoShow (salon variant) ────────────────────────────────────────────
   describe("markNoShow", () => {
     it("sets noShow=1, status=no_show, noShowBy, cancelReason", async () => {
-      const dbMock = createDbMock();
+      // Client no-show is grace-gated: SELECT ts (past start) then the
+      // tenant_config policy row (none → default 15-min grace, already elapsed).
+      const dbMock = createDbMock([[{ ts: Date.now() - 3_600_000 }], []]);
       const caller = ownerCaller(dbMock.db);
 
       const result = await caller.markNoShow({

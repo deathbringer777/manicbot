@@ -77,6 +77,7 @@ describe("useDashboardPrefs — bottom-nav additions", () => {
         bottomNavOrder: order,
         bottomNavLayout: "custom",
         homeWidgets: [],
+        appointmentDialog: null,
       },
       TENANT,
     );

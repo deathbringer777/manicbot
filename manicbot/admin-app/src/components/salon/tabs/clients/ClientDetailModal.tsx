@@ -13,7 +13,7 @@
  */
 
 import { useState } from "react";
-import { X, Edit2, Trash2, Ban, ShieldCheck, Phone, Mail, Send, Instagram, Cake, Star } from "lucide-react";
+import { X, Edit2, Trash2, Ban, ShieldCheck, Phone, Mail, Send, Instagram, Cake, Star, AlertTriangle } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -131,6 +131,16 @@ export function ClientDetailModal({ tenantId, chatId, onClose }: Props) {
                     <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-400">
                       <Ban className="h-3 w-3" />
                       {t("clients.detail.blockedGlobally", lang)}
+                    </span>
+                  )}
+                  {((c as { noShowCount?: number | null }).noShowCount ?? 0) > 0 && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-md bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-medium text-orange-600 dark:text-orange-400"
+                      title={t("salon.noShow.flagTitle", lang)}
+                      data-testid="cd-no-show-badge"
+                    >
+                      <AlertTriangle className="h-3 w-3" />
+                      {(c as { noShowCount?: number | null }).noShowCount} {t("salon.noShow.noun", lang)}
                     </span>
                   )}
                 </div>

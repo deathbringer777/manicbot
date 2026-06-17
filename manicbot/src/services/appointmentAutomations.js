@@ -6,6 +6,7 @@ import { CB } from '../config.js';
 import { log } from '../utils/logger.js';
 import { dispatchAppointmentInApp } from '../notifications.js';
 import { getUser } from './users.js';
+import { getNoShowPolicy } from './policy/noShowPolicy.js';
 
 /**
  * Per-event bell row metadata. The dispatcher uses this to drop a
@@ -98,6 +99,20 @@ export async function dispatchAppointmentAutomation(ctx, apt, eventType, opts = 
       sideEffects = true;
     }
 
+    if (eventType === 'appointment.no_show_client') {
+      // Bump the client's reliability counter. ONLY for client no-shows — a
+      // master no-show is the salon's fault and must never count against the
+      // client. Same UPDATE-in-place shape as the lifetime_visits bump, so a
+      // re-registration (ON CONFLICT upsert) never clobbers it.
+      if (ctx.db?.prepare && apt.chatId != null) {
+        await ctx.db.prepare(
+          'UPDATE users SET no_show_count = no_show_count + 1 ' +
+          'WHERE tenant_id = ? AND chat_id = ?'
+        ).bind(ctx.tenantId, apt.chatId).run().catch(() => undefined);
+      }
+      sideEffects = true;
+    }
+
     // Analytics row for every event so the dashboard can chart status flow.
     if (ctx.db?.prepare) {
       const now = Math.floor(Date.now() / 1000);
@@ -149,9 +164,12 @@ export async function dispatchAppointmentAutomation(ctx, apt, eventType, opts = 
     } else if (eventType === 'appointment.no_show_master') {
       notified = await sendDefaultMasterNoShowMessage(ctx, apt);
     } else if (eventType === 'appointment.no_show_client') {
-      // Silent by design — clients may take offense at "you didn't show".
-      // Salon-side analytics + lifetime_visits stay intact via step 1.
-      notified = false;
+      // Policy-driven: by default the client IS notified (they got reminders
+      // and could have cancelled). A tenant can soften (neutral), sharpen
+      // (firm), or silence it (notifyClient=false / notifyTone='off') from the
+      // no-show policy in Settings.
+      const policy = await getNoShowPolicy(ctx);
+      notified = await sendDefaultClientNoShowMessage(ctx, apt, policy);
     }
     // 'appointment.confirmed' / 'rejected' / 'cancelled' / 'rescheduled'
     // are still served by the legacy hardcoded branches in
@@ -183,6 +201,24 @@ const APOLOGY_MASTER_NO_SHOW = {
   pl: '🙏 <b>Przepraszamy — mistrz nie mógł przyjąć</b>\n\n{svc} · {dt}\n\nWybierz nowy termin. Chcielibyśmy znów Cię zobaczyć.',
 };
 
+// Client no-show copy, keyed by tone. `neutral` = gentle "we missed you";
+// `firm` = matter-of-fact "you didn't show, please cancel ahead next time".
+// Both invite a rebooking; `off` (handled before this map) sends nothing.
+const CLIENT_NO_SHOW = {
+  neutral: {
+    ru: '😔 <b>Мы вас не дождались</b>\n\n{svc} · {dt}\n\nЖаль, что не получилось. Если планы поменялись — запишитесь на удобное время.',
+    ua: '😔 <b>Ми вас не дочекалися</b>\n\n{svc} · {dt}\n\nШкода, що не вийшло. Якщо плани змінилися — запишіться на зручний час.',
+    en: '😔 <b>We missed you</b>\n\n{svc} · {dt}\n\nSorry it did not work out. If your plans changed, book a time that suits you.',
+    pl: '😔 <b>Czekaliśmy na Ciebie</b>\n\n{svc} · {dt}\n\nSzkoda, że się nie udało. Jeśli plany się zmieniły — zarezerwuj dogodny termin.',
+  },
+  firm: {
+    ru: '⚠️ <b>Вы пропустили запись</b>\n\n{svc} · {dt}\n\nВы не пришли и не предупредили. Пожалуйста, отменяйте заранее, если не сможете прийти.',
+    ua: '⚠️ <b>Ви пропустили запис</b>\n\n{svc} · {dt}\n\nВи не прийшли і не попередили. Будь ласка, скасовуйте заздалегідь, якщо не зможете прийти.',
+    en: '⚠️ <b>You missed your appointment</b>\n\n{svc} · {dt}\n\nYou did not show and did not let us know. Please cancel ahead of time if you cannot make it.',
+    pl: '⚠️ <b>Nie pojawiłeś się na wizycie</b>\n\n{svc} · {dt}\n\nNie przyszedłeś i nie uprzedziłeś. Prosimy o wcześniejsze odwołanie, jeśli nie możesz przyjść.',
+  },
+};
+
 function pickLang(map, lg) {
   return map[lg] || map.ru;
 }
@@ -195,6 +231,30 @@ async function sendDefaultDoneMessage(ctx, apt) {
     .replace('{svc}', svcName(ctx, lg, apt.svcId))
     .replace('{dt}', fmtDT(lg, apt.date, apt.time));
   await send(ctx, apt.chatId, body);
+  return true;
+}
+
+async function sendDefaultClientNoShowMessage(ctx, apt, policy) {
+  if (!apt.chatId) return false;
+  // Tenant opted out of notifying no-show clients.
+  if (!policy?.notifyClient || policy.notifyTone === 'off') return false;
+  const lg = (await getLang(ctx, apt.chatId).catch(() => null)) || 'ru';
+  const toneMap = CLIENT_NO_SHOW[policy.notifyTone] || CLIENT_NO_SHOW.neutral;
+  const tpl = pickLang(toneMap, lg);
+  const body = tpl
+    .replace('{svc}', svcName(ctx, lg, apt.svcId))
+    .replace('{dt}', fmtDT(lg, apt.date, apt.time));
+  const rebookBtn = {
+    ru: '📅 Записаться снова',
+    ua: '📅 Записатися знову',
+    en: '📅 Book again',
+    pl: '📅 Umów ponownie',
+  };
+  await send(ctx, apt.chatId, body, {
+    reply_markup: {
+      inline_keyboard: [[{ text: rebookBtn[lg] || rebookBtn.ru, callback_data: CB.BOOK }]],
+    },
+  });
   return true;
 }
 

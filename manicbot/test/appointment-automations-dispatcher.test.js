@@ -75,19 +75,25 @@ describe('dispatchAppointmentAutomation', () => {
     expect(sentMessages[0].text).toMatch(/Спасибо/);
   });
 
-  it('appointment.no_show_client — silent (no client message) but analytics fires', async () => {
+  it('appointment.no_show_client — bumps no_show_count + notifies client by default (neutral)', async () => {
     const { ctx, runCalls } = makeCtx();
     const apt = { id: 'apt_1', chatId: 555, date: '2026-05-15', time: '12:00', svcId: 'svc_a', masterId: 42 };
 
     const result = await dispatchAppointmentAutomation(ctx, apt, 'appointment.no_show_client');
 
-    expect(result.notified).toBe(false);
-    expect(sentMessages).toHaveLength(0);
+    // Default policy (no tenant_config row → first() null) notifies the client.
+    expect(result.notified).toBe(true);
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0].chatId).toBe(555);
+    expect(sentMessages[0].opts?.reply_markup?.inline_keyboard).toBeTruthy();
+    // Client reliability counter bumped …
+    expect(runCalls.some(c => /no_show_count\s*=\s*no_show_count\s*\+\s*1/.test(c.sql))).toBe(true);
+    // … and the analytics row still fires.
     expect(runCalls.some(c => /analytics_events/.test(c.sql))).toBe(true);
   });
 
-  it('appointment.no_show_master — apology message with rebook button', async () => {
-    const { ctx } = makeCtx();
+  it('appointment.no_show_master — apology to client, does NOT bump the client no_show_count', async () => {
+    const { ctx, runCalls } = makeCtx();
     const apt = { id: 'apt_1', chatId: 555, date: '2026-05-15', time: '12:00', svcId: 'svc_a', masterId: 42 };
 
     const result = await dispatchAppointmentAutomation(ctx, apt, 'appointment.no_show_master');
@@ -96,6 +102,8 @@ describe('dispatchAppointmentAutomation', () => {
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0].text).toMatch(/Извините|Перебронируйте|мастер/);
     expect(sentMessages[0].opts?.reply_markup?.inline_keyboard).toBeTruthy();
+    // A master no-show is NOT the client's fault — counter untouched.
+    expect(runCalls.some(c => /no_show_count/.test(c.sql))).toBe(false);
   });
 
   it('respects suppressDefault opt — runs side-effects but no default send', async () => {

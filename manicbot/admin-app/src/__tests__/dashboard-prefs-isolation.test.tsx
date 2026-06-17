@@ -94,6 +94,7 @@ describe("loadDashboardPrefs / saveDashboardPrefs", () => {
       bottomNavOrder: [],
       bottomNavLayout: "default" as const,
       homeWidgets: [],
+      appointmentDialog: null,
     };
     saveDashboardPrefs(prefs, "t_a");
     const loaded = loadDashboardPrefs("t_a");
@@ -111,6 +112,7 @@ describe("loadDashboardPrefs / saveDashboardPrefs", () => {
       bottomNavOrder: [],
       bottomNavLayout: "default" as const,
       homeWidgets: [],
+      appointmentDialog: null,
     };
     saveDashboardPrefs(prefs, "t_a");
     const b = loadDashboardPrefs("t_b");

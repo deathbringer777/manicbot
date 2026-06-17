@@ -47,12 +47,16 @@ export const appointmentNameColumns = {
   resolvedClientName: sql<string | null>`(select ${users.name} from ${users} where ${col(users, users.tenantId)} = ${col(appointments, appointments.tenantId)} and ${col(users, users.chatId)} = ${col(appointments, appointments.chatId)} limit 1)`,
   resolvedClientPhone: sql<string | null>`(select ${users.phone} from ${users} where ${col(users, users.tenantId)} = ${col(appointments, appointments.tenantId)} and ${col(users, users.chatId)} = ${col(appointments, appointments.chatId)} limit 1)`,
   resolvedServiceNames: sql<string | null>`(select ${services.names} from ${services} where ${col(services, services.tenantId)} = ${col(appointments, appointments.tenantId)} and ${col(services, services.svcId)} = ${col(appointments, appointments.svcId)} limit 1)`,
+  // 0124: the client's lifetime no-show count, for the unreliable-client flag
+  // on the calendar popover. Same tenant+chat correlation as the name lookup.
+  resolvedClientNoShowCount: sql<number | null>`(select ${users.noShowCount} from ${users} where ${col(users, users.tenantId)} = ${col(appointments, appointments.tenantId)} and ${col(users, users.chatId)} = ${col(appointments, appointments.chatId)} limit 1)`,
 };
 
 type ResolvedExtras = {
   resolvedClientName: string | null;
   resolvedClientPhone: string | null;
   resolvedServiceNames: string | null;
+  resolvedClientNoShowCount: number | null;
 };
 
 /**
@@ -66,12 +70,13 @@ export function foldAppointmentNames<
     userName: string | null;
     userPhone: string | null;
   },
->(row: T): Omit<T, keyof ResolvedExtras> & { serviceName: string } {
-  const { resolvedClientName, resolvedClientPhone, resolvedServiceNames, ...rest } = row;
+>(row: T): Omit<T, keyof ResolvedExtras> & { serviceName: string; noShowCount: number } {
+  const { resolvedClientName, resolvedClientPhone, resolvedServiceNames, resolvedClientNoShowCount, ...rest } = row;
   return {
     ...rest,
     userName: rest.userName ?? resolvedClientName ?? null,
     userPhone: rest.userPhone ?? resolvedClientPhone ?? null,
     serviceName: parseServiceName(resolvedServiceNames, rest.svcId),
+    noShowCount: resolvedClientNoShowCount ?? 0,
   };
 }

@@ -72,13 +72,26 @@ export async function handleClickRedirect(request, token, env, executionCtx) {
       if (!ctx?.db) return;
       const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for');
       const ipHash = await hashIp(ip, secret);
+      const nowS = Math.floor(Date.now() / 1000);
       await dbRun(
         ctx,
         `INSERT INTO marketing_link_clicks (id, tenant_id, campaign_id, send_id, contact_id, url, clicked_at, ip_hash)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         rid('clk'), claims.tenantId, claims.campaignId, claims.sendId,
-        claims.contactId, claims.url.slice(0, 2000), Math.floor(Date.now() / 1000), ipHash,
+        claims.contactId, claims.url.slice(0, 2000), nowS, ipHash,
       );
+      // Mirror the click onto the send row so the campaign funnel's Opened /
+      // Clicked counts reflect first-party clicks — independent of Resend's
+      // open/click tracking (which needs a custom tracking subdomain). The
+      // funnel counts `*_at IS NOT NULL`; `IS NULL` guards keep it idempotent
+      // and never overwrite an earlier real open. Status is left untouched so a
+      // prior bounce/complaint is never masked. marketing_sends has no
+      // tenant_id column (scoped via campaign_id); the send id is from the
+      // signed token.
+      if (claims.sendId) {
+        await dbRun(ctx, 'UPDATE marketing_sends SET opened_at = ? WHERE id = ? AND opened_at IS NULL', nowS, claims.sendId);
+        await dbRun(ctx, 'UPDATE marketing_sends SET clicked_at = ? WHERE id = ? AND clicked_at IS NULL', nowS, claims.sendId);
+      }
     } catch (e) {
       log.warn('http.clickRedirect', { action: 'insert_click_failed', error: e?.message, campaignId: claims.campaignId });
     }

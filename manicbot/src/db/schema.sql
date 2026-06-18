@@ -974,6 +974,12 @@ CREATE INDEX IF NOT EXISTS idx_mkt_campaigns_tenant ON marketing_campaigns(tenan
 CREATE INDEX IF NOT EXISTS idx_mkt_campaigns_status ON marketing_campaigns(status);
 CREATE INDEX IF NOT EXISTS idx_mkt_campaigns_scheduled ON marketing_campaigns(scheduled_at);
 
+-- NO tenant_id BY DESIGN (AUDIT YELLOW #5). A send belongs to a tenant only
+-- transitively via campaign_id -> marketing_campaigns.tenant_id. Every
+-- tenant-facing READ must JOIN marketing_campaigns and filter on its tenant_id
+-- (enforced by admin-app marketing-sends-tenant-isolation.test.ts). The Worker
+-- only writes rows by PRIMARY KEY id (send loop + signed-token click redirect)
+-- and runs an age-based God-Mode retention sweep — it never reads rows back.
 CREATE TABLE IF NOT EXISTS marketing_sends (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL,

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_NO_SHOW_POLICY,
+  DEPOSIT_CHARGING_ENABLED,
   normalizeNoShowPolicy,
   evaluateNoShowPolicy,
   getNoShowPolicy,
@@ -106,6 +107,35 @@ describe('evaluateNoShowPolicy', () => {
     );
     expect(r.penaltyAmount).toBe(50);
     expect(r.reasons).toContain('penalty');
+  });
+});
+
+// AUDIT YELLOW #4 — deposit charging is deferred (no online-payment integration
+// yet). These tests pin "prepayment is advisory, never auto-charged" as a
+// machine-checked invariant so the contract can't silently drift.
+describe('deposit charging is deferred (advisory-only prepayment)', () => {
+  it('DEPOSIT_CHARGING_ENABLED is false until a booking-payment integration exists', () => {
+    // Tripwire: when real charging is wired, flipping this to true makes the
+    // test fail, forcing a deliberate review of the UI disclaimer + charge path.
+    expect(DEPOSIT_CHARGING_ENABLED).toBe(false);
+  });
+
+  it('a require_prepayment decision reports the requirement as NOT enforceable', () => {
+    const r = evaluateNoShowPolicy(
+      { afterCount: 2, prepayment: 'deposit50' },
+      { noShowCount: 2 },
+    );
+    expect(r.decision).toBe('require_prepayment');
+    expect(r.prepayment).toBe('deposit50');
+    // The salon owner sees the requirement, but no money is collected — every
+    // consumer must branch on this flag rather than assume a charge happened.
+    expect(r.prepaymentEnforceable).toBe(DEPOSIT_CHARGING_ENABLED);
+    expect(r.prepaymentEnforceable).toBe(false);
+  });
+
+  it('prepaymentEnforceable is false even when no prepayment is required', () => {
+    const r = evaluateNoShowPolicy(null, { noShowCount: 0 });
+    expect(r.prepaymentEnforceable).toBe(false);
   });
 });
 

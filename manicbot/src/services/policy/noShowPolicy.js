@@ -17,6 +17,19 @@ import { dbGet } from '../../utils/db.js';
 
 export const NO_SHOW_POLICY_KEY = 'no_show_policy';
 
+/**
+ * Whether a `prepayment` requirement (deposit50 / deposit100) is actually
+ * COLLECTED from the client. This is `false` until a booking-payment integration
+ * (Stripe) exists — today `prepayment`/`penaltyAmount` are surfaced as staff
+ * instruction + client message only, never auto-charged.
+ *
+ * Single source of truth for the "deferred" status (AUDIT YELLOW #4). When real
+ * charging lands, flip this to `true` in BOTH twins, wire the charge path, and
+ * drop the "shown as instruction" disclaimer (`salon.noShowPolicy.prepayNote`).
+ * A tripwire test asserts this is `false` so the flip can't pass unnoticed.
+ */
+export const DEPOSIT_CHARGING_ENABLED = false;
+
 /** Neutral, safe-by-default policy used when a tenant hasn't configured one. */
 export const DEFAULT_NO_SHOW_POLICY = Object.freeze({
   // Minutes after the appointment START before "client no-show" can be marked.
@@ -82,9 +95,13 @@ export function normalizeNoShowPolicy(raw) {
  * require_prepayment > require_confirm. Any prior no-show (count > 0) yields at
  * least a soft `warn`. `penaltyAmount` is additive context, not a decision.
  *
+ * `prepaymentEnforceable` reflects {@link DEPOSIT_CHARGING_ENABLED}: when a
+ * `require_prepayment` decision is returned the requirement is advisory only
+ * (shown to staff + client) and NOT auto-collected until online payments exist.
+ *
  * @param {unknown} rawPolicy
  * @param {{ noShowCount?: number }} client
- * @returns {{ decision: 'allow'|'warn'|'require_confirm'|'require_prepayment'|'blocked', noShowCount: number, triggered: boolean, prepayment: string, penaltyAmount: number, reasons: string[] }}
+ * @returns {{ decision: 'allow'|'warn'|'require_confirm'|'require_prepayment'|'blocked', noShowCount: number, triggered: boolean, prepayment: string, prepaymentEnforceable: boolean, penaltyAmount: number, reasons: string[] }}
  */
 export function evaluateNoShowPolicy(rawPolicy, client) {
   const policy = normalizeNoShowPolicy(rawPolicy);
@@ -94,6 +111,8 @@ export function evaluateNoShowPolicy(rawPolicy, client) {
     noShowCount: count,
     triggered: false,
     prepayment: 'none',
+    // Advisory-only until DEPOSIT_CHARGING_ENABLED flips (no charge integration).
+    prepaymentEnforceable: DEPOSIT_CHARGING_ENABLED,
     penaltyAmount: 0,
     reasons: [],
   };

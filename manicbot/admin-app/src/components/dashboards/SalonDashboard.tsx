@@ -70,6 +70,7 @@ import {
 import { WorkHoursEditor } from "~/components/salon/WorkHoursEditor";
 import type { MoveCommit } from "~/lib/calendar/useDragToMove";
 import type { ResizeCommit } from "~/lib/calendar/useDragToResize";
+import { resolveReservationRoute } from "~/lib/calendar/reservationRouting";
 import { toast } from "~/lib/toast";
 import { AddMasterFab, type AddMasterPick } from "~/components/salon/AddMasterFab";
 import { InviteByEmailModal } from "~/components/salon/InviteByEmailModal";
@@ -1691,26 +1692,39 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const createBlockSingle = api.appointmentBlocks.create.useMutation({
     onSuccess: () => { void blocksQuery.refetch(); },
   });
-  const createBlockMany = api.appointmentBlocks.createMany.useMutation({
-    onSuccess: () => { void blocksQuery.refetch(); },
-  });
-  // Shift-drag "time reservation" fanned out to every master. Centralizes the
-  // chatId mapping + the empty-roster guard so neither calendar view silently
-  // no-ops when the salon has no masters yet (previously the `ids.length > 0`
-  // check just dropped the action with no feedback).
-  function reserveTimeForAllMasters(base: {
-    type: "reservation";
+  // «Резерв времени» from the grid quick-create. A reservation block needs
+  // exactly ONE master (`appointment_blocks.master_id` is NOT NULL), so
+  // resolveReservationRoute picks it WITHOUT ever fanning out to the whole team
+  // (the old behavior dropped one lock-block per master — "куча блоков").
+  // Ambiguous case (week view / several masters, no column) → open the picker
+  // dialog so the owner chooses one, or opts into «Все мастера» explicitly.
+  function startReservation(info: {
     date: string;
     time: string;
     durationMin: number;
-    reason?: string;
+    masterId: number | null;
+    title?: string;
   }) {
-    const ids = (mastersList.data ?? []).map((m) => m.chatId);
-    if (ids.length === 0) {
+    const masterIds = (mastersList.data ?? []).map((m) => m.chatId);
+    if (masterIds.length === 0) {
       toast.error(t("salon.noMasters", lang));
       return;
     }
-    createBlockMany.mutate({ tenantId, masterIds: ids, ...base });
+    const route = resolveReservationRoute(info.masterId, masterIds);
+    if (route.kind === "single") {
+      createBlockSingle.mutate({
+        tenantId,
+        masterId: route.masterId,
+        type: "reservation",
+        date: info.date,
+        time: info.time,
+        durationMin: info.durationMin,
+        reason: info.title || undefined,
+      });
+    } else {
+      setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
+      setTimeReservationOpen(true);
+    }
   }
   const mastersList = api.salon.getMasters.useQuery(
     { tenantId },
@@ -2422,12 +2436,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
               onCreateAt={(info) => {
                 if (info.modifier === "shift") {
-                  const base = { type: "reservation" as const, date: info.date, time: info.time, durationMin: info.durationMin, reason: info.title || undefined };
-                  if (info.masterId != null) {
-                    createBlockSingle.mutate({ tenantId, masterId: info.masterId, ...base });
-                  } else {
-                    reserveTimeForAllMasters(base);
-                  }
+                  startReservation(info);
                 } else {
                   setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
                   setManualBookingOpen(true);
@@ -2470,8 +2479,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
               onDeleteBlock={(id) => deleteBlock.mutate({ tenantId, id })}
               onCreateAt={(info) => {
                 if (info.modifier === "shift") {
-                  const base = { type: "reservation" as const, date: info.date, time: info.time, durationMin: info.durationMin, reason: info.title || undefined };
-                  reserveTimeForAllMasters(base);
+                  startReservation(info);
                 } else {
                   setDragPrefill({ date: info.date, time: info.time, masterId: info.masterId, durationMin: info.durationMin, title: info.title });
                   setManualBookingOpen(true);

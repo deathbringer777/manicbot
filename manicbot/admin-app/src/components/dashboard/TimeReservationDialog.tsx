@@ -103,7 +103,15 @@ export function TimeReservationDialog({
     },
   });
 
-  const formValid = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time) && durationMin > 0;
+  // A master must be chosen explicitly — either a specific one or «Все мастера».
+  // `masterId == null` means "not yet picked", NOT "all masters": without this
+  // guard an un-touched picker silently fanned the reservation out to the whole
+  // team (one block per master). Mirrors TimeOffDialog.
+  const formValid =
+    /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+    /^\d{2}:\d{2}$/.test(time) &&
+    durationMin > 0 &&
+    (allMasters || masterId != null);
   const submitDisabled = !formValid || create.isPending || createMany.isPending;
 
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -111,7 +119,7 @@ export function TimeReservationDialog({
     setErr(null);
     if (submitDisabled) return;
     const base = { type: "reservation" as const, date, time, durationMin, reason: reason.trim() || undefined };
-    if (allMasters || masterId == null) {
+    if (allMasters) {
       const ids = (masters.data ?? []).map((m) => m.chatId);
       if (ids.length === 0) { setErr(t("appointments.manual.pickPlaceholder", lang)); return; }
       createMany.mutate({ tenantId, masterIds: ids, ...base });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_NO_SHOW_POLICY,
+  DEPOSIT_CHARGING_ENABLED,
   normalizeNoShowPolicy,
   evaluateNoShowPolicy,
   NO_SHOW_POLICY_KEY,
@@ -42,5 +43,17 @@ describe("noShowPolicy (admin twin)", () => {
 
   it("exposes the tenant_config key", () => {
     expect(NO_SHOW_POLICY_KEY).toBe("no_show_policy");
+  });
+
+  // AUDIT YELLOW #4 — deposit charging deferred. Mirror of the Worker twin
+  // (manicbot/test/no-show-policy.test.js) — keep both in sync.
+  it("DEPOSIT_CHARGING_ENABLED is false (advisory-only prepayment)", () => {
+    expect(DEPOSIT_CHARGING_ENABLED).toBe(false);
+  });
+
+  it("require_prepayment reports the requirement as not enforceable", () => {
+    const r = evaluateNoShowPolicy({ afterCount: 2, prepayment: "deposit50" }, { noShowCount: 2 });
+    expect(r.decision).toBe("require_prepayment");
+    expect(r.prepaymentEnforceable).toBe(false);
   });
 });

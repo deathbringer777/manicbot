@@ -1043,6 +1043,11 @@ export const marketingCampaigns = sqliteTable("marketing_campaigns", {
   index("idx_mkt_campaigns_scheduled").on(t.scheduledAt),
 ]);
 
+// NO tenantId column BY DESIGN (AUDIT YELLOW #5) — a send is tenant-scoped only
+// via campaignId -> marketingCampaigns.tenantId. Every tenant-facing read MUST
+// innerJoin(marketingCampaigns) and filter marketingCampaigns.tenantId; the
+// God-Mode router (marketing.ts, adminProcedure) reads cross-tenant by design.
+// Enforced by marketing-sends-tenant-isolation.test.ts.
 export const marketingSends = sqliteTable("marketing_sends", {
   id: text("id").primaryKey(),
   campaignId: text("campaign_id").notNull(),

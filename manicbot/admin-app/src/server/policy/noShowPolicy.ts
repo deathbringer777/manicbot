@@ -11,6 +11,15 @@
 
 export const NO_SHOW_POLICY_KEY = "no_show_policy";
 
+/**
+ * Whether a `prepayment` requirement (deposit50 / deposit100) is actually
+ * COLLECTED. `false` until a booking-payment integration (Stripe) exists — today
+ * prepayment/penalty are surfaced as staff instruction + client message only,
+ * never auto-charged (AUDIT YELLOW #4). Single source of truth for the deferral;
+ * a tripwire test asserts it's `false`. Mirror of the Worker twin's constant.
+ */
+export const DEPOSIT_CHARGING_ENABLED = false;
+
 export type NotifyTone = "neutral" | "firm" | "off";
 export type Prepayment = "none" | "deposit50" | "deposit100" | "cash";
 export type AutoAction = "none" | "require_confirm" | "auto_block";
@@ -82,6 +91,8 @@ export interface NoShowEvaluation {
   noShowCount: number;
   triggered: boolean;
   prepayment: Prepayment;
+  /** Whether `prepayment` is actually collected — see {@link DEPOSIT_CHARGING_ENABLED}. */
+  prepaymentEnforceable: boolean;
   penaltyAmount: number;
   reasons: string[];
 }
@@ -102,6 +113,8 @@ export function evaluateNoShowPolicy(
     noShowCount: count,
     triggered: false,
     prepayment: "none",
+    // Advisory-only until DEPOSIT_CHARGING_ENABLED flips (no charge integration).
+    prepaymentEnforceable: DEPOSIT_CHARGING_ENABLED,
     penaltyAmount: 0,
     reasons: [],
   };

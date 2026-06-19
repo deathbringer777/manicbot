@@ -73,6 +73,7 @@ export function GodClientInbox() {
               options={tenantOptions}
               placeholder={t("conv.filter.allSalons", lang)}
               testIdPrefix="god-client-tenant"
+              aria-label={t("conv.filter.allSalons", lang)}
               className="min-w-0 flex-1"
             />
             <button

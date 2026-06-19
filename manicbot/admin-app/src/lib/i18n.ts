@@ -2719,6 +2719,13 @@ const translations = {
   "settings.widgets.show":      { ru: "Показывать", ua: "Показувати", en: "Show", pl: "Pokaż" },
   "settings.widgets.reset":     { ru: "Сбросить раскладку", ua: "Скинути розкладку", en: "Reset layout", pl: "Resetuj układ" },
   "settings.widgets.resetDone": { ru: "Раскладка сброшена", ua: "Розкладку скинуто", en: "Layout reset", pl: "Układ zresetowany" },
+
+  // ── God Mode → Bots page ─────────────────────────────────────────────────
+  "bots.title":     { ru: "Боты",                     ua: "Боти",                      en: "Bots",                      pl: "Boty" },
+  "bots.loading":   { ru: "Загрузка…",                ua: "Завантаження…",             en: "Loading…",                  pl: "Ładowanie…" },
+  "bots.emptyTitle":{ ru: "Нет подключённых ботов",   ua: "Немає підключених ботів",   en: "No connected bots",         pl: "Brak podłączonych botów" },
+  "bots.emptyDesc": { ru: "Боты появятся здесь после подключения через салон или онбординг.", ua: "Боти з'являться тут після підключення через салон або онбординг.", en: "Bots will appear here after connecting via a salon or onboarding.", pl: "Boty pojawią się tutaj po połączeniu przez salon lub onboarding." },
+  "bots.fixAll":    { ru: "Починить все",             ua: "Полагодити всі",            en: "Fix all",                   pl: "Napraw wszystko" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;

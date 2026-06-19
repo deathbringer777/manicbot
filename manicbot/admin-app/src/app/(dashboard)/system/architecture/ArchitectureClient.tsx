@@ -7,6 +7,8 @@ import { Shell } from "~/components/layout/Shell";
 import {
   Network, RefreshCw, ZoomIn, ZoomOut, Maximize2, AlertTriangle, Loader2, ShieldCheck,
 } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { localeFor } from "~/lib/i18n";
 
 const ICONBTN =
   "inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 " +
@@ -23,6 +25,7 @@ let renderSeq = 0;
  * diagram to the viewport on load. `mermaid` is loaded lazily (this route only).
  */
 export default function ArchitectureClient() {
+  const { lang } = useLang();
   const { data, isLoading, error, refetch, isFetching } =
     api.system.getArchitectureDiagram.useQuery(undefined, { staleTime: 5 * 60_000 });
 
@@ -121,7 +124,7 @@ export default function ArchitectureClient() {
 
   const generatedLabel =
     data?.source === "generated" && data?.generatedAt
-      ? new Date(data.generatedAt).toLocaleString("ru-RU")
+      ? new Date(data.generatedAt).toLocaleString(localeFor(lang))
       : null;
 
   return (

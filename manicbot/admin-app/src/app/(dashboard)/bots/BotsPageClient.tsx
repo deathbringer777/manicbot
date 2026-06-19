@@ -6,6 +6,8 @@ import { Shell } from "~/components/layout/Shell";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { SkeletonCard } from "~/components/ui/Skeleton";
+import { useLang } from "~/components/LangContext";
+import { t } from "~/lib/i18n";
 import {
   Bot,
   RefreshCw,
@@ -23,6 +25,7 @@ const ALL = "__all__";
  * api.adminBots (which proxies to the Worker; tokens never reach the browser).
  */
 export default function BotsPageClient() {
+  const { lang } = useLang();
   const utils = api.useUtils();
   const { data: bots = [], isLoading, error } = api.adminBots.list.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -45,10 +48,10 @@ export default function BotsPageClient() {
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <PageHeader
-            title="Боты"
+            title={t("bots.title", lang)}
             subtitle={
               isLoading
-                ? "Загрузка…"
+                ? t("bots.loading", lang)
                 : `${bots.length} ботов${broken ? ` · ${broken} без webhook` : ""}`
             }
           />
@@ -62,7 +65,7 @@ export default function BotsPageClient() {
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            Починить все
+            {t("bots.fixAll", lang)}
           </button>
         </div>
 
@@ -79,8 +82,8 @@ export default function BotsPageClient() {
         ) : bots.length === 0 ? (
           <EmptyState
             icon={Bot}
-            title="Нет подключённых ботов"
-            description="Боты появятся здесь после подключения через салон или онбординг."
+            title={t("bots.emptyTitle", lang)}
+            description={t("bots.emptyDesc", lang)}
           />
         ) : (
           <div className="space-y-3">

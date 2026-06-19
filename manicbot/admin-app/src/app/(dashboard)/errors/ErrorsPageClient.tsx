@@ -458,6 +458,7 @@ export default function ErrorsPageClient() {
             onChange={(v) => setSeverity(v as Severity | "")}
             options={SEVERITY_OPTIONS as Array<{ value: string; label: string }>}
             testIdPrefix="errors-severity"
+            aria-label="Filter by severity"
             className="w-40"
           />
           <Select
@@ -465,6 +466,7 @@ export default function ErrorsPageClient() {
             onChange={(v) => setSource(v as Source | "")}
             options={SOURCE_OPTIONS as Array<{ value: string; label: string }>}
             testIdPrefix="errors-source"
+            aria-label="Filter by source"
             className="w-36"
           />
           <Select
@@ -474,6 +476,7 @@ export default function ErrorsPageClient() {
             }
             options={STATUS_OPTIONS as Array<{ value: string; label: string }>}
             testIdPrefix="errors-status"
+            aria-label="Filter by status"
             className="w-36"
           />
           <input

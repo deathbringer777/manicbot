@@ -647,14 +647,7 @@ export async function phaseReminders(ctx, now, w) {
       if (diffH < -1 || diffH > 25) continue;
       const do24 = !row.rem_h24 && diffH <= 25 && diffH > 23;
       const do2 = !row.rem_h2 && diffH <= 2.5 && diffH > 1.5;
-      if (do24 || do2) {
-        const updates = {};
-        if (do24) updates.rem_h24 = 1;
-        if (do2) updates.rem_h2 = 1;
-        const setCols = Object.entries(updates).map(([k]) => `${k} = ?`).join(', ');
-        const vals = Object.values(updates);
-        await dbRun(ctx, `UPDATE appointments SET ${setCols} WHERE id = ? AND tenant_id = ?`, ...vals, row.id, ctx.tenantId);
-      }
+      if (!do24 && !do2) continue;
       const lg = langMap.get(row.chat_id) || 'ru';
       const tenantAddr = ctx.tenant?.salon?.address || ADDRESS;
       const tenantMaps = ctx.tenant?.salon?.mapsUrl || MAPS_URL;
@@ -741,10 +734,46 @@ export async function phaseReminders(ctx, now, w) {
         }
       }
 
-      // Fallback to Telegram if not sent via other channel
+      // Fallback to Telegram if not sent via other channel. A TG result is a
+      // success only if the call neither threw nor returned the adapter's
+      // { ok:false } shape (transport error / 429 / no bot token).
+      let tgFallbackOk = false;
       if (!sent) {
-        if (do24) await send(ctx, row.chat_id, fill(t(lg, 'rem_24'), vars));
-        if (do2) await send(ctx, row.chat_id, fill(t(lg, 'rem_2'), vars));
+        const ok = (r) => !(r && typeof r === 'object' && r.ok === false);
+        try {
+          if (do24) tgFallbackOk = ok(await send(ctx, row.chat_id, fill(t(lg, 'rem_24'), vars))) || tgFallbackOk;
+          if (do2) tgFallbackOk = ok(await send(ctx, row.chat_id, fill(t(lg, 'rem_2'), vars))) || tgFallbackOk;
+        } catch (e) {
+          log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'tg_reminder', aptId: row.id });
+        }
+      }
+
+      // At-least-once: claim the rem_h24 / rem_h2 flag(s) ONLY after a send
+      // actually succeeded. The flag is the sole idempotency guard, so claiming
+      // it before the send (the previous behaviour) silently dropped a reminder
+      // whenever the send threw or returned { ok:false } — no later tick would
+      // retry. Because the cron runs every 15 min and the reminder windows are
+      // wider than one tick (24h: 23–25h, 2h: 1.5–2.5h), a failed send is
+      // naturally retried on the next tick instead of being lost.
+      if (sent || tgFallbackOk) {
+        const updates = {};
+        if (do24) updates.rem_h24 = 1;
+        if (do2) updates.rem_h2 = 1;
+        const setCols = Object.entries(updates).map(([k]) => `${k} = ?`).join(', ');
+        const vals = Object.values(updates);
+        await dbRun(ctx, `UPDATE appointments SET ${setCols} WHERE id = ? AND tenant_id = ?`, ...vals, row.id, ctx.tenantId);
+      } else {
+        // Observable signal that a due reminder could not be delivered this
+        // tick. The next tick will retry while still inside the window.
+        void logEvent(ctx, 'reminder.send_failed', {
+          level: 'warn',
+          tenantId: ctx.tenantId,
+          message: 'Appointment reminder send failed; flag left unset for retry on the next tick',
+          data: {
+            appointmentId: row.id,
+            reminderKind: do24 ? '24h' : '2h',
+          },
+        });
       }
     } catch (e) {
       log.error('handlers.cron', e instanceof Error ? e : new Error(String(e.message)), { action: 'reminder', aptId: row.id });

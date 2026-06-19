@@ -49,6 +49,20 @@ export const HREFLANG_MAP: Record<Lang, string> = {
 };
 
 /**
+ * Editorial byline for blog articles — a brand editorial author (decided
+ * 2026-06 GEO pass). Used BOTH as the visible byline (ArticleClient) and as the
+ * Article schema author (articleJsonLd) so the human-visible page and the
+ * structured data agree, which is what Google's E-E-A-T / structured-data
+ * policy expects. Localized per UI language.
+ */
+export const EDITORIAL_AUTHOR: Record<Lang, string> = {
+  pl: "Redakcja ManicBot",
+  ru: "Редакция ManicBot",
+  ua: "Редакція ManicBot",
+  en: "ManicBot Editorial",
+};
+
+/**
  * Build per-language hreflang alternates for a given path.
  *
  * The landing is served with a `?lang=` query param; admin-app pages don't
@@ -410,6 +424,13 @@ interface ArticleJsonLdInput {
   /** Defaults to `datePublished` when not provided. */
   dateModified?: string;
   image?: string;
+  /**
+   * Editorial author (preferred). A brand editorial byline is an Organization;
+   * a real person would be a Person. `url` links the author entity to a profile
+   * / about page, which strengthens E-E-A-T.
+   */
+  author?: { name: string; type?: "Person" | "Organization"; url?: string };
+  /** @deprecated legacy Person-author name list; use `author`. */
   authors?: string[];
 }
 
@@ -425,9 +446,15 @@ export function articleJsonLd(input: ArticleJsonLdInput) {
     image,
     datePublished: input.datePublished,
     dateModified: input.dateModified ?? input.datePublished,
-    author: (input.authors && input.authors.length > 0
-      ? input.authors.map((name) => ({ "@type": "Person", name }))
-      : [{ "@type": "Organization", name: SITE_NAME }]),
+    author: input.author
+      ? {
+          "@type": input.author.type ?? "Organization",
+          name: input.author.name,
+          ...(input.author.url ? { url: input.author.url } : {}),
+        }
+      : input.authors && input.authors.length > 0
+        ? input.authors.map((name) => ({ "@type": "Person", name }))
+        : [{ "@type": "Organization", name: SITE_NAME }],
     publisher: {
       "@type": "Organization",
       name: SITE_NAME,

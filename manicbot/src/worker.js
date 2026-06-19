@@ -49,7 +49,9 @@ import { handleHealthRequest } from './http/healthHttp.js';
 import { logEvent, emitCronSkipRateLimited } from './utils/events.js';
 import { log } from './utils/logger.js';
 import { captureError } from './utils/errorCapture.js';
-import { generateSitemapResponse, generateRobotsResponse, generateLlmsTxtResponse } from './utils/seo.js';
+import { generateSitemapResponse, generateRobotsResponse, generateLlmsTxtResponse, generateAiPageResponse } from './utils/seo.js';
+import { isAiBot } from './utils/aiBots.js';
+import { recordAiBotHit, maybeRunAiBotDigest } from './utils/aiBotAnalytics.js';
 
 async function proxyToAdminApp(request, env, url) {
   const pagesBase = (env.ADMIN_APP_URL || 'https://admin-app-3nc.pages.dev').replace(/\/$/, '');
@@ -313,6 +315,15 @@ export default {
     }
     const url = new URL(request.url);
     try {
+    // AI-bot visibility analytics (Track E, 2026-06). Fire-and-forget hit
+    // counter so a weekly Telegram digest can show whether Perplexity / ChatGPT
+    // / Claude crawlers are actually fetching us. Best-effort: never blocks or
+    // fails the request, and only fires for known AI user-agents.
+    const aiBotName = isAiBot(request.headers.get('user-agent'));
+    if (aiBotName && executionCtx?.waitUntil) {
+      executionCtx.waitUntil(recordAiBotHit(env, aiBotName, Date.now()));
+    }
+
     // Canonical host + scheme: 301 www→apex and http→https (GET/HEAD only) so
     // crawlers consolidate on https://manicbot.com and the duplicate variants
     // stay out of the index. Runs before everything else, including robots.txt.
@@ -358,6 +369,20 @@ export default {
     ) {
       return addSecurityHeaders(
         generateLlmsTxtResponse(url.origin, { headOnly: request.method === 'HEAD' }),
+      );
+    }
+
+    // /ai — public HTML "answer page" for AI engines (GEO/AEO, 2026-06). Served
+    // by the Worker BEFORE the landing proxy so the Vite SPA's catch-all never
+    // wins. Human-visible HTML twin of /llms.txt (same facts, pricing,
+    // comparison table, FAQ) + FAQPage / AggregateOffer JSON-LD. HEAD support
+    // mirrors robots/sitemap/llms (P0-4).
+    if (
+      url.pathname === '/ai' &&
+      (request.method === 'GET' || request.method === 'HEAD')
+    ) {
+      return addSecurityHeaders(
+        generateAiPageResponse(url.origin, { headOnly: request.method === 'HEAD' }),
       );
     }
 
@@ -779,6 +804,21 @@ export default {
           (e) => {
             log.error('worker.stripeLedgerSync', e instanceof Error ? e : new Error(String(e?.message || e)));
             void captureError(env, e, { source: 'worker.scheduled', phase: 'stripe_ledger_sync' });
+          },
+        ),
+      );
+
+      // AI-bot visibility digest (Track E, 2026-06 GEO pass). Self-gated to
+      // weekly: seeds the timer on first run, then posts a per-bot crawl
+      // summary (PerplexityBot, OAI-SearchBot, Claude-SearchBot, GPTBot…) to
+      // the admin Telegram chat every ≥7 days. Fire-and-forget like the other
+      // global phases above; a missing KV / token just no-ops.
+      _scheduledCtx.waitUntil(
+        maybeRunAiBotDigest(env, event.scheduledTime || Date.now()).then(
+          (r) => { if (r?.sent) log.info('worker.aiBotDigest', { grand: r.grand }); },
+          (e) => {
+            log.error('worker.aiBotDigest', e instanceof Error ? e : new Error(String(e?.message || e)));
+            void captureError(env, e, { source: 'worker.scheduled', phase: 'ai_bot_digest' });
           },
         ),
       );

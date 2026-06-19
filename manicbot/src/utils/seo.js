@@ -9,6 +9,7 @@
 
 import { log } from './logger.js';
 import { POPULAR_CITIES } from '../lib/popularCities.js';
+import { robotsAiBots } from './aiBots.js';
 
 export const DEFAULT_SITE_ORIGIN = 'https://manicbot.com';
 
@@ -76,6 +77,16 @@ const ADMIN_APP_PUBLIC_ROUTES = [
 ];
 
 /**
+ * Indexable routes served DIRECTLY by the Worker (not the landing SPA or the
+ * admin-app). `/ai` is the public HTML "answer page" for AI engines — see
+ * renderAiPage below.
+ * @type {Array<{ loc: string; priority: string; changefreq: string }>}
+ */
+const WORKER_ROUTES = [
+  { loc: '/ai', priority: '0.6', changefreq: 'monthly' },
+];
+
+/**
  * #P0-4d (relax.md §3) — `/login` and `/register` were previously listed here
  * with priority 0.3, but the rendered pages return `<meta name="robots"
  * content="noindex,nofollow">`. Listing them in the sitemap while marking
@@ -132,6 +143,7 @@ const BLOG_ARTICLES = [
  */
 export const ROUTE_LASTMOD = {
   '/':            '2026-04-01',
+  '/ai':          '2026-06-19',
   '/help':        '2026-03-15',
   '/search':      '2026-05-01',
   '/blog':        '2026-05-16',
@@ -209,6 +221,7 @@ export function buildStaticSitemapEntries(today = todayIso()) {
   return [
     ...withLastmod(LANDING_ROUTES),
     ...withLastmod(ADMIN_APP_PUBLIC_ROUTES),
+    ...withLastmod(WORKER_ROUTES),
     // AUTH_PUBLIC_ROUTES removed (see comment above) — keeps auth pages out
     // of the sitemap; the matching Disallow directives stay in robots.txt.
     ...BLOG_ARTICLES.map((a) => ({
@@ -337,11 +350,13 @@ export async function generateSitemapResponse(env, origin, opts = {}) {
 /**
  * Render robots.txt. Public pages allowed; all internal/API/auth paths blocked.
  *
- * SEO audit 2026-05-20 P2-5: explicit allow blocks for the major AI bots
- * (GPTBot, ClaudeBot, Google-Extended, PerplexityBot, CCBot). Today's
- * `User-agent: *` default already allows everything; the explicit blocks
- * are paper trail and make our AI visibility intent legible to the
- * operators of those crawlers.
+ * SEO audit 2026-05-20 P2-5 + 2026-06 GEO pass: explicit allow blocks for the
+ * major AI bots. Covers training crawlers (GPTBot, ClaudeBot, Google-Extended,
+ * CCBot) AND the live citation/retrieval bots that power answer-engine sources
+ * (OAI-SearchBot, ChatGPT-User, Claude-SearchBot, Claude-User, Perplexity-User,
+ * PerplexityBot). Today's `User-agent: *` default already allows everything;
+ * the explicit blocks are a public paper trail driven by the single-source
+ * registry in src/utils/aiBots.js.
  *
  * @param {string} origin Request origin (e.g. https://manicbot.com).
  */
@@ -387,23 +402,13 @@ export function renderRobotsTxt(origin = DEFAULT_SITE_ORIGIN) {
     '# a robots.txt block would hide the noindex from Googlebot and cause',
     "# \"Indexed, though blocked by robots.txt\" (observed on /login, 2026-06).",
     '',
-    '# AI bots — explicit allow (P2-5). Mirrors the `*` default but makes',
-    '# our AI-visibility intent legible to operators of each crawler.',
-    'User-agent: GPTBot',
-    'Allow: /',
-    '',
-    'User-agent: ClaudeBot',
-    'Allow: /',
-    '',
-    'User-agent: Google-Extended',
-    'Allow: /',
-    '',
-    'User-agent: PerplexityBot',
-    'Allow: /',
-    '',
-    'User-agent: CCBot',
-    'Allow: /',
-    '',
+    '# AI bots — explicit allow (P2-5). Mirrors the `*` default but makes our',
+    '# AI-visibility intent legible to operators of each crawler. Covers both',
+    '# training crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot) AND the',
+    '# live citation/retrieval bots that power answer-engine sources',
+    '# (OAI-SearchBot, ChatGPT-User, Claude-SearchBot, Claude-User,',
+    '# Perplexity-User). Driven by src/utils/aiBots.js (single source of truth).',
+    ...robotsAiBots().flatMap((b) => [`User-agent: ${b.name}`, 'Allow: /', '']),
     `Sitemap: ${base}/sitemap.xml`,
     '',
   ].join('\n');
@@ -511,6 +516,7 @@ export function renderLlmsTxt(origin = DEFAULT_SITE_ORIGIN) {
     `- [About](${base}/about) — company info, founder, contact`,
     `- [Salon directory](${base}/search) — browse all public salons by city/service`,
     `- [Blog](${base}/blog) — guides on running a nail salon, AI receptionist, automation, channel strategy`,
+    `- [AI overview](${base}/ai) — one-page machine-readable overview: facts, pricing, comparison table, FAQ`,
     `- [Help center](${base}/help) — product documentation`,
     `- [Rules](${base}/rules) — terms of service, acceptable use`,
     `- [Sitemap](${base}/sitemap.xml) — full list of indexable URLs`,
@@ -568,6 +574,213 @@ export function generateLlmsTxtResponse(origin, opts = {}) {
       // text/plain; Cloudflare's CDN handles both — pick markdown because
       // that's what the llmstxt.org spec recommends.
       'Content-Type': 'text/markdown; charset=utf-8',
+      'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+    },
+  });
+}
+
+/**
+ * Pricing tiers — single source for the /ai page (mirrors the plans gated in
+ * src/billing/features.js and the figures in renderLlmsTxt above).
+ * @type {Array<{ name: string, price: number, includes: string }>}
+ */
+const PRICING_TIERS = [
+  { name: 'Start', price: 45, includes: '1 master · booking via Telegram, Instagram, WhatsApp and the web widget' },
+  { name: 'Pro',   price: 60, includes: '5 masters · AI assistant · two-way Google Calendar sync' },
+  { name: 'Max',   price: 90, includes: 'unlimited masters · white-label · every feature' },
+];
+
+/**
+ * Honest competitor comparison shown on the /ai page. Commission/pricing facts
+ * mirror the per-competitor hooks in LLMS_COMPARISONS and the /comparisons/*
+ * pages — keep them in sync.
+ * @type {Array<{ name: string, commission: string, pricing: string, note: string }>}
+ */
+const AI_PAGE_COMPARISON = [
+  { name: 'ManicBot', commission: '0% (never)',                       pricing: '45–90 PLN/mo, flat',                       note: 'Multi-channel AI receptionist (Telegram, Instagram, WhatsApp, web). EU-hosted, Polish-first.' },
+  { name: 'Booksy',   commission: 'up to 30% (Boost new-client fee)', pricing: '~145 PLN/mo + Boost',                      note: 'Marketplace app — clients must install and book inside the Booksy app.' },
+  { name: 'Fresha',   commission: '20% new-client fee',               pricing: 'free base + per-message WhatsApp fees',    note: 'Marketplace funnel that charges per new client.' },
+  { name: 'Yclients', commission: 'n/a (add-ons paid)',               pricing: 'base + paid messenger integrations',       note: 'Russia-domiciled; multi-channel booking needs paid third-party add-ons.' },
+  { name: 'Versum',   commission: 'n/a',                              pricing: 'quote-only',                               note: 'Booksy-owned legacy stack — SMS + forms, no conversational booking.' },
+];
+
+/**
+ * Render `/ai` — a public, human-visible, server-rendered HTML "answer page":
+ * a dense, low-JS, fact-first overview of ManicBot for AI answer engines
+ * (Perplexity, ChatGPT Search, Google AI Overviews, Claude) AND for any human
+ * who opens it. It is the HTML twin of /llms.txt and reuses the SAME data
+ * (pricing, FAQ, comparisons), so the two never drift.
+ *
+ * This is NOT cloaking: identical content is served to bots and humans at the
+ * same URL. The page is linked from the sitemap and /llms.txt so engines
+ * discover it; it self-canonicals and stays indexable. FAQ text is visible AND
+ * mirrored in FAQPage JSON-LD (Google requires the visible twin).
+ *
+ * @param {string} origin
+ */
+export function renderAiPage(origin = DEFAULT_SITE_ORIGIN) {
+  const base = origin.replace(/\/$/, '');
+  const e = xmlEscape;
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': `${base}/#org`,
+        name: 'ManicBot',
+        url: `${base}/`,
+        logo: `${base}/manicbot-mark-ui.png`,
+        sameAs: ['https://t.me/manicbot_com'],
+        contactPoint: {
+          '@type': 'ContactPoint',
+          email: 'support@manicbot.com',
+          contactType: 'customer support',
+          availableLanguage: ['Polish', 'Russian', 'Ukrainian', 'English'],
+        },
+      },
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${base}/#software`,
+        name: 'ManicBot',
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web',
+        url: `${base}/ai`,
+        publisher: { '@id': `${base}/#org` },
+        description:
+          'AI booking assistant for nail and beauty salons. Multi-channel booking via Telegram, Instagram, WhatsApp and an embeddable web widget. 0% commission, plans from 45 PLN/month.',
+        inLanguage: ['pl', 'ru', 'uk', 'en'],
+        offers: {
+          '@type': 'AggregateOffer',
+          priceCurrency: 'PLN',
+          lowPrice: '45',
+          highPrice: '90',
+          offerCount: String(PRICING_TIERS.length),
+        },
+      },
+      {
+        '@type': 'FAQPage',
+        '@id': `${base}/ai#faq`,
+        mainEntity: LLMS_FAQS.map((f) => ({
+          '@type': 'Question',
+          name: f.q,
+          acceptedAnswer: { '@type': 'Answer', text: f.a },
+        })),
+      },
+    ],
+  };
+  // Escape `<` so a stray "</script>" inside any string can't break out of the
+  // JSON-LD <script> block.
+  const jsonLdScript = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+
+  const pricingRows = PRICING_TIERS.map(
+    (t) => `<tr><td>${e(t.name)}</td><td>${t.price} PLN / month</td><td>${e(t.includes)}</td></tr>`,
+  ).join('');
+  const comparisonRows = AI_PAGE_COMPARISON.map(
+    (c) => `<tr><td>${e(c.name)}</td><td>${e(c.commission)}</td><td>${e(c.pricing)}</td><td>${e(c.note)}</td></tr>`,
+  ).join('');
+  const faqBlocks = LLMS_FAQS.map((f) => `<h3>${e(f.q)}</h3>\n<p>${e(f.a)}</p>`).join('\n');
+  const guideLinks = LLMS_TOP_GUIDES.slice(0, 10)
+    .map((g) => `<li><a href="${base}/blog/${e(g.slug)}">${e(g.title)}</a></li>`)
+    .join('');
+  const comparisonLinks = LLMS_COMPARISONS
+    .map((c) => `<li><a href="${base}/comparisons/${e(c.slug)}">ManicBot vs ${e(c.competitor)}</a></li>`)
+    .join('');
+  const cityLinks = POPULAR_CITIES
+    .map((c) => `<li><a href="${base}/salons/${citySlug(c)}">Nail salons in ${e(c)}</a></li>`)
+    .join('');
+
+  const title = 'ManicBot — AI booking assistant for nail & beauty salons (pricing, comparison, FAQ)';
+  const description =
+    'ManicBot is an AI booking assistant for nail and beauty salons: multi-channel booking via Telegram, Instagram, WhatsApp and a web widget, 0% commission, from 45 PLN/month. Pricing, comparison vs Booksy/Fresha/Yclients, and FAQ.';
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${e(title)}</title>
+<meta name="description" content="${e(description)}">
+<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large">
+<link rel="canonical" href="${base}/ai">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${e(title)}">
+<meta property="og:description" content="${e(description)}">
+<meta property="og:url" content="${base}/ai">
+<style>
+:root{color-scheme:light dark}
+body{max-width:820px;margin:40px auto;padding:0 20px;font:16px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a}
+h1{font-size:30px;line-height:1.2;margin:0 0 8px}
+h2{font-size:22px;margin:36px 0 10px;border-bottom:1px solid #e5e5e5;padding-bottom:6px}
+h3{font-size:17px;margin:20px 0 4px}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:15px}
+th,td{border:1px solid #ddd;padding:8px 10px;text-align:left;vertical-align:top}
+th{background:#f6f6f6}
+ul{padding-left:20px}
+a{color:#1a56db}
+.lead{font-size:18px;color:#333}
+footer{margin-top:40px;padding-top:16px;border-top:1px solid #e5e5e5;font-size:14px;color:#666}
+@media(prefers-color-scheme:dark){body{color:#e8e8e8;background:#111}th{background:#1d1d1d}th,td{border-color:#333}h2,footer{border-color:#333}.lead{color:#bbb}a{color:#7aa7ff}footer{color:#999}}
+</style>
+<script type="application/ld+json">${jsonLdScript}</script>
+</head>
+<body>
+<main>
+<h1>ManicBot — AI booking assistant for nail &amp; beauty salons</h1>
+<p class="lead">ManicBot answers clients, books appointments, sends reminders and wins clients back — 24/7, across Telegram, Instagram Direct, WhatsApp Business and an embeddable web widget. One AI receptionist, four languages (Polish, Russian, Ukrainian, English), <strong>0% booking commission</strong>, from 45 PLN/month. Operating in Poland and the EU.</p>
+
+<h2>What it is</h2>
+<p>ManicBot is a multi-tenant booking SaaS for nail salons and independent nail masters. A salon connects its existing channels and the AI receptionist handles the whole booking flow — slot selection, service catalog, master choice, confirmation and reminders — without the owner lifting a finger. Two-way Google Calendar sync keeps personal events and client bookings from colliding.</p>
+
+<h2>Pricing</h2>
+<table>
+<thead><tr><th>Plan</th><th>Price</th><th>What you get</th></tr></thead>
+<tbody>${pricingRows}</tbody>
+</table>
+<p>14-day free trial. No per-booking commission, no per-message fee, no marketplace cut. Billed monthly via Stripe.</p>
+
+<h2>How ManicBot compares</h2>
+<table>
+<thead><tr><th>Platform</th><th>Booking commission</th><th>Pricing</th><th>Key difference</th></tr></thead>
+<tbody>${comparisonRows}</tbody>
+</table>
+
+<h2>Channels &amp; languages</h2>
+<p>Connect any combination of Telegram bot, Instagram Direct, WhatsApp Business and a web chat widget — all feeding one AI receptionist with a shared conversation history. The bot detects the client's language from their first message and replies in Polish, Russian, Ukrainian or English.</p>
+
+<h2>Frequently asked questions</h2>
+${faqBlocks}
+
+<h2>Guides</h2>
+<ul>${guideLinks}</ul>
+
+<h2>Compare ManicBot</h2>
+<ul>${comparisonLinks}</ul>
+
+<h2>Nail salons by city</h2>
+<ul>${cityLinks}</ul>
+
+<footer>
+<p>ManicBot · <a href="${base}/">Home</a> · <a href="${base}/pricing">Pricing</a> · <a href="${base}/blog">Blog</a> · <a href="${base}/llms.txt">llms.txt</a> · Telegram <a href="https://t.me/manicbot_com">@manicbot_com</a> · <a href="mailto:support@manicbot.com">support@manicbot.com</a></p>
+</footer>
+</main>
+</body>
+</html>
+`;
+}
+
+/**
+ * Build the `/ai` HTTP response. Mirrors generateLlmsTxtResponse (HEAD → empty
+ * body, same headers; 24h cache).
+ *
+ * @param {string} origin
+ * @param {{ headOnly?: boolean }} [opts]
+ */
+export function generateAiPageResponse(origin, opts = {}) {
+  return new Response(opts.headOnly ? null : renderAiPage(origin), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=86400, s-maxage=86400',
     },
   });

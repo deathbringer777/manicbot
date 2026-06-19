@@ -11,7 +11,8 @@ import {
   langToOgLocale,
   articleJsonLd,
   breadcrumbJsonLd,
-  SITE_NAME,
+  EDITORIAL_AUTHOR,
+  SITE_URL,
 } from "~/lib/seo";
 import { blogFaqPageJsonLd, resolveBlogFaqs } from "~/content/blog/blogFaqs";
 import type { Lang } from "~/lib/i18n";
@@ -91,7 +92,7 @@ export async function generateMetadata({
     type: "article",
     publishedTime: article.date,
     modifiedTime: article.updated ?? article.date,
-    authors: [SITE_NAME],
+    authors: [EDITORIAL_AUTHOR[lang]],
     keywords,
     locale: langToOgLocale(langRaw),
     image: article.coverImage.url,
@@ -129,6 +130,13 @@ export default async function ArticlePage({ params, searchParams }: Props) {
             datePublished: article.date,
             dateModified: article.updated ?? article.date,
             image: article.coverImage.url,
+            // Brand editorial author (Organization) linked to /about — the same
+            // byline rendered visibly in ArticleClient (E-E-A-T alignment).
+            author: {
+              name: EDITORIAL_AUTHOR[lang],
+              type: "Organization",
+              url: `${SITE_URL}/about`,
+            },
           }),
           breadcrumbJsonLd([
             { name: BREADCRUMB_HOME[lang], path: "/" },

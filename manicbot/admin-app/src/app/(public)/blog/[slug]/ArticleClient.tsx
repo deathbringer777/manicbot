@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Calendar, Tag, Clock } from "lucide-react";
+import { ArrowLeft, Calendar, Tag, Clock, User } from "lucide-react";
 import { useLang } from "~/components/LangContext";
+import { EDITORIAL_AUTHOR } from "~/lib/seo";
 import { BLOG_CATEGORY_LABELS } from "~/content/blog/articles";
 import type { BlogArticle } from "~/content/blog/types";
 import { CATEGORY_STYLE } from "../BlogClient";
@@ -23,6 +24,13 @@ const READ_TIME_SUFFIX: Record<Lang, string> = {
   ua: "хв читання",
   en: "min read",
   pl: "min czytania",
+};
+
+const UPDATED_LABEL: Record<Lang, string> = {
+  ru: "Обновлено",
+  ua: "Оновлено",
+  en: "Updated",
+  pl: "Zaktualizowano",
 };
 
 function formatDate(iso: string, lang: Lang) {
@@ -73,7 +81,9 @@ export function ArticleClient({
           {BACK_LABEL[lang]}
         </Link>
 
-        {/* Meta */}
+        {/* Meta — category, author byline, published/updated dates, read time.
+            The author byline mirrors the Article schema author (E-E-A-T), and
+            dates use <time> so crawlers parse freshness reliably. */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <span
             className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${style.badge}`}
@@ -82,9 +92,19 @@ export function ArticleClient({
             {BLOG_CATEGORY_LABELS[article.categoryKey][lang]}
           </span>
           <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-white/30">
-            <Calendar className="h-3 w-3" />
-            {formatDate(article.date, lang)}
+            <User className="h-3 w-3" />
+            {EDITORIAL_AUTHOR[lang]}
           </span>
+          <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-white/30">
+            <Calendar className="h-3 w-3" />
+            <time dateTime={article.date}>{formatDate(article.date, lang)}</time>
+          </span>
+          {article.updated && article.updated !== article.date && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-white/30">
+              {UPDATED_LABEL[lang]}{" "}
+              <time dateTime={article.updated}>{formatDate(article.updated, lang)}</time>
+            </span>
+          )}
           <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-white/30">
             <Clock className="h-3 w-3" />
             {mins} {READ_TIME_SUFFIX[lang]}

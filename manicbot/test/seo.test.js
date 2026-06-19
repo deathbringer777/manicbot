@@ -9,6 +9,8 @@ import {
   generateRobotsResponse,
   generateLlmsTxtResponse,
   renderLlmsTxt,
+  renderAiPage,
+  generateAiPageResponse,
   citySlug,
   coerceLastmodDate,
 } from '../src/utils/seo.js';
@@ -33,6 +35,15 @@ describe('seo', () => {
       expect(entries.find((e) => e.loc === '/blog')).toBeTruthy();
       expect(entries.find((e) => e.loc === '/help')).toBeTruthy();
       expect(entries.find((e) => e.loc === '/rules')).toBeTruthy();
+    });
+
+    // 2026-06 GEO pass — the Worker-served /ai answer page must be in the
+    // sitemap so AI/search engines discover it (it is not a landing SPA or
+    // admin-app route, so it has its own WORKER_ROUTES entry).
+    it('includes the Worker-served /ai answer page', () => {
+      const ai = entries.find((e) => e.loc === '/ai');
+      expect(ai).toBeTruthy();
+      expect(ai.lastmod).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
     // #P0-4d (relax.md §3) — auth pages must NOT be in the sitemap. They
@@ -411,6 +422,21 @@ describe('seo', () => {
       expect(body).toContain('User-agent: Google-Extended');
       expect(body).toContain('User-agent: PerplexityBot');
     });
+
+    // 2026-06 GEO pass — explicit allow for the live citation/retrieval bots
+    // that actually power answer-engine sources (Perplexity, ChatGPT Search,
+    // Claude web search), not just the training crawlers above. These are the
+    // user-agents that fetch a page when a human's question needs a live
+    // source, so they MUST be eligible to reach us to be cited.
+    it('explicitly allows the citation/retrieval bots (OAI-SearchBot, ChatGPT-User, Claude-SearchBot, Claude-User, Perplexity-User)', async () => {
+      const res = generateRobotsResponse('https://manicbot.com');
+      const body = await res.text();
+      expect(body).toContain('User-agent: OAI-SearchBot');
+      expect(body).toContain('User-agent: ChatGPT-User');
+      expect(body).toContain('User-agent: Claude-SearchBot');
+      expect(body).toContain('User-agent: Claude-User');
+      expect(body).toContain('User-agent: Perplexity-User');
+    });
   });
 
   // SEO audit 2026-05-20 P1-7 — /llms.txt (https://llmstxt.org).
@@ -537,6 +563,102 @@ describe('seo', () => {
     it('links to /pricing and /about under ## Key URLs (forward-looking)', () => {
       expect(txt).toContain('(https://manicbot.com/pricing)');
       expect(txt).toContain('(https://manicbot.com/about)');
+    });
+
+    it('links to the /ai answer page under ## Key URLs (2026-06)', () => {
+      expect(txt).toContain('(https://manicbot.com/ai)');
+    });
+  });
+
+  // 2026-06 GEO pass — the public /ai "answer page" (HTML twin of /llms.txt).
+  describe('renderAiPage', () => {
+    const html = renderAiPage('https://manicbot.com');
+
+    it('is a complete HTML document with lang, title and a single H1', () => {
+      expect(html).toMatch(/^<!doctype html>/i);
+      expect(html).toContain('<html lang="en">');
+      expect(html).toContain('<title>');
+      expect((html.match(/<h1[ >]/g) || []).length).toBe(1);
+    });
+
+    it('self-canonicals to /ai and stays indexable', () => {
+      expect(html).toContain('<link rel="canonical" href="https://manicbot.com/ai">');
+      expect(html).toMatch(/<meta name="robots" content="index,follow/);
+    });
+
+    it('renders the pricing table (45/60/90 PLN)', () => {
+      expect(html).toContain('45 PLN');
+      expect(html).toContain('60 PLN');
+      expect(html).toContain('90 PLN');
+    });
+
+    it('renders the competitor comparison table with commission facts', () => {
+      expect(html).toContain('How ManicBot compares');
+      expect(html).toMatch(/0%/);   // ManicBot
+      expect(html).toContain('Booksy');
+      expect(html).toContain('Fresha');
+      expect(html).toMatch(/30%/);  // Booksy Boost new-client fee
+      expect(html).toMatch(/20%/);  // Fresha new-client fee
+    });
+
+    it('renders every FAQ as a visible question heading (GEO: question-as-header)', () => {
+      const qHeadings = (html.match(/<h3>[^<]*\?<\/h3>/g) || []).length;
+      expect(qHeadings).toBeGreaterThanOrEqual(6);
+    });
+
+    it('links to blog guides, comparison pages and city directories', () => {
+      expect(html).toContain('/blog/instagram-bookings-2026');
+      expect(html).toContain('/comparisons/manicbot-vs-booksy');
+      expect(html).toContain('/salons/');
+    });
+
+    describe('JSON-LD', () => {
+      const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+
+      it('embeds exactly one JSON-LD block that parses', () => {
+        expect(m).toBeTruthy();
+        expect(() => JSON.parse(m[1])).not.toThrow();
+      });
+
+      it('graph includes Organization, SoftwareApplication w/ AggregateOffer, and FAQPage', () => {
+        const data = JSON.parse(m[1]);
+        const types = data['@graph'].map((n) => n['@type']);
+        expect(types).toContain('Organization');
+        expect(types).toContain('SoftwareApplication');
+        expect(types).toContain('FAQPage');
+        const sw = data['@graph'].find((n) => n['@type'] === 'SoftwareApplication');
+        expect(sw.offers['@type']).toBe('AggregateOffer');
+        expect(sw.offers.lowPrice).toBe('45');
+        expect(sw.offers.highPrice).toBe('90');
+        const faq = data['@graph'].find((n) => n['@type'] === 'FAQPage');
+        expect(faq.mainEntity.length).toBeGreaterThanOrEqual(6);
+        expect(faq.mainEntity[0]['@type']).toBe('Question');
+      });
+    });
+
+    it('strips trailing slash from origin', () => {
+      const h2 = renderAiPage('https://manicbot.com/');
+      expect(h2).toContain('href="https://manicbot.com/ai"');
+      expect(h2).not.toContain('manicbot.com//ai');
+    });
+  });
+
+  describe('generateAiPageResponse', () => {
+    it('returns 200 text/html with 24h cache', async () => {
+      const res = generateAiPageResponse('https://manicbot.com');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toMatch(/text\/html/);
+      expect(res.headers.get('cache-control')).toContain('max-age=86400');
+      const body = await res.text();
+      expect(body).toContain('<h1');
+    });
+
+    it('HEAD returns 200 with empty body and same headers (P0-4)', async () => {
+      const res = generateAiPageResponse('https://manicbot.com', { headOnly: true });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toMatch(/text\/html/);
+      const body = await res.text();
+      expect(body).toBe('');
     });
   });
 

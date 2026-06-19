@@ -21,6 +21,7 @@ import {
 import { sql, eq, desc } from "drizzle-orm";
 import { isResendConfigured, sendResendEmail } from "~/server/email/resend";
 import { log } from "~/server/utils/logger";
+import { ERD_MERMAID, ERD_META } from "~/server/_generated/erd.generated";
 
 const TABLE_LIST = [
   { name: "tenants", table: tenants },
@@ -199,5 +200,25 @@ export const systemRouter = createTRPCRouter({
         error: e instanceof Error ? e.message : String(e),
       };
     }
+  }),
+
+  /**
+   * God-Mode-only: return the auto-generated DB ERD as Mermaid text.
+   *
+   * The diagram is regenerated from `schema.sql` on every admin-app deploy
+   * (CI step "Generate architecture ERD" → scripts/gen-erd.mjs) and embedded
+   * into the server bundle. It is served ONLY through this `adminProcedure`,
+   * so the architecture map never reaches non-admins and is never published to
+   * the public repo. Payload carries table/column NAMES only — no secrets.
+   */
+  getArchitectureDiagram: adminProcedure.query(async () => {
+    return {
+      kind: "erd" as const,
+      format: "mermaid" as const,
+      mermaid: ERD_MERMAID,
+      generatedAt: ERD_META.generatedAt,
+      tableCount: ERD_META.tableCount,
+      source: ERD_META.source,
+    };
   }),
 });

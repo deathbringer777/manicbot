@@ -162,3 +162,34 @@ describe("system.testResendTransport — adminProcedure gate + transport probe",
     });
   });
 });
+
+describe("system.getArchitectureDiagram — adminProcedure gate + payload", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("rejects unauthenticated callers", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeUnauthCtx(db) as never);
+    await expect(caller.getArchitectureDiagram()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects tenant_owner (system_admin-only)", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeTenantOwnerCtx(db, "t") as never);
+    await expect(caller.getArchitectureDiagram()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("rejects master", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeMasterCtx(db, "t") as never);
+    await expect(caller.getArchitectureDiagram()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("admin receives a mermaid erd payload", async () => {
+    const { db } = createDbMock();
+    const caller = callerFactory(makeAdminCtx(db) as never);
+    const result = await caller.getArchitectureDiagram();
+    expect(result.format).toBe("mermaid");
+    expect(result.mermaid).toContain("erDiagram");
+    expect(typeof result.tableCount).toBe("number");
+  });
+});

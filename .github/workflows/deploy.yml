@@ -295,6 +295,14 @@ jobs:
         run: npm ci --legacy-peer-deps
         working-directory: manicbot/admin-app
 
+      # Regenerate the DB ERD from schema.sql and embed it into the server
+      # bundle. The committed erd.generated.ts is a stub; this overwrites it in
+      # the build workspace only (never committed), keeping the diagram private
+      # to the God-Mode page and out of the public repo.
+      - name: Generate architecture ERD (private, embedded in bundle)
+        run: node scripts/gen-erd.mjs
+        working-directory: manicbot/admin-app
+
       - name: Build for Cloudflare Pages (next-on-pages)
         run: npx next-on-pages
         working-directory: manicbot/admin-app

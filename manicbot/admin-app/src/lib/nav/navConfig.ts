@@ -4,7 +4,7 @@ import {
   ScrollText, CalendarCheck, UserRound, Wallet, LayoutGrid,
   HeadphonesIcon, Scissors, Star, BarChart3, ArrowLeftRight, Inbox,
   Puzzle, Megaphone, AlertOctagon, Plug, BookOpen, UsersRound, TrendingUp, Ticket,
-  Bot,
+  Bot, Network,
   type LucideIcon,
 } from "lucide-react";
 import type { AppRole } from "~/server/api/routers/auth";
@@ -77,6 +77,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "god.analytics",     href: "/system/events",      icon: TrendingUp,      labelKey: "Analytics Events", roles: ["system_admin"], group: "platform" },
   { id: "god.errors",        href: "/errors",             icon: AlertOctagon,    labelKey: "Errors",           roles: ["system_admin"], group: "platform" },
   { id: "god.system",        href: "/system",             icon: Activity,        labelKey: "System",           roles: ["system_admin"], group: "platform" },
+  { id: "god.architecture",  href: "/system/architecture",icon: Network,         labelKey: "Architecture",     roles: ["system_admin"], group: "platform" },
   { id: "god.providers",     href: "/system/providers",   icon: Plug,            labelKey: "Providers",        roles: ["system_admin"], group: "platform" },
   // Self-hosted blog CMS — no external CMS dependency, posts live in D1.
   // See migrations/0083_blog_posts.sql + routers/blog.ts for the data model.

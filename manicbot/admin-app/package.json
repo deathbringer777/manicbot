@@ -15,6 +15,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "gen-erd": "node scripts/gen-erd.mjs",
     "check-tenant-isolation": "node scripts/check-tenant-isolation.mjs"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "driver.js": "^1.4.0",
     "drizzle-orm": "^0.45.2",
     "fuse.js": "^7.3.0",
+    "mermaid": "^11.15.0",
     "next": "^15.5.18",
     "next-auth": "^5.0.0-beta.30",
     "qrcode.react": "^4.2.0",

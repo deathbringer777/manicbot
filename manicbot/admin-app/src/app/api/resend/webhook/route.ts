@@ -21,6 +21,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "~/server/db";
 import { emailSuppressions } from "~/server/db/schema";
 import { log } from "~/server/utils/logger";
+import { getRuntimeEnv } from "~/server/runtimeEnv";
 import {
   processResendEvent,
   isSvixTimestampFresh,
@@ -70,7 +71,7 @@ function timingSafeStrEq(a: string, b: string): boolean {
 }
 
 export async function POST(req: Request) {
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  const secret = getRuntimeEnv("RESEND_WEBHOOK_SECRET");
   if (!secret) return new Response("Webhook not configured", { status: 503 });
 
   // Replay protection: Svix's standard ±5 min freshness window. A captured

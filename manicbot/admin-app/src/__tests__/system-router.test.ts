@@ -189,7 +189,8 @@ describe("system.getArchitectureDiagram — adminProcedure gate + payload", () =
     const caller = callerFactory(makeAdminCtx(db) as never);
     const result = await caller.getArchitectureDiagram();
     expect(result.format).toBe("mermaid");
-    expect(result.mermaid).toContain("erDiagram");
+    expect(result.mermaid).toContain("flowchart");
     expect(typeof result.tableCount).toBe("number");
+    expect(typeof result.domainCount).toBe("number");
   });
 });

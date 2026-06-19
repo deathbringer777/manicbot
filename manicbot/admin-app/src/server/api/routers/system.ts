@@ -218,6 +218,7 @@ export const systemRouter = createTRPCRouter({
       mermaid: ERD_MERMAID,
       generatedAt: ERD_META.generatedAt,
       tableCount: ERD_META.tableCount,
+      domainCount: ERD_META.domainCount,
       source: ERD_META.source,
     };
   }),

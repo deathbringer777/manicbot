@@ -67,25 +67,61 @@ function buildAnalysisPrompt({ keywords = [], striking = [], geoPrompts = [] }) 
   ].join('\n');
 }
 
-async function analyzeWithClaude(input, { ask = askClaude, timeoutMs = 12 * 60 * 1000, logger } = {}) {
-  try {
-    const out = await ask(buildAnalysisPrompt(input), { json: true, model: 'sonnet', effort: 'high', timeoutMs });
-    return out?.json || null;
-  } catch (e) {
-    logger?.log?.(`Claude analysis degraded to heuristic clusters: ${e.message}`);
-    return null;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Cluster + GEO plan via Claude, with retries. A long high-effort call can fail
+ * transiently (a ~7min request hitting a network blip); `effort:'medium'` keeps
+ * the call shorter/sturdier and we retry once before degrading. Returns null
+ * only after all attempts fail — the caller then uses heuristicClusters().
+ */
+async function analyzeWithClaude(input, { ask = askClaude, timeoutMs = 10 * 60 * 1000, attempts = 2, logger } = {}) {
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const out = await ask(buildAnalysisPrompt(input), { json: true, model: 'sonnet', effort: 'medium', timeoutMs });
+      if (out?.json) return out.json;
+      logger?.log?.(`Claude analysis attempt ${i}/${attempts}: no JSON extracted`);
+    } catch (e) {
+      logger?.log?.(`Claude analysis attempt ${i}/${attempts} failed: ${e.message}`);
+    }
+    if (i < attempts) await sleep(4000);
   }
+  logger?.log?.('Claude analysis degraded to heuristic clusters after retries');
+  return null;
 }
 
-/** Deterministic fallback when Claude is unavailable: group by audience+cluster. */
+// Readable RU labels + a sensible target page per cluster, so the heuristic
+// fallback report is presentable (not a slug dump) when Claude is unavailable.
+const CLUSTER_LABEL = {
+  booking: 'Запись / онлайн-бронирование', 'b2b-software': 'B2B · софт для салона',
+  competitor: 'B2B · альтернатива Booksy', price: 'Цены услуг', service: 'Услуги (салон/город)',
+  gsc: 'Из Search Console', general: 'Прочее',
+};
+const CLUSTER_PAGE = {
+  booking: '/salon/{slug}/chat', 'b2b-software': '/', competitor: '/comparisons/manicbot-vs-booksy',
+  price: '/blog', service: '/salons/{city}', gsc: '—', general: '—',
+};
+
+/** Deterministic fallback when Claude is unavailable: readable groups by audience+cluster. */
 function heuristicClusters(keywords) {
   const map = new Map();
   for (const k of keywords || []) {
-    const key = `${k.audience || '?'} · ${k.cluster || 'general'}`;
-    if (!map.has(key)) map.set(key, { name: key, audience: k.audience, intent: k.cluster, keywords: [] });
+    const cl = k.cluster || 'general';
+    const key = `${k.audience || '?'}/${cl}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        name: `${CLUSTER_LABEL[cl] || cl}`,
+        audience: k.audience, intent: cl,
+        target_page: CLUSTER_PAGE[cl] || '—',
+        keywords: [],
+      });
+    }
     map.get(key).keywords.push(k.keyword);
   }
-  return { clusters: Array.from(map.values()), geo: null, quick_wins: [], new_pages: [] };
+  return {
+    clusters: Array.from(map.values()).sort((a, b) => b.keywords.length - a.keywords.length),
+    geo: null, quick_wins: [], new_pages: [],
+  };
 }
 
 module.exports = { scoreKeyword, prioritize, buildAnalysisPrompt, analyzeWithClaude, heuristicClusters };

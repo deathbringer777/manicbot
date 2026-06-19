@@ -27,6 +27,7 @@ import {
   type TimeBucket,
 } from "~/lib/notifications/kindMeta";
 import { groupNotifications } from "~/lib/notifications/grouping";
+import { resolveNotificationHref } from "~/lib/notifications/linkTarget";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
 
@@ -83,7 +84,7 @@ export default function NotificationsClient() {
 
   function handleRowClick(n: { id: string; readAt: number | null; link: string | null }) {
     if (n.readAt === null) markRead.mutate({ ids: [n.id] });
-    if (n.link) router.push(n.link);
+    if (n.link) router.push(resolveNotificationHref(n.link));
   }
 
   return (
@@ -181,7 +182,7 @@ export default function NotificationsClient() {
                   const onClickRep = () => {
                     const unreadIds = allRows.filter((r) => r.readAt === null).map((r) => r.id);
                     if (unreadIds.length > 0) markRead.mutate({ ids: unreadIds });
-                    if (rep.link) router.push(rep.link);
+                    if (rep.link) router.push(resolveNotificationHref(rep.link));
                   };
                   return (
                     <li

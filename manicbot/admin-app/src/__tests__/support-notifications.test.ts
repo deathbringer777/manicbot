@@ -241,7 +241,9 @@ describe("support.createTicket → fan-out to support staff", () => {
     expect(payload.kind).toBe("support.ticket.new");
     expect(payload.title).toBe("Новый тикет: Help");
     expect(payload.body).toBe("All slots are double-booked");
-    expect(payload.link).toBe(`/?ticket=${r.ticketId}`);
+    // Anchored at the in-app home, NOT root "/" — a root link would send the
+    // user to the marketing landing page (src/http/adminAppProxy.js).
+    expect(payload.link).toBe(`/dashboard?ticket=${r.ticketId}`);
     expect(payload.sourceSlug).toBe("support");
     expect(payload.sourceId).toBe(r.ticketId);
   });

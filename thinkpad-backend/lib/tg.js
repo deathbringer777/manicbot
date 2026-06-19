@@ -8,9 +8,29 @@
  * When unconfigured every send is a silent no-op — a cron must never crash
  * because notifications are missing.
  */
+const fs = require('fs');
 const { httpJson } = require('./http');
 
 const CHUNK_LIMIT = 3500; // Telegram hard limit is 4096; keep headroom like the Worker does
+
+/**
+ * Build a multipart/form-data body (string) for sendDocument. Text documents
+ * only (UTF-8) — that's all the cron needs; httpJson writes the string as UTF-8
+ * and sets Content-Length to match, so binary encoding isn't required.
+ */
+function buildMultipart(boundary, fields, file) {
+  const parts = [];
+  for (const [name, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === '') continue;
+    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`);
+  }
+  parts.push(
+    `--${boundary}\r\nContent-Disposition: form-data; name="${file.field}"; filename="${file.filename}"\r\n` +
+    `Content-Type: ${file.contentType || 'application/octet-stream'}\r\n\r\n${file.content}\r\n`,
+  );
+  parts.push(`--${boundary}--\r\n`);
+  return parts.join('');
+}
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -74,6 +94,27 @@ function createTg({
     });
   }
 
+  // Upload a (text) file as a Telegram document — used to attach the SEO/GEO
+  // markdown report. Multipart, so it goes through `transport` directly, not `call`.
+  async function sendDocument(filePath, { caption, parseMode = 'HTML', chatId: overrideChat, filename, fsImpl = fs } = {}) {
+    if (!configured) return null;
+    const content = fsImpl.readFileSync(filePath, 'utf8');
+    const name = filename || String(filePath).split(/[\\/]/).pop();
+    const boundary = `----manicbotcron${content.length}x${name.length}`;
+    const fields = { chat_id: overrideChat || chatId, ...(caption ? { caption, ...(parseMode ? { parse_mode: parseMode } : {}) } : {}) };
+    const body = buildMultipart(boundary, fields, { field: 'document', filename: name, content, contentType: 'text/markdown; charset=utf-8' });
+    const res = await transport(api('sendDocument'), {
+      method: 'POST', body,
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+      timeoutMs: 30000,
+    });
+    if (!res?.data?.ok) {
+      const desc = res?.data?.description || res?.body || `status ${res?.status}`;
+      throw new Error(`Telegram sendDocument failed: ${desc}`);
+    }
+    return res.data.result;
+  }
+
   async function editMessageText(messageId, text, { keyboard, parseMode = 'HTML', chatId: overrideChat } = {}) {
     return call('editMessageText', {
       chat_id: overrideChat || chatId,
@@ -91,7 +132,7 @@ function createTg({
     });
   }
 
-  return { configured, sendMessage, sendPhoto, editMessageText, answerCallback };
+  return { configured, sendMessage, sendPhoto, sendDocument, editMessageText, answerCallback };
 }
 
-module.exports = { createTg, escapeHtml, chunkText };
+module.exports = { createTg, escapeHtml, chunkText, buildMultipart };

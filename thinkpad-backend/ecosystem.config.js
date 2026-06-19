@@ -63,5 +63,12 @@ module.exports = {
         NODE_PATH: `${BASE}/node_modules`,
       },
     },
+    {
+      name: 'seo-geo-research',
+      script: `${BASE}/crons/seo-geo/index.js`,
+      cron_restart: '0 4 * * 1',      // Monday 04:00 — weekly deep SEO+GEO keyword research → report + Telegram
+      autorestart: false,             // one-shot; collectors degrade cleanly if GSC/Trends are down
+      watch: false,
+    },
   ],
 };

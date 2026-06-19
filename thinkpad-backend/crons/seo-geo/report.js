@@ -32,6 +32,12 @@ function countBy(keywords, field) {
   return m;
 }
 
+/** Humanize a machine slug if Claude returned one (e.g. "b2b-pl-system" → "b2b · pl · system"). */
+function prettyClusterName(name) {
+  const s = String(name || '').trim();
+  return /^[a-z0-9]+(-[a-z0-9]+)+$/.test(s) ? s.replace(/-/g, ' · ') : s;
+}
+
 function buildMarkdown({ date, keywords = [], gsc = {}, analysis, trendsCount = 0, failures = [], deltas } = {}) {
   const byAud = countBy(keywords, 'audience');
   const byPrio = countBy(keywords, 'priority');
@@ -41,11 +47,12 @@ function buildMarkdown({ date, keywords = [], gsc = {}, analysis, trendsCount = 
   if (deltas) L.push(`**Δ к прошлой неделе:** +${deltas.added} новых · ${deltas.removed} ушло (было ${deltas.prevTotal}).`);
   if (failures.length) L.push(`> ⚠️ Коллекторы деградировали: ${failures.join(', ')} — отчёт построен из остального.`);
   L.push(`> Источники: Google Autocomplete (живой) · GSC ${gsc.configured ? '✓' : '— off (нет service-account)'} · Trends ${trendsCount} related · SERP/PAA.`);
+  L.push('> Язык: стратегия/комментарии — по-русски; готовый для сайта контент (title/meta/FAQ/llms.txt) — на польском (или языке кластера). ⚠️ Цифры в GEO-фактах сгенерированы AI — проверь перед публикацией.');
 
   L.push('\n## 1. Сводка приоритетов');
   L.push(`High: **${byPrio.High || 0}** · Med: **${byPrio.Med || 0}** · Low: **${byPrio.Low || 0}**`);
 
-  L.push('\n## 2. Топ-приоритет (по score — бакет High наполнится после подключения GSC)');
+  L.push('\n## 2. Топ-приоритет (приоритет = перцентиль ранга: топ-25% = High; точность вырастет с подключением GSC)');
   const ranked = keywords.slice(0, 40); // keywords arrive already sorted desc by score
   if (ranked.length) for (const k of ranked) L.push(`- \`${k.keyword}\` — ${k.lang}/${k.audience || '?'}/${k.cluster || '?'} · ${k.priority} (${k.score})`);
   else L.push('_нет ключей_');
@@ -59,7 +66,7 @@ function buildMarkdown({ date, keywords = [], gsc = {}, analysis, trendsCount = 
   const clusters = (analysis && analysis.clusters) || [];
   if (clusters.length) {
     for (const c of clusters.slice(0, 24)) {
-      L.push(`\n### ${c.name}${c.audience ? ` · ${c.audience}` : ''}${c.intent ? ` · ${c.intent}` : ''}`);
+      L.push(`\n### ${prettyClusterName(c.name)}${c.audience ? ` · ${c.audience}` : ''}${c.intent ? ` · ${c.intent}` : ''}`);
       if (c.target_page) L.push(`**Целевая:** \`${c.target_page}\``);
       if (c.suggested_title) L.push(`**Title:** ${c.suggested_title}`);
       if (c.suggested_meta) L.push(`**Meta:** ${c.suggested_meta}`);

@@ -22,11 +22,15 @@ function scoreKeyword(signals = {}) {
   if (signals.question) score += 6;                                   // GEO/FAQ value
   return Math.round(score);
 }
-function bucket(score) { return score >= 45 ? 'High' : score >= 25 ? 'Med' : 'Low'; }
-
-/** Attach score+priority to every keyword from its signals, sorted high→low. */
+/**
+ * Attach score, sort high→low, then bucket by RELATIVE rank (top 25% High,
+ * middle 50% Med, bottom 25% Low). Percentile — not a fixed threshold — so the
+ * report always has a populated "High" focus group even before GSC volume data
+ * exists (absolute scores are necessarily low without it). Real GSC winners rise
+ * to the top 25% naturally once the service account is connected.
+ */
 function prioritize(keywords) {
-  return (keywords || [])
+  const scored = (keywords || [])
     .map((k) => {
       const signals = {
         autocompleteDepth: k.autocompleteDepth || 0,
@@ -36,10 +40,14 @@ function prioritize(keywords) {
         businessFit: businessFitFor(k.cluster || 'general'),
         question: k.intent === 'question' || /\?\s*$/.test(k.keyword || ''),
       };
-      const score = scoreKeyword(signals);
-      return { ...k, score, priority: bucket(score) };
+      return { ...k, score: scoreKeyword(signals) };
     })
     .sort((a, b) => b.score - a.score);
+  const n = scored.length;
+  return scored.map((k, i) => {
+    const pct = n > 1 ? i / (n - 1) : 0; // 0 = top-ranked
+    return { ...k, priority: pct <= 0.25 ? 'High' : pct <= 0.75 ? 'Med' : 'Low' };
+  });
 }
 
 function buildAnalysisPrompt({ keywords = [], striking = [], geoPrompts = [] }) {
@@ -51,6 +59,7 @@ function buildAnalysisPrompt({ keywords = [], striking = [], geoPrompts = [] }) 
     'You are an SEO+GEO strategist for ManicBot — an AI booking assistant (Telegram/Instagram/WhatsApp/web) for nail & beauty salons in Poland. 0% commission, from 45 PLN/mo, languages pl/ru/ua/en. TWO audiences: B2C (salon clients booking a service) and B2B (salon owners buying software) — never mix them on one page.',
     'Given the collected keywords (priority\\tlang\\taudience\\tcluster\\tkeyword), the GSC striking-distance queries, and the GEO prompts, return STRICT JSON only:',
     '{ "clusters": [ {"name","audience","intent","keywords":[..],"target_page","suggested_title","suggested_meta"} ], "geo": { "faq": [ {"q","a"} ], "citable_facts": [".."], "llms_txt_additions": [".."], "schema_recommendations": [".."] }, "quick_wins": [".."], "new_pages": [".."] }',
+    'LANGUAGE — the report is read by a Russian-speaking founder, so write all STRATEGY in RUSSIAN: cluster "name" must be a short human-readable Russian label (e.g. "B2B · Система записи / альтернатива Booksy") and NEVER a machine slug like "b2b-pl-system-rezerwacji"; "quick_wins" and "new_pages" in Russian. Keep SITE-READY copy in its target language: "suggested_title", "suggested_meta", every "faq" {q,a}, "citable_facts" and "llms_txt_additions" in POLISH (or the cluster\'s own language for the RU/UA/EN clusters). In "schema_recommendations" write the explanation in Russian but keep JSON-LD type/property names in English.',
     'Be concrete and Poland-specific. Map clusters to real routes: /, /salons/{city}, /salons/warszawa/{district}, /salon/{slug}, /comparisons/manicbot-vs-booksy, /blog. Keep FAQ answers extractable (front-load the answer in the first sentence). Differentiator over Booksy/competitors is conversational AI inside the client\'s messenger, not just 0% commission (every competitor claims that).',
     '\n## KEYWORDS\n' + sample,
     '\n## GSC STRIKING DISTANCE\n' + (sd || '(none — GSC off)'),
@@ -79,4 +88,4 @@ function heuristicClusters(keywords) {
   return { clusters: Array.from(map.values()), geo: null, quick_wins: [], new_pages: [] };
 }
 
-module.exports = { scoreKeyword, bucket, prioritize, buildAnalysisPrompt, analyzeWithClaude, heuristicClusters };
+module.exports = { scoreKeyword, prioritize, buildAnalysisPrompt, analyzeWithClaude, heuristicClusters };

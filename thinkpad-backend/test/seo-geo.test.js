@@ -12,7 +12,7 @@ const { toRow, strikingDistance } = require('../crons/seo-geo/collectors/gsc');
 const { stripXssi, parseRelatedQueries } = require('../crons/seo-geo/collectors/trends');
 const { parseQuestions } = require('../crons/seo-geo/collectors/serp');
 const { normalizeKeyword, keywordKey, mergeKeywords } = require('../crons/seo-geo/dedup');
-const { scoreKeyword, bucket, prioritize } = require('../crons/seo-geo/analyze');
+const { scoreKeyword, prioritize } = require('../crons/seo-geo/analyze');
 const { buildMarkdown, buildCsv } = require('../crons/seo-geo/report');
 const { runCollectors } = require('../crons/seo-geo/index');
 const { createTg, buildMultipart } = require('../lib/tg');
@@ -111,18 +111,16 @@ test('scoreKeyword rewards demand, striking distance, momentum, fit', () => {
   const weak = scoreKeyword({ autocompleteDepth: 1, businessFit: 1 });
   const strong = scoreKeyword({ autocompleteDepth: 10, gscImpressions: 500, gscPosition: 8, trendsRising: true, businessFit: 3, question: true });
   assert.ok(strong > weak);
-  assert.equal(bucket(strong), 'High');
-  assert.equal(bucket(weak), 'Low');
 });
 
-test('prioritize sorts high→low and labels priority from signals', () => {
-  const out = prioritize([
-    { keyword: 'low term', lang: 'pl', cluster: 'service', autocompleteDepth: 0 },
-    { keyword: 'system rezerwacji dla salonu', lang: 'pl', cluster: 'b2b-software', autocompleteDepth: 10, rising: true },
-  ]);
-  assert.equal(out[0].keyword, 'system rezerwacji dla salonu');
-  assert.ok(out[0].score > out[1].score);
-  assert.ok(['High', 'Med', 'Low'].includes(out[0].priority));
+test('prioritize sorts high→low and buckets by percentile (top 25% High, bottom 25% Low — always populated)', () => {
+  const kws = Array.from({ length: 8 }, (_, i) => ({ keyword: `k${i}`, lang: 'pl', cluster: 'service', autocompleteDepth: 8 - i }));
+  const out = prioritize(kws);
+  assert.equal(out[0].keyword, 'k0');                 // highest depth → top
+  assert.ok(out[0].score >= out[out.length - 1].score);
+  assert.equal(out[0].priority, 'High');              // top quartile
+  assert.equal(out[out.length - 1].priority, 'Low');  // bottom quartile
+  assert.ok(out.some((k) => k.priority === 'Med'));   // middle band populated
 });
 
 // ── report ──────────────────────────────────────────────────────────────────

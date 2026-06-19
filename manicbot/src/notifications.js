@@ -174,7 +174,7 @@ export async function dispatchAppointmentInApp(ctx, apt, user, kind, titlePrefix
   const svc = svcName(ctx, 'ru', apt.svcId) || apt.svcId;
   const when = fmtDT('ru', apt.date, apt.time);
   const body = `${clientName} · ${svc} · ${when}`;
-  const link = `/?tab=appointments&apt=${encodeURIComponent(apt.id)}`;
+  const link = `/dashboard?tab=appointments&apt=${encodeURIComponent(apt.id)}`;
   const sourceId = `${apt.id}:${kind}`;
 
   const calls = [];
@@ -427,7 +427,7 @@ export async function notifyStaffAptRescheduled(ctx, apt, oldDate, oldTime) {
   }
   if (targets.size === 0) return;
 
-  const link = `/?tab=appointments&apt=${encodeURIComponent(apt.id)}`;
+  const link = `/dashboard?tab=appointments&apt=${encodeURIComponent(apt.id)}`;
   const sourceId = `${apt.id}:rescheduled:${apt.date}_${apt.time}`;
   const calls = [];
   for (const webUserId of targets) {

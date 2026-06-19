@@ -1904,7 +1904,7 @@ async function processBirthdayAndReturningPromos(ctx, nowMs) {
             kind: 'birthday.client',
             title: `🎂 День рождения ${displayName}`,
             body: `Сегодня. Выдан промокод -20% ${code}.`,
-            link: `/?tab=clients&q=${encodeURIComponent(displayName)}`,
+            link: `/dashboard?tab=clients&q=${encodeURIComponent(displayName)}`,
             sourceSlug: 'birthday',
             sourceId: `bday:${u.chat_id}:${thisYear}`,
             inapp: true,

@@ -35,6 +35,7 @@ import {
   type BellGroup,
 } from "~/lib/notifications/kindMeta";
 import { groupNotifications } from "~/lib/notifications/grouping";
+import { resolveNotificationHref } from "~/lib/notifications/linkTarget";
 import { usePushSubscription } from "~/lib/notifications/usePushSubscription";
 import { useLang } from "~/components/LangContext";
 import { t } from "~/lib/i18n";
@@ -240,7 +241,7 @@ export function NotificationBell() {
                       const onRowClick = () => {
                         if (unreadIds.length > 0) markRead.mutate({ ids: unreadIds });
                         if (rep.link) {
-                          router.push(rep.link);
+                          router.push(resolveNotificationHref(rep.link));
                           setOpen(false);
                         }
                       };

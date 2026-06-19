@@ -334,7 +334,7 @@ export const supportRouter = createTRPCRouter({
         kindSlug: "support.ticket.reply",
         title: "Клиент ответил в тикете",
         body: truncateBody(input.text),
-        link: `/?ticket=${input.ticketId}`,
+        link: `/dashboard?ticket=${input.ticketId}`,
         sourceId: `${input.ticketId}:reply:${now}`,
       }).catch((e) =>
         log.error("support.replyToMyTicket.notifyStaff", e instanceof Error ? e : new Error(String(e))),
@@ -473,7 +473,7 @@ export const supportRouter = createTRPCRouter({
         kindSlug: "support.ticket.new",
         title: `Новый тикет: ${extractTicketSubject(`[${input.subject}]`, "Тикет")}`,
         body: truncateBody(input.message),
-        link: `/?ticket=${ticketId}`,
+        link: `/dashboard?ticket=${ticketId}`,
         sourceId: ticketId,
       }).catch((e) =>
         log.error("support.createTicket.notifyStaff", e instanceof Error ? e : new Error(String(e))),

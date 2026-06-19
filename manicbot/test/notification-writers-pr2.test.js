@@ -117,8 +117,12 @@ describe('notifyAptStaff → appointment.created in-app fan-out', () => {
     expect(ownerRows[0].body).toContain('Анна');
     // svcName falls back to the svcId when i18n isn't loaded — accept either.
     expect(ownerRows[0].body).toMatch(/Маникюр|manicure/i);
-    expect(ownerRows[0].link).toContain('tab=appointments');
+    // Link must anchor at the in-app home (/dashboard), NOT root "/" — a root
+    // link sends the user to the marketing landing page (src/http/adminAppProxy.js
+    // does not proxy "/" to admin-app).
+    expect(ownerRows[0].link).toContain('/dashboard?tab=appointments');
     expect(ownerRows[0].link).toContain('apt_1');
+    expect(ownerRows[0].link.startsWith('/?')).toBe(false);
 
     expect(masterRows).toHaveLength(1);
     expect(masterRows[0].kind).toBe('appointment.created');

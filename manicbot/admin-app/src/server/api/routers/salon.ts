@@ -2124,7 +2124,7 @@ export const salonRouter = createTRPCRouter({
           tenantId: req.tenantId,
           title: t(approved ? "notify.scheduleApproved.title" : "notify.scheduleDenied.title", lang),
           body: t(approved ? "notify.scheduleApproved.body" : "notify.scheduleDenied.body", lang),
-          link: "?tab=schedule",
+          link: "/dashboard?tab=schedule",
           sourceSlug: "schedule_review",
           sourceId: req.id,
         },

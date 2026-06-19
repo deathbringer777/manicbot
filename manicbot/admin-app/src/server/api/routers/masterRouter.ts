@@ -192,7 +192,7 @@ async function notifyOwnerOfScheduleRequest(
       tenantId,
       title: t("notify.scheduleRequest.title", lang),
       body: t("notify.scheduleRequest.body", lang),
-      link: "?tab=masters",
+      link: "/dashboard?tab=masters",
       sourceSlug: "schedule_request",
       sourceId: requestId,
     },

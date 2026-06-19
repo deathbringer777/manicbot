@@ -35,7 +35,6 @@ function countBy(keywords, field) {
 function buildMarkdown({ date, keywords = [], gsc = {}, analysis, trendsCount = 0, failures = [], deltas } = {}) {
   const byAud = countBy(keywords, 'audience');
   const byPrio = countBy(keywords, 'priority');
-  const top = (p) => keywords.filter((k) => k.priority === p);
   const L = [];
   L.push('# Manicbot — SEO + GEO keyword research');
   L.push(`\n**Дата:** ${date} · **Авто-прогон (ThinkPad cron)** · ключей: **${keywords.length}** (B2C ${byAud.B2C || 0} / B2B ${byAud.B2B || 0})`);
@@ -46,10 +45,10 @@ function buildMarkdown({ date, keywords = [], gsc = {}, analysis, trendsCount = 
   L.push('\n## 1. Сводка приоритетов');
   L.push(`High: **${byPrio.High || 0}** · Med: **${byPrio.Med || 0}** · Low: **${byPrio.Low || 0}**`);
 
-  L.push('\n## 2. Быстрые победы (High)');
-  const highs = top('High').slice(0, 40);
-  if (highs.length) for (const k of highs) L.push(`- \`${k.keyword}\` — ${k.lang}/${k.audience || '?'}/${k.cluster || '?'} · score ${k.score}`);
-  else L.push('_нет High в этом прогоне_');
+  L.push('\n## 2. Топ-приоритет (по score — бакет High наполнится после подключения GSC)');
+  const ranked = keywords.slice(0, 40); // keywords arrive already sorted desc by score
+  if (ranked.length) for (const k of ranked) L.push(`- \`${k.keyword}\` — ${k.lang}/${k.audience || '?'}/${k.cluster || '?'} · ${k.priority} (${k.score})`);
+  else L.push('_нет ключей_');
 
   L.push('\n## 3. GSC truth-layer (striking distance, поз. 5–20)');
   if (gsc.configured && (gsc.striking || []).length) {

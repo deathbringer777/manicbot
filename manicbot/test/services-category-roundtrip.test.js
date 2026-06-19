@@ -29,6 +29,13 @@ function buildFakeDb(initialRows) {
       },
     }),
   });
+  // Support dbBatch: execute each prepared statement sequentially so writes
+  // are recorded in db.writes exactly as the old sequential path did.
+  db.batch = async (statements) => {
+    const results = [];
+    for (const stmt of statements) results.push(await stmt.run());
+    return results;
+  };
   return db;
 }
 

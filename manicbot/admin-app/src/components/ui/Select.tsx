@@ -46,6 +46,12 @@ interface Props {
   testIdPrefix?: string;
   /** Optional explicit width override — useful inside cramped 2-col grids. */
   className?: string;
+  /**
+   * Accessible label for the trigger button. Required when there is no
+   * visible `<label>` element associated with this Select via htmlFor.
+   * Passed through to `aria-label` on the underlying `<button>`.
+   */
+  "aria-label"?: string;
 }
 
 const TRIGGER_BASE =
@@ -62,6 +68,7 @@ export function Select({
   disabled,
   testIdPrefix = "select",
   className,
+  "aria-label": ariaLabel,
 }: Props) {
   const [open, setOpen] = useState(false);
   // Keyboard-cursor index — -1 means no keyboard focus yet.
@@ -177,6 +184,7 @@ export function Select({
         data-value={value || ""}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={ariaLabel}
         aria-activedescendant={
           open && focusIdx >= 0 ? `${testIdPrefix}-opt-${focusIdx}` : undefined
         }

@@ -16,7 +16,7 @@ import { Shell } from "~/components/layout/Shell";
 import { api } from "~/trpc/react";
 import { Loader2, Activity, Zap, ZapOff, ShieldAlert } from "lucide-react";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, localeFor } from "~/lib/i18n";
 import { useRole } from "~/components/RoleContext";
 
 type HealthResult = {
@@ -26,15 +26,20 @@ type HealthResult = {
   plan?: string;
 };
 
-function fmtDate(ts?: number | null) {
-  if (!ts) return "never";
-  return new Date(ts * 1000).toLocaleString("ru-RU", {
-    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
-  });
+// ProvidersClient calls fmtDate in JSX where lang is available via closure — see below.
+// The helper is intentionally not module-level because it needs the locale at render time.
+function makeFmtDate(locale: string) {
+  return (ts?: number | null) => {
+    if (!ts) return "never";
+    return new Date(ts * 1000).toLocaleString(locale, {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+    });
+  };
 }
 
 export default function ProvidersClient() {
   const { lang } = useLang();
+  const fmtDate = makeFmtDate(localeFor(lang));
   const utils = api.useUtils();
   const { role } = useRole();
   // The page is sysadmin-only.

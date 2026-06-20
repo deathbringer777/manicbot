@@ -6,6 +6,8 @@ import { Shell } from "~/components/layout/Shell";
 import {
   Ticket, Copy, Check, Loader2, Trash2, Sparkles, AlertTriangle,
 } from "lucide-react";
+import { useLang } from "~/components/LangContext";
+import { formatDate as i18nFormatDate } from "~/lib/i18n";
 
 type Plan = "start" | "pro" | "max";
 
@@ -47,6 +49,7 @@ function CopyButton({ value }: { value: string }) {
 }
 
 export default function GrantCodesClient() {
+  const { lang } = useLang();
   const utils = api.useUtils();
   const [plan, setPlan] = useState<Plan>("max");
   const [durationDays, setDurationDays] = useState(365);
@@ -67,7 +70,7 @@ export default function GrantCodesClient() {
   });
 
   const fmtDate = (ts: number | null | undefined) =>
-    ts ? new Date(ts * 1000).toLocaleDateString("ru-RU") : "—";
+    ts ? i18nFormatDate(new Date(ts * 1000), lang) : "—";
 
   const rows = listQuery.data ?? [];
 

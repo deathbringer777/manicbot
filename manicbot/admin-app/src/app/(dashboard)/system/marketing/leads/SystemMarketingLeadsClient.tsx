@@ -17,16 +17,19 @@ import { Users, Search, MailX, ToggleLeft, ToggleRight } from "lucide-react";
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { SystemMarketingShell } from "../SystemMarketingShell";
+import { useLang } from "~/components/LangContext";
+import { formatDate as i18nFormatDate, type Lang } from "~/lib/i18n";
 
 const PAGE_SIZE = 100;
 
-function fmtDate(ts: number | null | undefined): string {
+function fmtDate(ts: number | null | undefined, lang: Lang): string {
   if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleDateString("ru-RU");
+  return i18nFormatDate(new Date(ts * 1000), lang);
 }
 
 export default function SystemMarketingLeadsClient() {
   const { role } = useRole();
+  const { lang } = useLang();
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [subscribedOnly, setSubscribedOnly] = useState(false);
@@ -169,7 +172,7 @@ export default function SystemMarketingLeadsClient() {
                           )}
                         </button>
                       </td>
-                      <td className="px-4 py-2 text-slate-500">{fmtDate(row.lastSeenAt)}</td>
+                      <td className="px-4 py-2 text-slate-500">{fmtDate(row.lastSeenAt, lang)}</td>
                     </tr>
                   ))}
                 </tbody>

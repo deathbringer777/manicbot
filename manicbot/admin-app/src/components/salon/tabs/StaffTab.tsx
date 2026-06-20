@@ -7,7 +7,7 @@ import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Button } from "~/components/ui/Button";
 import { Pill } from "~/components/ui/Pill";
 import { useLang } from "~/components/LangContext";
-import { t } from "~/lib/i18n";
+import { t, localeFor } from "~/lib/i18n";
 import {
   TENANT_PERMISSION_KEYS,
   TENANT_MANAGER_DEFAULT,
@@ -525,6 +525,7 @@ function ActionRequestRow({
   };
   onAction: () => void;
 }) {
+  const { lang } = useLang();
   const review = api.tenantStaff.reviewActionRequest.useMutation({
     onSuccess: () => onAction(),
   });
@@ -541,7 +542,7 @@ function ActionRequestRow({
           </p>
         )}
         <p className="text-[10px] text-slate-500 dark:text-slate-600">
-          {new Date(req.createdAt * 1000).toLocaleString("ru-RU")}
+          {new Date(req.createdAt * 1000).toLocaleString(localeFor(lang))}
         </p>
       </div>
       <Button

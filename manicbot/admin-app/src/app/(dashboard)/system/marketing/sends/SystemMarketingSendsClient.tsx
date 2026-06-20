@@ -22,6 +22,8 @@ import {
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { SystemMarketingShell } from "../SystemMarketingShell";
+import { useLang } from "~/components/LangContext";
+import { formatDate as i18nFormatDate, type Lang } from "~/lib/i18n";
 
 const PAGE_SIZE = 100;
 
@@ -64,9 +66,11 @@ function channelIcon(channel: string | null | undefined): LucideIcon {
   return channel === "sms" || channel === "whatsapp" ? MessageSquare : Mail;
 }
 
-function fmtDate(ts: number | null | undefined): string {
+function fmtDate(ts: number | null | undefined, lang: Lang): string {
   if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleString("ru-RU");
+  return i18nFormatDate(new Date(ts * 1000), lang, {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
 }
 
 function fmtRelative(ts: number | null | undefined): string {
@@ -80,6 +84,7 @@ function fmtRelative(ts: number | null | undefined): string {
 
 export default function SystemMarketingSendsClient() {
   const { role } = useRole();
+  const { lang } = useLang();
   const [status, setStatus] = useState<string>("all");
   const [recipient, setRecipient] = useState("");
   const [debouncedRecipient, setDebouncedRecipient] = useState("");
@@ -221,10 +226,10 @@ export default function SystemMarketingSendsClient() {
                           )}
                         </td>
                         <td className="px-4 py-2 align-middle text-slate-500">{row.provider}</td>
-                        <td className="px-4 py-2 align-middle text-slate-500" title={fmtDate(row.sentAt ?? row.queuedAt)}>
+                        <td className="px-4 py-2 align-middle text-slate-500" title={fmtDate(row.sentAt ?? row.queuedAt, lang)}>
                           {fmtRelative(row.sentAt ?? row.queuedAt)}
                         </td>
-                        <td className="px-4 py-2 align-middle text-slate-500" title={fmtDate(lastEventAt)}>
+                        <td className="px-4 py-2 align-middle text-slate-500" title={fmtDate(lastEventAt, lang)}>
                           {fmtRelative(lastEventAt)}
                         </td>
                       </tr>

@@ -27,6 +27,10 @@ type Status =
   | "failed"
   | "paused";
 
+// i18n: sysadmin-only surface, intentionally single-language (English).
+// This page is only accessible to system_admin users (see Shell / route guard),
+// so full locale support is deferred — add t() calls here if the surface ever
+// becomes multi-role.
 const STATUS_LABELS: Record<Status, { label: string; color: string; icon: typeof Clock }> = {
   pending: { label: "Pending", color: "bg-slate-700 text-slate-200", icon: Clock },
   generating: { label: "Generating", color: "bg-yellow-700 text-yellow-100", icon: Sparkles },

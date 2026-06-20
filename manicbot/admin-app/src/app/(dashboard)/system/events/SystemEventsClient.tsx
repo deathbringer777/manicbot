@@ -19,11 +19,14 @@ import { Activity, Filter, Search, TrendingUp, ArrowLeftCircle, ArrowRightCircle
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { Shell } from "~/components/layout/Shell";
+import { useLang } from "~/components/LangContext";
+import { localeFor } from "~/lib/i18n";
 
 const PAGE_SIZE = 50;
 
 export default function SystemEventsClient() {
   const { role } = useRole();
+  const { lang } = useLang();
   const [eventFilter, setEventFilter] = useState<string>("");
   const [tenantFilter, setTenantFilter] = useState<string>("");
   const [userFilter, setUserFilter] = useState<string>("");
@@ -167,7 +170,7 @@ export default function SystemEventsClient() {
               {(listQuery.data?.rows ?? []).map((row) => (
                 <tr key={row.id} className="border-t border-slate-100 align-top hover:bg-slate-50/50 dark:border-slate-800 dark:hover:bg-slate-950/50">
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500">
-                    {new Date(row.createdAt * 1000).toLocaleString("ru-RU")}
+                    {new Date(row.createdAt * 1000).toLocaleString(localeFor(lang))}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-900 dark:text-slate-100">{row.event}</td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-500">{row.tenantId ?? "—"}</td>

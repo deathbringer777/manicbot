@@ -5,7 +5,7 @@ import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { Loader2, Mail, Phone, User, Clock, Trash2, Check, MessageCircle } from "lucide-react";
 import { useLang } from "~/components/LangContext";
-import { t, type Lang } from "~/lib/i18n";
+import { t, formatDate as i18nFormatDate, type Lang } from "~/lib/i18n";
 
 type StatusFilter = "all" | "new" | "contacted" | "closed";
 
@@ -36,8 +36,9 @@ function StatusBadge({ status, lang }: { status: string; lang: Lang }) {
   );
 }
 
-function formatDate(ts: number): string {
-  return new Date(ts * 1000).toLocaleString("ru-RU", {
+/** Format a unix-seconds timestamp using the active UI locale. */
+function formatDate(ts: number, lang: Lang): string {
+  return i18nFormatDate(new Date(ts * 1000), lang, {
     day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -184,7 +185,7 @@ export default function LeadsPageClient() {
 
             <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
               <Clock className="w-3 h-3" />
-              {formatDate(lead.createdAt)}
+              {formatDate(lead.createdAt, lang)}
               {lead.source && <span className="ml-2">· {lead.source}</span>}
               {lead.ip && <span className="ml-2">· {lead.ip}</span>}
             </div>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api } from "~/trpc/react";
 import { Shell } from "~/components/layout/Shell";
 import { useLang } from "~/components/LangContext";
-import { t, type Lang } from "~/lib/i18n";
+import { t, formatDate as i18nFormatDate, type Lang } from "~/lib/i18n";
 import {
   ArrowLeftRight,
   Check,
@@ -58,8 +58,9 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function formatDate(ts: number): string {
-  return new Date(ts * 1000).toLocaleDateString("ru-RU", {
+/** Format a unix-seconds timestamp using the active UI locale. */
+function formatDate(ts: number, lang: Lang): string {
+  return i18nFormatDate(new Date(ts * 1000), lang, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -205,10 +206,10 @@ export default function RoleRequestsPageClient() {
             {/* Timestamp */}
             <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
               <Clock className="w-3 h-3" />
-              {formatDate(req.createdAt)}
+              {formatDate(req.createdAt, lang)}
               {req.reviewedAt && (
                 <span className="ml-2">
-                  · {t("gmRoleReq.reviewed", lang)} {formatDate(req.reviewedAt)}
+                  · {t("gmRoleReq.reviewed", lang)} {formatDate(req.reviewedAt, lang)}
                 </span>
               )}
             </div>

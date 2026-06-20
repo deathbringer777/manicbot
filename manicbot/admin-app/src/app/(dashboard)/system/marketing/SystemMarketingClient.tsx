@@ -20,6 +20,8 @@ import {
 import { api } from "~/trpc/react";
 import { useRole } from "~/components/RoleContext";
 import { SystemMarketingShell } from "./SystemMarketingShell";
+import { useLang } from "~/components/LangContext";
+import { formatDate as i18nFormatDate, type Lang } from "~/lib/i18n";
 
 function StatCard({
   icon: Icon,
@@ -70,9 +72,11 @@ function pct(num: number, denom: number): string {
   return `${v.toFixed(1)}%`;
 }
 
-function fmtDate(ts: number | null | undefined): string {
+function fmtDate(ts: number | null | undefined, lang: Lang): string {
   if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleString("ru-RU");
+  return i18nFormatDate(new Date(ts * 1000), lang, {
+    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
 }
 
 function statusBadge(status: string): { label: string; cls: string } {
@@ -97,6 +101,7 @@ function statusBadge(status: string): { label: string; cls: string } {
 export default function SystemMarketingClient() {
   // RoleContext gate — defensive layer in addition to the URL convention.
   const { role } = useRole();
+  const { lang } = useLang();
 
   // Always call hooks in the same order — gate via `enabled` rather than early return.
   const statsQ = api.marketing.stats.useQuery(undefined, {
@@ -270,7 +275,7 @@ export default function SystemMarketingClient() {
                         <td className="px-4 py-2 font-mono text-[11px] text-slate-500">
                           {c.tenantId ?? <span className="italic text-amber-500">platform</span>}
                         </td>
-                        <td className="px-4 py-2 text-slate-500">{fmtDate(c.updatedAt)}</td>
+                        <td className="px-4 py-2 text-slate-500">{fmtDate(c.updatedAt, lang)}</td>
                       </tr>
                     );
                   })}

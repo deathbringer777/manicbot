@@ -1074,6 +1074,10 @@ export const marketingSends = sqliteTable("marketing_sends", {
   index("idx_mkt_sends_provider_msg").on(t.providerMessageId),
   // 0051: campaign progress page reads (campaign_id, status) together.
   index("idx_msend_campaign_status").on(t.campaignId, t.status),
+  // 0125 (HELD): one send per (campaign, contact) — race guard for the
+  // >INLINE_CAP re-send fix so onConflictDoNothing makes a concurrent
+  // double-send a no-op. Not yet applied to prod (see migration 0125).
+  uniqueIndex("idx_mkt_sends_campaign_contact").on(t.campaignId, t.contactId),
 ]);
 
 // 0123: first-party per-click log feeding conversion attribution. Written by

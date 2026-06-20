@@ -20,7 +20,7 @@
  */
 
 import { and, eq, sql, type SQL } from "drizzle-orm";
-import { marketingContacts, marketingSegments, marketingSegmentMembers } from "~/server/db/schema";
+import { marketingContacts, marketingSegments, marketingSegmentMembers, marketingSends } from "~/server/db/schema";
 
 type DbInstance = ReturnType<typeof import("~/server/db").getDb>;
 
@@ -50,6 +50,15 @@ export interface ResolveAudienceArgs {
   limit?: number;
   /** UNIX seconds. Used by `lastSeenWithinDays`. Defaults to now(). */
   nowSec?: number;
+  /**
+   * When set, exclude contacts already recorded in `marketing_sends` for this
+   * campaign (cross-tick dedup). The sender passes its campaign id so a
+   * >INLINE_CAP audience advances to the next un-sent batch on every cron pass
+   * instead of re-sending the first `limit` rows forever. Audience PREVIEW
+   * callers omit it — a preview must show the full segment size, not the
+   * remaining tail.
+   */
+  excludeSentForCampaignId?: string | null;
 }
 
 const DEFAULT_LIMIT = 5000;
@@ -148,6 +157,18 @@ export async function resolveAudience(args: ResolveAudienceArgs): Promise<{
   if (filter.lastSeenWithinDays && filter.lastSeenWithinDays > 0) {
     const cutoff = nowSec - filter.lastSeenWithinDays * 86400;
     conds.push(sql`${marketingContacts.lastSeenAt} >= ${cutoff}`);
+  }
+
+  // Cross-tick dedup (>INLINE_CAP re-send-loop fix): skip contacts already
+  // sent for this campaign. Correlated NOT EXISTS keyed by campaign_id (the
+  // campaign was already tenant-verified by the sender) + contact_id — applied
+  // to both the rows and the COUNT query (and the manual-list JOIN path) so
+  // `totalCount` counts only the remaining tail and the sender's
+  // `deferred = totalCount - contacts.length` reaches 0 on the final tick.
+  if (args.excludeSentForCampaignId) {
+    conds.push(
+      sql`NOT EXISTS (SELECT 1 FROM ${marketingSends} WHERE ${marketingSends.campaignId} = ${args.excludeSentForCampaignId} AND ${marketingSends.contactId} = ${marketingContacts.id})`,
+    );
   }
 
   const where = conds.length === 1 ? conds[0] : and(...conds);

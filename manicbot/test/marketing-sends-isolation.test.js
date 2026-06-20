@@ -56,7 +56,19 @@ function classifyLine(line) {
   const keyedById = /\bid\s*=\s*\?/i.test(line);
   const joinsCampaign = /marketing_campaigns/i.test(line);
 
-  if (/\binsert\s+into\s+marketing_sends\b/i.test(line)) {
+  // A correlated dedup subquery — `(NOT) EXISTS (SELECT 1 FROM marketing_sends
+  // ms WHERE ms.campaign_id = ? AND ms.contact_id = <outer>)` — is tenant-safe:
+  // it filters by a campaign_id that belongs to an already tenant-verified
+  // campaign and correlates back to the outer contact row, never returning
+  // sends rows. It must carry BOTH the `exists (` wrapper AND the
+  // `campaign_id = ?` + `contact_id =` correlation so a bare
+  // `SELECT * FROM marketing_sends WHERE campaign_id = ?` stays flagged.
+  const isDedupSubquery =
+    /\bexists\s*\(/i.test(line) &&
+    /campaign_id\s*=\s*\?/i.test(line) &&
+    /contact_id\s*=/i.test(line);
+
+  if (/\binsert\s+(?:or\s+\w+\s+)?into\s+marketing_sends\b/i.test(line)) {
     return { ok: true, reason: 'insert' };
   }
   if (/\bupdate\s+marketing_sends\b/i.test(line)) {
@@ -66,7 +78,7 @@ function classifyLine(line) {
     return { ok: keyedById, reason: keyedById ? 'delete-by-id' : 'DELETE FROM marketing_sends not keyed by id' };
   }
   if (/\bfrom\s+marketing_sends\b/i.test(line) || /\bjoin\s+marketing_sends\b/i.test(line)) {
-    const ok = keyedById || joinsCampaign;
+    const ok = keyedById || joinsCampaign || isDedupSubquery;
     return { ok, reason: ok ? 'read-isolated' : 'SELECT FROM marketing_sends without id=? or marketing_campaigns join (cross-tenant read)' };
   }
   // Bare identifier (e.g. retention config `table: 'marketing_sends'`) — no SQL verb.
@@ -91,6 +103,17 @@ describe('classifyLine predicate has teeth', () => {
   });
   it('accepts INSERT', () => {
     expect(classifyLine('INSERT INTO marketing_sends (id, campaign_id) VALUES (?, ?)').ok).toBe(true);
+  });
+  it('accepts INSERT OR IGNORE', () => {
+    expect(classifyLine('INSERT OR IGNORE INTO marketing_sends (id, campaign_id) VALUES (?, ?)').ok).toBe(true);
+  });
+  it('accepts a correlated dedup NOT EXISTS subquery (campaign-scoped, contact-correlated)', () => {
+    expect(classifyLine('AND NOT EXISTS (SELECT 1 FROM marketing_sends ms WHERE ms.campaign_id = ? AND ms.contact_id = c.id)').ok).toBe(true);
+  });
+  it('still flags a bare campaign-scoped read with no EXISTS / contact correlation', () => {
+    // The dedup carve-out must NOT widen to a standalone campaign_id read.
+    expect(classifyLine('SELECT * FROM marketing_sends WHERE campaign_id = ? AND contact_id = ?').ok).toBe(false);
+    expect(classifyLine('EXISTS (SELECT 1 FROM marketing_sends WHERE campaign_id = ?)').ok).toBe(false);
   });
   it('treats a bare retention-config identifier as a non-SQL reference', () => {
     expect(classifyLine("{ table: 'marketing_sends', where: \"sent_at < x\" },").ok).toBe(true);

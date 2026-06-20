@@ -56,6 +56,19 @@ function tenantRowToDoc(row) {
     publicActive: row.public_active === 1,
     chatEnabled: row.chat_enabled === undefined ? true : row.chat_enabled === 1,
     searchText: row.search_text || null,
+    // Branding + classification columns. putTenant is INSERT-OR-REPLACE, so these
+    // MUST round-trip through get/put — otherwise every save resets them to DEFAULT
+    // (the column-landmine: a Stripe webhook or settings save would silently wipe a
+    // tenant's branding and un-flag a test tenant via is_test=0).
+    displayName: row.display_name || null,
+    logoR2Key: row.logo_r2_key || null,
+    coverR2Key: row.cover_r2_key || null,
+    brandPalette: row.brand_palette || null,
+    bgImage: row.bg_image || null,
+    bgR2Key: row.bg_r2_key || null,
+    isPersonal: row.is_personal === 1,
+    industry: row.industry || 'beauty',
+    isTest: row.is_test === 1,
     parentTenantId: row.parent_tenant_id || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -102,6 +115,22 @@ function docToTenantParams(data) {
     // paused chat must pass `chatEnabled: false` explicitly.
     chat_enabled: data.chatEnabled === false ? 0 : 1,
     search_text: data.searchText || null,
+    // Branding + classification columns. Omitting any of these from this
+    // INSERT-OR-REPLACE mapper resets it to DEFAULT on every save (column-landmine).
+    display_name: data.displayName || null,
+    logo_r2_key: data.logoR2Key || null,
+    cover_r2_key: data.coverR2Key || null,
+    brand_palette:
+      data.brandPalette == null
+        ? null
+        : typeof data.brandPalette === 'string'
+          ? data.brandPalette
+          : JSON.stringify(data.brandPalette),
+    bg_image: data.bgImage || null,
+    bg_r2_key: data.bgR2Key || null,
+    is_personal: data.isPersonal ? 1 : 0,
+    industry: data.industry || 'beauty',
+    is_test: data.isTest ? 1 : 0,
     // 0117 — preserve secondary-salon parent across billing writes (putTenant
     // is INSERT-OR-REPLACE; an omitted column would reset to NULL).
     parent_tenant_id: data.parentTenantId || null,
@@ -121,14 +150,15 @@ export async function putTenant(ctx, tenantId, data) {
   try {
     const p = docToTenantParams({ ...data, id: tenantId });
     await dbRun(ctx,
-      `INSERT OR REPLACE INTO tenants (id, name, active, salon, photos, about_photos, maps_url, instagram_url, plan, billing_status, subscription_status, trial_ends_at, grace_ends_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, current_period_end, next_payment_date, billing_email, cancel_at_period_end, pending_plan, pending_price_id, pending_plan_effective_at, pending_schedule_id, pause_resumes_at, logo, cover_photo, slug, description, lat, lng, city, public_active, chat_enabled, search_text, parent_tenant_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO tenants (id, name, active, salon, photos, about_photos, maps_url, instagram_url, plan, billing_status, subscription_status, trial_ends_at, grace_ends_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, current_period_end, next_payment_date, billing_email, cancel_at_period_end, pending_plan, pending_price_id, pending_plan_effective_at, pending_schedule_id, pause_resumes_at, logo, cover_photo, slug, description, lat, lng, city, public_active, chat_enabled, search_text, display_name, logo_r2_key, cover_r2_key, brand_palette, bg_image, bg_r2_key, is_personal, industry, is_test, parent_tenant_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       p.id, p.name, p.active, p.salon, p.photos, p.about_photos, p.maps_url, p.instagram_url,
       p.plan, p.billing_status, p.subscription_status, p.trial_ends_at, p.grace_ends_at,
       p.stripe_customer_id, p.stripe_subscription_id, p.stripe_price_id,
       p.current_period_end, p.next_payment_date, p.billing_email, p.cancel_at_period_end,
       p.pending_plan, p.pending_price_id, p.pending_plan_effective_at, p.pending_schedule_id, p.pause_resumes_at,
       p.logo, p.cover_photo, p.slug, p.description, p.lat, p.lng, p.city, p.public_active, p.chat_enabled, p.search_text,
+      p.display_name, p.logo_r2_key, p.cover_r2_key, p.brand_palette, p.bg_image, p.bg_r2_key, p.is_personal, p.industry, p.is_test,
       p.parent_tenant_id,
       p.created_at, p.updated_at,
     );

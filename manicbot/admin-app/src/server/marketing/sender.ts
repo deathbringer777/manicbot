@@ -153,6 +153,9 @@ export async function runCampaignSend(args: RunCampaignSendArgs): Promise<RunCam
     channel,
     limit: inlineCap,
     nowSec: now,
+    // Exclude contacts already sent for this campaign so each cron tick
+    // advances to the next un-sent batch (no >INLINE_CAP re-send loop).
+    excludeSentForCampaignId: c.id,
   });
 
   // 6) Salon name for {{salon}} merge var (best-effort; non-fatal).
@@ -177,6 +180,11 @@ export async function runCampaignSend(args: RunCampaignSendArgs): Promise<RunCam
 
     const sendRowId = rid("snd");
     const queuedAt = nowS();
+    // onConflictDoNothing is the row-level race guard: the NOT EXISTS exclusion
+    // in resolveAudience already skips already-sent contacts, but two ticks
+    // racing the same batch could both pass that read. Once a
+    // UNIQUE(campaign_id, contact_id) index exists this makes the loser a
+    // no-op; until then it is harmless (random PK never collides).
     await db.insert(marketingSends).values({
       id: sendRowId,
       campaignId: c.id,
@@ -185,7 +193,7 @@ export async function runCampaignSend(args: RunCampaignSendArgs): Promise<RunCam
       provider: provider.name,
       status: "queued",
       queuedAt,
-    });
+    }).onConflictDoNothing();
 
     try {
       const unsubUrl = channel === "email"

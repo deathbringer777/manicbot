@@ -188,7 +188,18 @@ function parseFilterJson(raw) {
   return {};
 }
 
-async function resolveAudience(ctx, tenantId, segmentId, channel, limit) {
+/**
+ * Resolve the next batch of recipients for a campaign send.
+ *
+ * `campaignId` (required) scopes a cross-tick dedup: contacts already recorded
+ * in `marketing_sends` for THIS campaign are excluded from both the returned
+ * rows and the total count, so a >INLINE_CAP audience advances to the next
+ * un-sent batch on every cron tick instead of re-sending the first `cap` rows
+ * forever. `totalCount` is the count of contacts STILL to send (already-sent
+ * excluded), which lets the caller's `deferred = totalCount - contacts.length`
+ * reach 0 on the final tick and flip the campaign to a terminal status.
+ */
+async function resolveAudience(ctx, tenantId, segmentId, channel, limit, campaignId) {
   let filter = {};
   if (segmentId) {
     const seg = await dbGet(ctx,
@@ -238,16 +249,24 @@ async function resolveAudience(ctx, tenantId, segmentId, channel, limit) {
     params.push(cutoff);
   }
 
+  // Cross-tick dedup: skip contacts already sent for this campaign so each
+  // cron pass advances to the next un-sent batch (the >INLINE_CAP re-send-loop
+  // fix). The subquery is keyed by campaign_id (campaignId belongs to the
+  // already tenant-verified campaign in the caller), so it never spans tenants.
+  // tenant-scan-ignore: the NOT EXISTS reads marketing_sends scoped to the tenant-verified campaign_id, not cross-tenant (dedup guard, resolveAudience).
+  const dedupClause = campaignId
+    ? ' AND NOT EXISTS (SELECT 1 FROM marketing_sends ms WHERE ms.campaign_id = ? AND ms.contact_id = c.id)'
+    : '';
   const whereStr = where.join(' AND ');
   const cap = Math.max(1, Math.min(limit ?? INLINE_CAP, INLINE_CAP * 4));
   // tenant-scan-ignore: whereStr always begins with `tenant_id = ?` (resolveAudience, line ~200); scanner can't see tenant_id through the template var.
   const rows = await dbAll(ctx,
-    `SELECT id, email, phone, name, unsubscribe_token FROM marketing_contacts WHERE ${whereStr} LIMIT ?`,
-    ...params, cap);
+    `SELECT c.id, c.email, c.phone, c.name, c.unsubscribe_token FROM marketing_contacts c WHERE ${whereStr}${dedupClause} LIMIT ?`,
+    ...params, ...(campaignId ? [campaignId] : []), cap);
   // tenant-scan-ignore: same tenant_id-prefixed whereStr (count query); tenant scoping is inside the template var.
   const totalRow = await dbGet(ctx,
-    `SELECT COUNT(*) AS c FROM marketing_contacts WHERE ${whereStr}`,
-    ...params);
+    `SELECT COUNT(*) AS c FROM marketing_contacts c WHERE ${whereStr}${dedupClause}`,
+    ...params, ...(campaignId ? [campaignId] : []));
   return { contacts: rows, totalCount: Number(totalRow?.c ?? rows.length) };
 }
 
@@ -346,7 +365,7 @@ export async function runCampaignSend(ctx, tenantId, campaignId, opts = {}) {
     contacts = row ? [row] : [];
     totalCount = contacts.length;
   } else {
-    const a = await resolveAudience(ctx, tenantId, c.segment_id, channel, inlineCap);
+    const a = await resolveAudience(ctx, tenantId, c.segment_id, channel, inlineCap, campaignId);
     contacts = a.contacts;
     totalCount = a.totalCount;
   }
@@ -359,12 +378,20 @@ export async function runCampaignSend(ctx, tenantId, campaignId, opts = {}) {
     const sendId = rid('snd');
     const queuedAt = nowSec();
     try {
-      await dbRun(ctx,
-        `INSERT INTO marketing_sends (id, campaign_id, contact_id, recipient, provider, status, queued_at)
+      // INSERT OR IGNORE: the NOT EXISTS exclusion in resolveAudience already
+      // skips already-sent contacts, but two cron ticks racing the same batch
+      // could both pass that read. The OR IGNORE is the row-level guard — once
+      // a UNIQUE(campaign_id, contact_id) index exists it makes a concurrent
+      // double-send a no-op; until then it is harmless (random PK never
+      // collides). A 0-change result means another tick claimed this contact,
+      // so skip the provider call.
+      const ins = await dbRun(ctx,
+        `INSERT OR IGNORE INTO marketing_sends (id, campaign_id, contact_id, recipient, provider, status, queued_at)
          VALUES (?, ?, ?, ?, ?, 'queued', ?)`,
         sendId, campaignId, row.id, recipient,
         channel === 'email' ? 'resend' : 'brevo',
         queuedAt);
+      if (ins?.meta && ins.meta.changes === 0) continue;
     } catch (e) {
       // Likely a duplicate PK (cron retry) — skip.
       log.warn('services.marketing.sender', { action: 'insert_send_failed', error: e?.message, campaignId });

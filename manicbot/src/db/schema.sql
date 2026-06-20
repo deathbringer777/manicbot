@@ -1004,6 +1004,10 @@ CREATE INDEX IF NOT EXISTS idx_mkt_sends_status ON marketing_sends(status);
 CREATE INDEX IF NOT EXISTS idx_mkt_sends_provider_msg ON marketing_sends(provider_message_id);
 -- 0051: campaign progress page reads (campaign_id, status) together.
 CREATE INDEX IF NOT EXISTS idx_msend_campaign_status ON marketing_sends(campaign_id, status);
+-- 0125 (HELD): one send per (campaign, contact). Race guard for the >INLINE_CAP
+-- re-send fix — the per-contact INSERT OR IGNORE / onConflictDoNothing relies on
+-- this so two concurrent cron ticks can't double-send the same contact.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mkt_sends_campaign_contact ON marketing_sends(campaign_id, contact_id);
 
 -- 0123: first-party click log feeding conversion attribution. Written by the
 -- signed /r/<token> redirect; ip_hash is salted, never the raw IP.

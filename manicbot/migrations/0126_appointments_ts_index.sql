@@ -1,0 +1,13 @@
+-- 0126_appointments_ts_index.sql — 2026-06-20
+--
+-- Perf: metrics.getChartData (God-Mode, platform-wide appointments chart) runs
+--   SELECT date, count(*) FROM appointments
+--   WHERE ts >= ? AND cancelled = 0 GROUP BY date ORDER BY date
+-- with NO tenant_id predicate. Every existing appointments index is
+-- tenant_id-leading (idx_apt_tenant_ts = (tenant_id, ts)), and SQLite cannot use
+-- a composite index for a query that does not constrain the leading column, so
+-- this query full-scans `appointments`. A ts-leading index serves the
+-- tenant-agnostic range scan.
+--
+-- Behaviour-neutral: pure read-path optimization, no schema/column change.
+CREATE INDEX IF NOT EXISTS idx_apt_ts ON appointments(ts);

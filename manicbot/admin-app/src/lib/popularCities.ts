@@ -5,7 +5,10 @@
  * Keep this list in sync with `manicbot/src/lib/popularCities.js` (the
  * Worker version exposed via `GET /api/search/cities`).
  */
-export const POPULAR_CITIES = ["Warszawa", "Gdańsk", "Wrocław"] as const;
+export const POPULAR_CITIES = [
+  "Warszawa", "Kraków", "Łódź", "Wrocław", "Poznań",
+  "Gdańsk", "Szczecin", "Bydgoszcz", "Lublin", "Katowice",
+] as const;
 
 /**
  * City-center coordinates used to auto-select the nearest pinned city on
@@ -14,8 +17,15 @@ export const POPULAR_CITIES = ["Warszawa", "Gdańsk", "Wrocław"] as const;
  */
 export const POPULAR_CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   Warszawa: { lat: 52.2297, lng: 21.0122 },
-  "Gdańsk": { lat: 54.352, lng: 18.6466 },
+  "Kraków": { lat: 50.0647, lng: 19.945 },
+  "Łódź": { lat: 51.7592, lng: 19.456 },
   "Wrocław": { lat: 51.1079, lng: 17.0385 },
+  "Poznań": { lat: 52.4064, lng: 16.9252 },
+  "Gdańsk": { lat: 54.352, lng: 18.6466 },
+  Szczecin: { lat: 53.4285, lng: 14.5528 },
+  Bydgoszcz: { lat: 53.1235, lng: 18.0084 },
+  Lublin: { lat: 51.2465, lng: 22.5684 },
+  Katowice: { lat: 50.2649, lng: 19.0238 },
 };
 
 /**

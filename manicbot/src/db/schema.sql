@@ -63,6 +63,10 @@ CREATE INDEX IF NOT EXISTS idx_apt_unsynced
   WHERE google_event_id IS NULL AND status='confirmed' AND cancelled=0;
 CREATE INDEX IF NOT EXISTS idx_apt_master_date ON appointments(tenant_id, master_id, date);
 CREATE INDEX IF NOT EXISTS idx_apt_created ON appointments(tenant_id, created_at);
+-- 0126: ts-leading index for the God-Mode platform-wide chart (metrics.getChartData),
+-- which filters `ts >= ? AND cancelled = 0` with no tenant_id predicate and so
+-- cannot use the tenant_id-leading indexes above.
+CREATE INDEX IF NOT EXISTS idx_apt_ts ON appointments(ts);
 
 CREATE TABLE IF NOT EXISTS users (
   tenant_id TEXT NOT NULL,

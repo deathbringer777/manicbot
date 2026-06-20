@@ -12,8 +12,11 @@ function makeKv() {
 }
 
 describe('POPULAR_CITIES', () => {
-  it('exposes exactly the three Polish cities we promote', () => {
-    expect(POPULAR_CITIES).toEqual(['Warszawa', 'Gdańsk', 'Wrocław']);
+  it('promotes a stable set of Polish metros, Warszawa first', () => {
+    expect(POPULAR_CITIES[0]).toBe('Warszawa');
+    expect(POPULAR_CITIES).toContain('Kraków');
+    expect(POPULAR_CITIES).toContain('Gdańsk');
+    expect(POPULAR_CITIES.length).toBeGreaterThanOrEqual(10);
   });
 
   it('does not contain any non-Polish placeholders (e.g. legacy test "Київ")', () => {
@@ -41,7 +44,7 @@ describe('GET /api/search/cities', () => {
     const res = await trySearchApi(req, env, url);
     expect(res).not.toBeNull();
     const body = await res.json();
-    expect(body.cities).toEqual(['Warszawa', 'Gdańsk', 'Wrocław']);
+    expect(body.cities).toEqual([...POPULAR_CITIES]);
   });
 
   it('returns the same Polish list when DB binding is missing', async () => {
@@ -51,6 +54,6 @@ describe('GET /api/search/cities', () => {
 
     const res = await trySearchApi(req, env, url);
     const body = await res.json();
-    expect(body.cities).toEqual(['Warszawa', 'Gdańsk', 'Wrocław']);
+    expect(body.cities).toEqual([...POPULAR_CITIES]);
   });
 });

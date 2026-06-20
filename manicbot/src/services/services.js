@@ -1,6 +1,6 @@
 import { DEFAULT_SVC, DEFAULT_PHOTOS, DEFAULT_ABOUT_PHOTOS, CORRECTION_SVC, BROKEN_ABOUT_PHOTO_ID, FALLBACK_ABOUT_PHOTO, INSTAGRAM_URL } from '../config.js';
 import { L } from '../i18n.js';
-import { dbAll, dbRun, dbGet } from '../utils/db.js';
+import { dbAll, dbRun, dbGet, dbBatch } from '../utils/db.js';
 
 const _svcCacheByTenant = new Map();
 const SVC_CACHE_TTL_MS = 60000;
@@ -49,21 +49,29 @@ export async function loadServices(ctx) {
     let services = rows.map(svcRowToDoc);
     if (!services.some(s => s.id === 'correction')) {
       services = [...services, CORRECTION_SVC];
-      await saveServiceRow(ctx, CORRECTION_SVC);
+      await dbBatch(ctx, [buildServiceInsertTuple(ctx.tenantId, CORRECTION_SVC)]);
     }
     return services;
   }
   const defaults = buildDefaultSvc();
   const all = [...defaults, CORRECTION_SVC];
-  for (const s of all) await saveServiceRow(ctx, s);
+  // Cold-start: seed all default services in a single batch (1 round-trip instead of N).
+  await dbBatch(ctx, all.map(s => buildServiceInsertTuple(ctx.tenantId, s)));
   return all;
 }
 
-async function saveServiceRow(ctx, s) {
-  await dbRun(ctx,
-    `INSERT OR REPLACE INTO services (tenant_id, svc_id, emoji, duration, price, active, hidden, sort_order, names, description, photos, category)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ctx.tenantId, s.id, s.e || null, s.dur, s.price,
+/**
+ * Build the [sql, ...params] tuple for a single service INSERT OR REPLACE.
+ * Kept as a pure helper so both the cold-start path and saveServices can
+ * collect all tuples and send them as ONE dbBatch call.
+ *
+ * SQL is a single line (no newlines inside the VALUES clause) because the
+ * Worker test mock-db SQL parser does not handle newlines inside parentheses.
+ */
+function buildServiceInsertTuple(tenantId, s) {
+  return [
+    'INSERT OR REPLACE INTO services (tenant_id, svc_id, emoji, duration, price, active, hidden, sort_order, names, description, photos, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    tenantId, s.id, s.e || null, s.dur, s.price,
     s.active === false ? 0 : 1,
     s.hidden ? 1 : 0,
     s.order || 0,
@@ -71,7 +79,7 @@ async function saveServiceRow(ctx, s) {
     s.desc ? JSON.stringify(s.desc) : null,
     s.photos ? JSON.stringify(s.photos) : null,
     s.category ?? null,
-  );
+  ];
 }
 
 export async function saveServices(ctx, services) {
@@ -83,8 +91,12 @@ export async function saveServices(ctx, services) {
   if (!ctx.svcIds.has('correction')) ctx.svcIds.add('correction');
 
   if (ctx?.db && ctx?.tenantId) {
-    await dbRun(ctx, 'DELETE FROM services WHERE tenant_id = ?', ctx.tenantId);
-    for (const s of services) await saveServiceRow(ctx, s);
+    // DELETE + all INSERT OR REPLACE in a single batch: 1 round-trip instead of N+1.
+    const stmts = [
+      ['DELETE FROM services WHERE tenant_id = ?', ctx.tenantId],
+      ...services.map(s => buildServiceInsertTuple(ctx.tenantId, s)),
+    ];
+    await dbBatch(ctx, stmts);
   }
   syncSvcNames(ctx);
   invalidateServiceCache();

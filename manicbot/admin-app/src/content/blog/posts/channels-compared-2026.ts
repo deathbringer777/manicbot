@@ -110,7 +110,7 @@ export const channelsCompared2026: BlogArticle = {
 
 ## Лучшая комбинация для салона
 
-По нашим данным, лучшая стратегия выглядит так:
+На практике лучшая стратегия выглядит так:
 
 1. **Telegram** — основной канал записи и напоминаний. 5 минут на подключение, ноль ограничений.
 2. **Instagram Direct** — основной канал привлечения. Через 1–2 недели после Telegram, когда вы добавили в Instagram bio ссылку на бота.
@@ -214,7 +214,7 @@ export const channelsCompared2026: BlogArticle = {
 
 ## Найкраща комбінація для салону
 
-За нашими даними найкраща стратегія виглядає так:
+На практиці найкраща стратегія виглядає так:
 
 1. **Telegram** — основний канал запису і нагадувань. 5 хвилин на підключення, нуль обмежень.
 2. **Instagram Direct** — основний канал залучення. Через 1–2 тижні після Telegram, коли ви додали в Instagram bio посилання на бота.
@@ -318,7 +318,7 @@ Below — a per-channel deep dive.
 
 ## Best combo for a salon
 
-By our data the best strategy looks like:
+In practice, the best strategy looks like:
 
 1. **Telegram** — primary channel for booking and reminders. 5 minutes to connect, zero limits.
 2. **Instagram Direct** — primary acquisition channel. 1–2 weeks after Telegram, once you've added a bot link to your Instagram bio.
@@ -422,7 +422,7 @@ Niżej — głębsza analiza każdego kanału.
 
 ## Najlepsza kombinacja dla salonu
 
-Z naszych danych najlepsza strategia wygląda tak:
+W praktyce najlepsza strategia wygląda tak:
 
 1. **Telegram** — główny kanał rezerwacji i przypomnień. 5 minut konfiguracji, zero ograniczeń.
 2. **Instagram Direct** — główny kanał akwizycji. 1–2 tygodnie po Telegramie, gdy dodasz link bota do Instagram bio.

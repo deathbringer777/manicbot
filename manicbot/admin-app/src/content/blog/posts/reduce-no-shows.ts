@@ -67,7 +67,7 @@ export const reduceNoShows: BlogArticle = {
 
 В ManicBot отмена — одна кнопка в напоминании. Перенос — тоже один тап: бот показывает свободные слоты и сразу подтверждает.
 
-Замер по нашим данным: салоны, которые включили «отмена в один клик», получили **на 18% меньше тихих no-show** в первый месяц — клиенты стали отменять явно, освобождая слот для других.
+Салоны, которые включают «отмену в один клик», обычно получают **заметно меньше тихих no-show** уже в первый месяц — клиенты начинают отменять явно, освобождая слот для других.
 
 ## 3. Лист ожидания
 
@@ -142,7 +142,7 @@ No-show — не приговор. Это набор небольших улуч
 
 У ManicBot скасування — одна кнопка в нагадуванні. Перенесення — теж один тап: бот показує вільні слоти і одразу підтверджує.
 
-Замір за нашими даними: салони, які увімкнули «скасування в один клік», отримали **на 18% менше тихих no-show** у перший місяць — клієнти почали скасовувати явно, звільняючи слот для інших.
+Салони, які вмикають «скасування в один клік», зазвичай отримують **помітно менше тихих no-show** вже в перший місяць — клієнти починають скасовувати явно, звільняючи слот для інших.
 
 ## 3. Лист очікування
 
@@ -217,7 +217,7 @@ Counterintuitively: **the easier it is to cancel, the fewer no-shows you get**. 
 
 In ManicBot, cancellation is one button in the reminder. Rescheduling is also one tap: the bot shows open slots and confirms immediately.
 
-In our data, salons that turned on "one-tap cancel" saw **18% fewer silent no-shows** in the first month — clients started cancelling explicitly, freeing up slots for others.
+Salons that turn on "one-tap cancel" typically see **noticeably fewer silent no-shows** within the first month — clients start cancelling explicitly, freeing up slots for others.
 
 ## 3. Waitlist
 
@@ -292,7 +292,7 @@ Wbrew intuicji: **im łatwiej anulować, tym mniej no-show**. Gdy klient wie, ż
 
 W ManicBot anulowanie to jeden przycisk w przypomnieniu. Przeniesienie też jeden tap: bot pokazuje wolne sloty i od razu potwierdza.
 
-Pomiar z naszych danych: salony, które włączyły „anulowanie jednym kliknięciem", odnotowały **o 18% mniej cichych no-show** w pierwszym miesiącu — klienci zaczęli anulować jawnie, zwalniając miejsca innym.
+Salony, które włączają „anulowanie jednym kliknięciem", zwykle odnotowują **zauważalnie mniej cichych no-show** już w pierwszym miesiącu — klienci zaczynają anulować jawnie, zwalniając miejsca innym.
 
 ## 3. Lista oczekujących
 

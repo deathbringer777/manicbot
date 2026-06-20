@@ -21,12 +21,13 @@ import { getDb } from "~/server/db";
 import { newsletterSubscribers } from "~/server/db/schema";
 import { sendNewsletterWelcomeEmail } from "~/server/email/emailService";
 import { log } from "~/server/utils/logger";
+import { getRuntimeEnv } from "~/server/runtimeEnv";
 import { processNewsletterWelcomeRequest } from "~/server/newsletter/processWelcomeRequest";
 
 export const runtime = "edge";
 
 export async function POST(req: Request) {
-  const expectedToken = process.env.INTERNAL_API_TOKEN ?? null;
+  const expectedToken = getRuntimeEnv("INTERNAL_API_TOKEN") ?? null;
 
   let body: unknown = null;
   try {

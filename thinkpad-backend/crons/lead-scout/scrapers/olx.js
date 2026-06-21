@@ -1,6 +1,6 @@
 'use strict';
 /**
- * olx.js — OLX.pl classified-ads scraper for Warsaw nail masters/salons.
+ * olx.js — OLX.pl classified-ads scraper for Polish nail masters/salons.
  *
  * OLX renders listings client-side from a JSON blob embedded as
  *   window.__PRERENDERED_STATE__ = "<json-string-literal>";
@@ -19,7 +19,10 @@ const https = require('https');
 const { URL } = require('url');
 const { extractPhone, extractInstagram } = require('./extract');
 
-const MAX_PER_RUN = 25;
+// OLX is national and ad-dense (solo masters advertise heavily); with city-level
+// queries one results page carries plenty, so we capture more per run than the
+// salon sources. The dedup layer drops repeats, so a higher cap is free upside.
+const MAX_PER_RUN = 40;
 
 function get(url) {
   return new Promise((resolve, reject) => {

@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * lead-scout/index.js — Warsaw nail salon lead scraper.
+ * lead-scout/index.js — Polish nail salon / solo-master lead scraper.
  *
  * Runs every 15 minutes via PM2 cron_restart.
- * Each run: picks the next (district, query, source) slot, scrapes, appends
+ * Each run: picks the next (location, query, source) slot, scrapes, appends
  * new leads to CSV. Goal: 5000 unique leads with at least one contact.
  *
- * Sources: google_maps + booksy (salons) and olx + google + bing (web search,
- * also surfaces solo masters). Google search needs GOOGLE_CSE_KEY/CX in .env to
- * yield results; without them it is a graceful no-op. duckduckgo was retired
- * (low-quality, stale results).
+ * Geography: Warsaw by district + the largest Polish cities (Kraków, Wrocław,
+ * Łódź, …) — Warsaw alone saturates well below the target. Sources in rotation:
+ * google_maps + booksy (established salons) and olx (solo masters via classified
+ * ads). Plain google + bing web search were retired from the rotation (google
+ * needs a paid CSE key; bing is JS-gated — both returned 0 results every run);
+ * their scraper modules are kept so a future GOOGLE_CSE_KEY can re-enable them.
  *
  * State:  ~/manicbot-backend/marketing/research/lead-scout-state.json
  * Output: ~/manicbot-backend/marketing/research/leads.csv
@@ -42,40 +44,61 @@ const HARD_TIMEOUT_MS = 8 * 60 * 1000;
 
 // ─── Corpus ───────────────────────────────────────────────────────────────────
 
-// 14 Warsaw districts (roughly from most nail-salon density to less)
-const DISTRICTS = [
+// Warsaw, split by district (highest nail-salon density in PL), roughly most → less.
+const WARSAW_DISTRICTS = [
   'Mokotów', 'Śródmieście', 'Wola', 'Praga Południe', 'Praga Północ',
   'Ursynów', 'Wilanów', 'Ochota', 'Żoliborz', 'Bielany',
   'Bemowo', 'Targówek', 'Białołęka', 'Włochy',
 ];
 
-// Query templates per district. Mix of salon-oriented terms (Google Maps /
-// Booksy) and service/solo-master terms (OLX / web search) so both segments —
-// established salons and individual masters — are covered.
+// Largest Polish cities outside Warsaw, by population. All three live sources
+// (google_maps, booksy, olx) return per-city results, so each city is a fresh,
+// largely non-overlapping lead pool — the headroom that makes 5000 reachable
+// once Warsaw saturates.
+const PL_CITIES = [
+  'Kraków', 'Łódź', 'Wrocław', 'Poznań', 'Gdańsk', 'Szczecin',
+  'Bydgoszcz', 'Lublin', 'Białystok', 'Katowice', 'Gdynia', 'Częstochowa',
+  'Radom', 'Sosnowiec', 'Toruń', 'Kielce', 'Rzeszów', 'Gliwice',
+  'Olsztyn', 'Zabrze', 'Bielsko-Biała', 'Bytom', 'Tarnów', 'Opole',
+];
+
+// One flat rotation dimension. Each entry is a complete geo phrase fed verbatim
+// into the query templates (Warsaw districts keep the "Warszawa" suffix; cities
+// stand alone), so the templates no longer hardcode a city.
+const LOCATIONS = [
+  ...WARSAW_DISTRICTS.map((d) => `${d} Warszawa`),
+  ...PL_CITIES,
+];
+
+// Query templates per location. Mix of salon-oriented terms (Google Maps /
+// Booksy) and service/solo-master terms (OLX) so both segments — established
+// salons and individual masters — are covered.
 const QUERY_TEMPLATES = [
-  (d) => `salon manicure ${d} Warszawa`,
-  (d) => `salon paznokci ${d} Warszawa`,
-  (d) => `studio paznokci ${d} Warszawa`,
-  (d) => `manicure pedicure ${d} Warszawa`,
-  (d) => `manicure hybrydowy ${d} Warszawa`,
-  (d) => `paznokcie żelowe ${d} Warszawa`,
-  (d) => `przedłużanie paznokci ${d} Warszawa`,
-  (d) => `stylizacja paznokci ${d} Warszawa`,
-  (d) => `lakier hybrydowy ${d} Warszawa`,
-  (d) => `pedicure ${d} Warszawa`,
-  (d) => `gabinet kosmetyczny ${d} Warszawa`,
-  (d) => `kosmetyczka ${d} Warszawa`,
-  (d) => `nail art ${d} Warszawa`,
-  (d) => `paznokcie ${d} Warszawa`,
-  (d) => `manicure ${d} Warszawa`,
+  (loc) => `salon manicure ${loc}`,
+  (loc) => `salon paznokci ${loc}`,
+  (loc) => `studio paznokci ${loc}`,
+  (loc) => `manicure pedicure ${loc}`,
+  (loc) => `manicure hybrydowy ${loc}`,
+  (loc) => `paznokcie żelowe ${loc}`,
+  (loc) => `przedłużanie paznokci ${loc}`,
+  (loc) => `stylizacja paznokci ${loc}`,
+  (loc) => `lakier hybrydowy ${loc}`,
+  (loc) => `pedicure ${loc}`,
+  (loc) => `gabinet kosmetyczny ${loc}`,
+  (loc) => `kosmetyczka ${loc}`,
+  (loc) => `nail art ${loc}`,
+  (loc) => `paznokcie ${loc}`,
+  (loc) => `manicure ${loc}`,
 ];
 
 // Sources in rotation order (sourceIndex % SOURCES.length). google_maps + booksy
-// target salons; olx + google + bing add solo masters and web presence.
-const SOURCES = ['google_maps', 'booksy', 'olx', 'google', 'bing'];
+// target established salons; olx surfaces solo masters via classified ads.
+// (google + bing web search retired from rotation — see header.)
+const SOURCES = ['google_maps', 'booksy', 'olx'];
 
 const CORPUS = {
-  districts: DISTRICTS.length,
+  // Historical key name; now counts all geo locations (Warsaw districts + cities).
+  districts: LOCATIONS.length,
   queries: QUERY_TEMPLATES.length,
   sources: SOURCES.length,
 };
@@ -115,20 +138,20 @@ const olx = require('./scrapers/olx');
 const google = require('./scrapers/google');
 const bing = require('./scrapers/bing');
 
-async function runScraper(sourceName, query, district, state) {
+async function runScraper(sourceName, query, location, state) {
   switch (sourceName) {
     case 'google_maps':
-      return googleMaps.scrape(query, district);
+      return googleMaps.scrape(query, location);
     case 'booksy':
       // Page hint walks Booksy pages across full source cycles so runs don't
       // repeat page 1 (one increment per complete pass over SOURCES).
-      return booksy.scrape(query, district, { pageHint: Math.floor(state.sourceIndex / CORPUS.sources) + 1 });
+      return booksy.scrape(query, location, { pageHint: Math.floor(state.sourceIndex / CORPUS.sources) + 1 });
     case 'olx':
-      return olx.scrape(query, district);
+      return olx.scrape(query, location);
     case 'google':
-      return google.scrape(query, district);
+      return google.scrape(query, location);
     case 'bing':
-      return bing.scrape(query, district);
+      return bing.scrape(query, location);
     default:
       return [];
   }
@@ -156,18 +179,18 @@ async function main(logger) {
   }
 
   const slot = rotation.currentSlot(state, CORPUS);
-  const district = DISTRICTS[slot.districtIndex];
-  const query = QUERY_TEMPLATES[slot.queryIndex](district);
+  const location = LOCATIONS[slot.districtIndex];
+  const query = QUERY_TEMPLATES[slot.queryIndex](location);
   const sourceName = SOURCES[slot.sourceOrdinal];
 
-  logger.log(`🔍 Run #${state.runsCompleted + 1}: district=${district}, query="${query}", source=${sourceName}${state.failStreak ? ` (retry ${state.failStreak}/${rotation.MAX_FAILS})` : ''}`);
+  logger.log(`🔍 Run #${state.runsCompleted + 1}: location=${location}, query="${query}", source=${sourceName}${state.failStreak ? ` (retry ${state.failStreak}/${rotation.MAX_FAILS})` : ''}`);
 
   let added = 0;
   let scraperError = null;
   let forcedAdvance = false;
 
   try {
-    const scraped = await runScraper(sourceName, query, district, state);
+    const scraped = await runScraper(sourceName, query, location, state);
     logger.log(`  Scraper returned ${scraped.length} raw results`);
 
     for (const lead of scraped) {
@@ -177,7 +200,7 @@ async function main(logger) {
 
     state = rotation.advanceOnSuccess(state, CORPUS);
     if (state.queryIndex === 0 && state.sourceIndex % CORPUS.sources === 0) {
-      logger.log(`  → district pointer now: ${DISTRICTS[state.districtIndex]}`);
+      logger.log(`  → location pointer now: ${LOCATIONS[state.districtIndex]}`);
     }
     state.totalLeads = storage.getTotal();
     state.runsCompleted = (state.runsCompleted || 0) + 1;
@@ -197,7 +220,7 @@ async function main(logger) {
     const statusIcon = scraperError ? '⚠️' : '✅';
     const msg = [
       `${statusIcon} Lead Scout`,
-      `📍 ${district} / ${sourceName}`,
+      `📍 ${location} / ${sourceName}`,
       `+${added} новых лидов`,
       `📊 Всего: ${storage.getTotal()} / ${LEAD_TARGET}`,
       scraperError ? `❌ Ошибка: ${scraperError}` : null,
@@ -211,4 +234,4 @@ if (require.main === module) {
   runCron('lead-scout', main, { lockTtlMs: 10 * 60 * 1000 });
 }
 
-module.exports = { main, DISTRICTS, QUERY_TEMPLATES, SOURCES, CORPUS };
+module.exports = { main, LOCATIONS, QUERY_TEMPLATES, SOURCES, CORPUS };

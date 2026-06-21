@@ -12,7 +12,7 @@ runtime credentials stay in `~/manicbot-backend/.env` on the server
 | `health-check` | every 30 min | system stats + Worker `/api/health` probe; TG alert on FAIL |
 | `nightly` | 01:00 + 13:00 | tenant roster → `marketing/clients.csv` + full D1 SQL backup (30 days kept) |
 | `blog-autopilot` | 02:00 + 14:00 | generates a long-form (~2000 words/language) blog draft via `claude -p` (i18n: write RU once, localize ua/en/pl) and sends a Telegram preview with **Читать / Publish / Revise / Skip** buttons; skips generation while a draft awaits approval |
-| `lead-scout` | every 15 min | scrapes one (district, query, source) slot of Warsaw nail salons/masters |
+| `lead-scout` | every 15 min | scrapes one (location, query, source) slot of PL nail salons/masters (Warsaw districts + major cities) |
 | `booksy-full` | 03:30 + 15:30 | full Booksy catalog crawl via JSON-LD with yield-anomaly alerts |
 | `gsc-monitor` | 08:00 daily | Google Search Console 7d-over-7d trend + sitemap status + index coverage of priority URLs → TG; no-ops until `GSC_SERVICE_ACCOUNT_JSON` is set |
 
@@ -21,15 +21,19 @@ Blog publishing is button-driven: the tg-bot callback handler shells out to
 
 ## Lead sources (`crons/lead-scout/`)
 
-The rotation cycles 14 districts × 15 query templates × 5 sources:
+The rotation cycles 38 locations (14 Warsaw districts + 24 largest PL cities)
+× 15 query templates × 3 sources:
 
 | Source | How | Notes |
 | --- | --- | --- |
 | `google_maps` | Playwright (headless Chrome) | richest — name + phone + website |
 | `booksy` | HTTP + JSON-LD | salons; phones behind login |
-| `olx` | HTTP + `__PRERENDERED_STATE__` | solo masters; services-only, phone regex'd from description |
-| `google` | Custom Search JSON API | **needs `GOOGLE_CSE_KEY` + `GOOGLE_CSE_CX`** in `.env`; graceful no-op without them |
-| `bing` | best-effort HTML scrape | often JS-gated → 0 results; harmless |
+| `olx` | HTTP + `__PRERENDERED_STATE__` | solo masters via classified ads; services-only, phone regex'd from description; national, so each city is a fresh pool |
+
+`google` (Custom Search JSON API, needs `GOOGLE_CSE_KEY` + `GOOGLE_CSE_CX`) and
+`bing` (JS-gated HTML scrape) were **retired from the rotation** — both returned
+0 results every run, wasting 40% of slots. Their scraper modules are kept so a
+future `GOOGLE_CSE_KEY` can re-enable `google` by adding it back to `SOURCES`.
 
 Dedup (`dedup.js`, shared with `scripts/clean-leads.js`) collapses leads that
 share any of: phone / website / instagram / booksy / maps / olx url. One-off

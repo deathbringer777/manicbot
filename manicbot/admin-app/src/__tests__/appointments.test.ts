@@ -287,20 +287,21 @@ describe("appointmentsRouter", () => {
     });
   });
 
-  // ── markNoShow ────────────────────────────────────────────────────────────
+  // ── markNoShow (idempotent conditional-claim, #463 contract) ───────────────
   describe("markNoShow", () => {
-    it("returns success=false when appointment is not found", async () => {
-      const dbMock = createDbMock([[]]); // empty → no aptRow
+    it("returns success=false when nothing is flipped (missing/foreign or already no_show)", async () => {
+      // The guarded UPDATE (… AND noShow = 0) claims nothing → .returning() is
+      // empty. No separate existence SELECT — the claim itself is the gate.
+      const dbMock = createDbMock([], [[] /* returning: 0 rows */]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
       const result = await caller.markNoShow({ tenantId: "t_demo", id: "apt_x", noShowBy: "client" });
 
       expect(result).toEqual({ success: false });
-      expect(dbMock.updateCalls).toHaveLength(0);
     });
 
-    it("sets noShow=1, status=no_show, noShowBy, cancelReason when found", async () => {
-      const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
+    it("sets noShow=1, status=no_show, noShowBy, cancelReason when it claims the flip", async () => {
+      const dbMock = createDbMock([], [[{ id: "apt_1" }] /* returning: claimed */]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
       const result = await caller.markNoShow({
@@ -320,12 +321,24 @@ describe("appointmentsRouter", () => {
     });
 
     it("sets cancelReason=null when comment is omitted", async () => {
-      const dbMock = createDbMock([[{ tenantId: "t_demo" }]]);
+      const dbMock = createDbMock([], [[{ id: "apt_1" }]]);
       const caller = createCaller(makeAdminCtx(dbMock.db) as never);
 
       await caller.markNoShow({ tenantId: "t_demo", id: "apt_1", noShowBy: "client" });
 
       expect(dbMock.updateCalls[0]?.values.cancelReason).toBeNull();
+    });
+
+    it("is idempotent — a re-mark of an already-no_show row claims nothing", async () => {
+      // First call wins the flip; second call's guarded UPDATE matches 0 rows.
+      const dbMock = createDbMock([], [[{ id: "apt_1" }], [] /* second: 0 rows */]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      const first = await caller.markNoShow({ tenantId: "t_demo", id: "apt_1", noShowBy: "client" });
+      const second = await caller.markNoShow({ tenantId: "t_demo", id: "apt_1", noShowBy: "client" });
+
+      expect(first.success).toBe(true);
+      expect(second).toEqual({ success: false });
     });
   });
 

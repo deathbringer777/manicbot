@@ -283,21 +283,31 @@ export const appointmentsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const scope = and(eq(appointments.id, input.id), eq(appointments.tenantId, input.tenantId));
-      const aptRow = await ctx.db
-        .select({ tenantId: appointments.tenantId })
-        .from(appointments)
-        .where(scope)
-        .limit(1);
-      if (!aptRow[0]) return { success: false };
+      // Idempotency gate — mirrors salon.markNoShow and claimAndConfirm (#463):
+      // flip only a row that exists, belongs to this tenant, AND isn't already
+      // no_show. A double-click / tRPC retry / re-delivery then claims nothing
+      // (`.returning()` over a 0-row UPDATE is empty) instead of silently
+      // re-writing the row — and would not double-fire a Worker side effect
+      // were one ever added to this God-Mode path. A missing/foreign or
+      // already-no_show row reports no flip (success:false), same as before.
+      const flipped = await ctx.db
+        .update(appointments)
+        .set({
+          noShow: 1,
+          noShowBy: input.noShowBy,
+          status: "no_show",
+          cancelReason: input.comment ?? null,
+        })
+        .where(
+          and(
+            eq(appointments.id, input.id),
+            eq(appointments.tenantId, input.tenantId),
+            eq(appointments.noShow, 0),
+          ),
+        )
+        .returning({ id: appointments.id });
 
-      await ctx.db.update(appointments).set({
-        noShow: 1,
-        noShowBy: input.noShowBy,
-        status: "no_show",
-        cancelReason: input.comment ?? null,
-      }).where(scope);
-
+      if (!flipped.length) return { success: false };
       return { success: true, updatedAt: Date.now() };
     }),
 

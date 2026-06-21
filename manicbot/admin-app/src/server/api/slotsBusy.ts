@@ -1,6 +1,15 @@
 import { and, eq, ne, or } from "drizzle-orm";
 import { appointments, appointmentBlocks, services } from "~/server/db/schema";
 
+/**
+ * Fallback appointment length (minutes) when an existing appointment has no
+ * per-appointment duration override AND its service has been deleted/renamed.
+ * Mirrors the `?? 60` fallback in appointments.rescheduleAppointment. A missing
+ * duration must still block its slot — never silently allow a double-booking by
+ * dropping the row from the overlap check.
+ */
+const DEFAULT_APPT_MIN = 60;
+
 type DbInstance = ReturnType<typeof import("~/server/db").getDb>;
 
 interface BusyArgs {
@@ -54,6 +63,7 @@ export async function slotsBusy(args: BusyArgs): Promise<BusyResult> {
       id: appointments.id,
       time: appointments.time,
       svcId: appointments.svcId,
+      duration: appointments.duration,
     })
     .from(appointments)
     .where(
@@ -75,8 +85,12 @@ export async function slotsBusy(args: BusyArgs): Promise<BusyResult> {
     const svcDuration = new Map(svcRows.map((s) => [s.svcId, s.duration]));
     for (const a of aptRows) {
       if (args.excludeAppointmentId && a.id === args.excludeAppointmentId) continue;
-      const dur = svcDuration.get(a.svcId);
-      if (!dur) continue;
+      // Resolve the slot the appointment actually occupies: its per-appointment
+      // duration override (drag-to-resize, 0106) wins; else the service's
+      // nominal duration; else DEFAULT_APPT_MIN when the service was deleted.
+      // NEVER skip the row on a missing duration — dropping it from the overlap
+      // check would let a new booking double-book the master.
+      const dur = a.duration ?? svcDuration.get(a.svcId) ?? DEFAULT_APPT_MIN;
       const aStart = timeToMinutes(a.time);
       const aEnd = aStart + dur;
       if (rangesOverlap(candStart, candEnd, aStart, aEnd)) {

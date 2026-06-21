@@ -107,6 +107,24 @@ describe('#S11 chat rate limiting', () => {
     expect(fresh.status).toBe(200);
   });
 
+  it('x-forwarded-for rotation cannot mint fresh buckets (only cf-connecting-ip is trusted)', async () => {
+    // A flooder with no cf-connecting-ip rotates a client-supplied
+    // X-Forwarded-For each request. All must collapse to the single 'unknown'
+    // bucket, so the 11th /chat/init is still blocked. (Old code keyed on XFF,
+    // so each spoofed value got a fresh bucket and the limiter never tripped.)
+    const spoof = (n) => new Request('https://manicbot.com/chat/init', {
+      method: 'POST',
+      headers: new Headers({ 'Content-Type': 'application/json', 'x-forwarded-for': `10.0.0.${n}` }),
+      body: JSON.stringify({ slug: 'demo' }),
+    });
+    for (let i = 0; i < 10; i++) {
+      const r = await call(env, spoof(i));
+      expect(r.status).toBe(200);
+    }
+    const blocked = await call(env, spoof(99));
+    expect(blocked.status).toBe(429);
+  });
+
   it('different actions on the same IP are counted separately', async () => {
     const ip = '198.51.100.5';
     for (let i = 0; i < 10; i++) {

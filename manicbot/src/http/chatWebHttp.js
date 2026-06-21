@@ -51,11 +51,12 @@ function jsonError(message, status = 400, extra = {}) {
 }
 
 function clientIp(request) {
-  return (
-    request.headers.get('cf-connecting-ip') ||
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
-  );
+  // Use ONLY cf-connecting-ip — Cloudflare sets it at the edge and it cannot be
+  // spoofed. x-forwarded-for is client-supplied: a flooder could rotate it to
+  // mint a fresh `chat:${ip}` rate-limit bucket per request and defeat the
+  // flood limiter (#S11). When absent (local dev / tests) all callers share one
+  // 'unknown' bucket — safe-by-default rather than bypassable.
+  return request.headers.get('cf-connecting-ip') || 'unknown';
 }
 
 /**

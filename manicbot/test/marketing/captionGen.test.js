@@ -180,6 +180,15 @@ describe('marketing/captionGen — validateOutput', () => {
     ).toThrow(/caption_pl/);
   });
 
+  it('rejects too-long caption (Instagram 2200-char hard cap)', () => {
+    // IG rejects > 2200 chars; without an upper bound a runaway Haiku caption
+    // would fail every Meta publish until the slot is marked failed.
+    const longCaption = 'A'.repeat(2001);
+    expect(() =>
+      validateOutput({ ...VALID_OUTPUT, caption_pl: longCaption }),
+    ).toThrow(/caption_pl too long/);
+  });
+
   it('rejects hashtags below 8', () => {
     expect(() =>
       validateOutput({ ...VALID_OUTPUT, hashtags: ['#a', '#b', '#c'] }),

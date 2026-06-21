@@ -39,9 +39,31 @@ describe('handleClickRedirect', () => {
     expect(rows[0].campaign_id).toBe('cmp_1');
     expect(rows[0].tenant_id).toBe('t_a');
 
-    // First-party click feeds the funnel: opened_at + clicked_at now set.
+    // First-party click feeds the funnel: a click implies delivered + opened +
+    // clicked, so all three stamps are set. Without delivered_at the report
+    // rates Open/Click against delivered=0 and shows 0% on every campaign.
     const send = (await env.DB.prepare('SELECT * FROM marketing_sends').all()).results[0];
+    expect(send.delivered_at).toBeTypeOf('number');
     expect(send.opened_at).toBeTypeOf('number');
+    expect(send.clicked_at).toBeTypeOf('number');
+  });
+
+  it('does not overwrite an earlier delivered_at on a later click (idempotent)', async () => {
+    const env = { CLICK_TOKEN_SECRET: SECRET, DB: createMockD1() };
+    // Resend already reported delivery at t=1000; a later first-party click
+    // must not clobber that real timestamp.
+    await env.DB.prepare(
+      'INSERT INTO marketing_sends (id, campaign_id, contact_id, recipient, provider, status, delivered_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).bind('snd_d', 'cmp_1', 7, 'a@b.c', 'resend', 'delivered', 1000).run();
+
+    const tok = await signClickToken(SECRET, {
+      campaignId: 'cmp_1', sendId: 'snd_d', tenantId: 't_a',
+      contactId: 7, url: 'https://salon.example/book',
+    });
+    await handleClickRedirect(new Request(`https://manicbot.com/r/${tok}`), tok, env);
+
+    const send = (await env.DB.prepare('SELECT * FROM marketing_sends').all()).results[0];
+    expect(send.delivered_at).toBe(1000);
     expect(send.clicked_at).toBeTypeOf('number');
   });
 

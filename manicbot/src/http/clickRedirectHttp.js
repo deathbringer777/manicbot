@@ -84,15 +84,21 @@ export async function handleClickRedirect(request, token, env, executionCtx) {
         rid('clk'), claims.tenantId, claims.campaignId, claims.sendId,
         claims.contactId, claims.url.slice(0, 2000), nowS, ipHash,
       );
-      // Mirror the click onto the send row so the campaign funnel's Opened /
-      // Clicked counts reflect first-party clicks — independent of Resend's
-      // open/click tracking (which needs a custom tracking subdomain). The
-      // funnel counts `*_at IS NOT NULL`; `IS NULL` guards keep it idempotent
-      // and never overwrite an earlier real open. Status is left untouched so a
+      // Mirror the click onto the send row so the campaign funnel's
+      // Delivered / Opened / Clicked counts reflect first-party clicks —
+      // independent of Resend's open/click tracking (which needs a custom
+      // tracking subdomain that prod does not run). A click necessarily
+      // implies the mail was delivered AND opened, so backfill all three.
+      // Without delivered_at the report rates Open/Click against delivered=0
+      // and shows 0% on every tracked campaign, violating its own
+      // Delivered >= Opened >= Clicked invariant. The funnel counts
+      // `*_at IS NOT NULL`; `IS NULL` guards keep it idempotent and never
+      // overwrite an earlier real timestamp. Status is left untouched so a
       // prior bounce/complaint is never masked. marketing_sends has no
       // tenant_id column (scoped via campaign_id); the send id is from the
       // signed token.
       if (claims.sendId) {
+        await dbRun(ctx, 'UPDATE marketing_sends SET delivered_at = ? WHERE id = ? AND delivered_at IS NULL', nowS, claims.sendId);
         await dbRun(ctx, 'UPDATE marketing_sends SET opened_at = ? WHERE id = ? AND opened_at IS NULL', nowS, claims.sendId);
         await dbRun(ctx, 'UPDATE marketing_sends SET clicked_at = ? WHERE id = ? AND clicked_at IS NULL', nowS, claims.sendId);
       }

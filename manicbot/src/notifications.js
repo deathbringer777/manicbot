@@ -17,20 +17,24 @@ import { postBookingRequest } from './services/messengerRequests.js';
 import { dbAll } from './utils/db.js';
 
 export async function notifyAptStaff(ctx, apt, user) {
-  const adminId = await getAdminId(ctx);
+  // Best-effort recipient lookups: a transient D1 failure on either must not
+  // reject the whole fan-out (the booking is already saved and the client was
+  // already messaged; there is no retry on this path). Degrade to the
+  // recipients we *can* resolve — same pattern as postAptRequestCard below.
+  const adminId = await getAdminId(ctx).catch(() => null);
   const recipients = new Set();
   if (apt.masterId) {
     // Assigned to a specific master — notify only that master + admin.
     // 0072: route through masterTelegramRecipient so paired web-created
     // masters get the ping on their REAL Telegram, not the synthetic
     // 10B+ identity that Telegram would reject.
-    const masters = await listMasters(ctx);
+    const masters = await listMasters(ctx).catch(() => []);
     const assigned = masters.find(mm => Number(mm.chatId) === Number(apt.masterId));
     const tg = masterTelegramRecipient(assigned);
     if (tg && !assigned?.onVacation) recipients.add(tg);
   } else {
     // Unassigned — notify all active masters via their real TG chat.
-    const masters = await listMasters(ctx);
+    const masters = await listMasters(ctx).catch(() => []);
     for (const m of masters) {
       if (m.onVacation) continue;
       const tg = masterTelegramRecipient(m);
@@ -209,12 +213,12 @@ export async function notifyAptStaffAutoConfirmed(ctx, apt, user) {
   const recipients = new Set();
   if (apt.masterId) {
     // 0072 — paired master notif routing.
-    const masters = await listMasters(ctx);
+    const masters = await listMasters(ctx).catch(() => []);
     const assigned = masters.find(mm => Number(mm.chatId) === Number(apt.masterId));
     const tg = masterTelegramRecipient(assigned);
     if (tg && !assigned?.onVacation) recipients.add(tg);
   } else {
-    const masters = await listMasters(ctx);
+    const masters = await listMasters(ctx).catch(() => []);
     for (const m of masters) {
       if (m.onVacation) continue;
       const tg = masterTelegramRecipient(m);

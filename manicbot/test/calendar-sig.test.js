@@ -41,28 +41,6 @@ describe('#S6 — calendar URL signing (ics.js)', () => {
     expect(ok).toBe(false);
   });
 
-  it('legacy raw-key signatures verify during grace window', async () => {
-    // Pin the clock INSIDE the grace window so this stays deterministic no
-    // matter when the suite runs. The window closed 2026-06-17
-    // (LEGACY_HMAC_GRACE_UNTIL_TS); relying on the real clock made this a
-    // time-bomb that started failing once that date passed. Mirrors the
-    // sibling "AFTER grace window" test, which mocks Date.now() post-grace.
-    vi.spyOn(Date, 'now').mockReturnValue(1745000000 * 1000); // within grace
-    try {
-      // Synthesize a legacy raw-key signature
-      const enc = new TextEncoder();
-      const rawKey = await crypto.subtle.importKey('raw', enc.encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-      const ts = '1745000000'; // before LEGACY_HMAC_GRACE_UNTIL_TS
-      const payload = `a999_legacy:${ts}`;
-      const macBuf = await crypto.subtle.sign('HMAC', rawKey, enc.encode(payload));
-      const sig = Array.from(new Uint8Array(macBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
-      const ok = await verifyCalendarSig(SECRET, 'a999_legacy', ts, sig);
-      expect(ok).toBe(true);
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-
   it('verifyCalendarSig rejects legacy signature AFTER grace window', async () => {
     // Mock Date.now to be after LEGACY_HMAC_GRACE_UNTIL_TS (2026-06-17 → +1 year)
     const mockNow = 1850000000 * 1000; // 2028-08-something

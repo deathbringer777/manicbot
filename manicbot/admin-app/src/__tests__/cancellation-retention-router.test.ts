@@ -147,12 +147,36 @@ describe("requestCancellation — eligibility branches", () => {
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "no_active_subscription" });
   });
 
-  it("rejects when already cancelling (cancelAtPeriodEnd=1)", async () => {
+  it("rejects when LIVE Stripe already has cancel_at_period_end=true (authoritative, not the local flag)", async () => {
     const { db } = createDbMock([[tenantRow({ cancelAtPeriodEnd: 1 })]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: true,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
     const caller = ownerCaller(db);
     await expect(
       caller.requestCancellation({ tenantId: TENANT }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "already_cancelling" });
+  });
+
+  // Self-heal: the denormalized local flag says "cancelling" but Stripe is
+  // still actively renewing (a dropped webhook / out-of-band un-cancel). The
+  // owner must NOT be trapped — eligibility is decided by LIVE Stripe, so they
+  // can proceed to actually cancel the still-charging subscription.
+  it("local cancelAtPeriodEnd=1 but Stripe says false → still eligible (no trap)", async () => {
+    const { db } = createDbMock([[tenantRow({ cancelAtPeriodEnd: 1 })], []]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
+    const caller = ownerCaller(db);
+    const res = await caller.requestCancellation({ tenantId: TENANT });
+    expect(res.eligibleForOffer).toBe(true);
+    expect(res.stripeSubId).toBe(SUB_ID);
   });
 
   it("rejects when Stripe says the subscription is missing", async () => {
@@ -652,6 +676,67 @@ describe("confirmCancellation — validation + happy path", () => {
     // DB row was written; tenants.cancel_at_period_end mirror was NOT
     expect(insertCalls.length).toBe(1);
     expect(updateCalls.length).toBe(0);
+  });
+
+  it("throws stripe_subscription_missing when Stripe has no such subscription", async () => {
+    const { db, insertCalls } = createDbMock([[tenantRow()]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce(null);
+    const caller = ownerCaller(db);
+    await expect(
+      caller.confirmCancellation({
+        tenantId: TENANT,
+        reasonTags: ["other"],
+        retentionOfferShown: false,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "stripe_subscription_missing" });
+    // No churn row written when there's nothing to cancel.
+    expect(insertCalls.length).toBe(0);
+    expect(cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
+  });
+
+  it("throws already_cancelling when LIVE Stripe sub is already cancel_at_period_end", async () => {
+    const { db } = createDbMock([[tenantRow()]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: true,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
+    const caller = ownerCaller(db);
+    await expect(
+      caller.confirmCancellation({
+        tenantId: TENANT,
+        reasonTags: ["other"],
+        retentionOfferShown: false,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "already_cancelling" });
+    expect(cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
+  });
+
+  // Self-heal: local flag stale (=1) but Stripe still renewing (false) — the
+  // owner can finally cancel the subscription that kept charging.
+  it("local cancelAtPeriodEnd=1 but Stripe false → proceeds to cancel (no trap)", async () => {
+    const { db, updateCalls } = createDbMock([[tenantRow({ cancelAtPeriodEnd: 1 })]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
+    vi.mocked(cancelSubscriptionAtPeriodEnd).mockResolvedValueOnce({
+      id: SUB_ID,
+      cancel_at_period_end: true,
+      current_period_end: NOW + 14 * 86400,
+    });
+    const caller = ownerCaller(db);
+    const res = await caller.confirmCancellation({
+      tenantId: TENANT,
+      reasonTags: ["too_expensive"],
+      retentionOfferShown: false,
+    });
+    expect(res.ok).toBe(true);
+    expect(cancelSubscriptionAtPeriodEnd).toHaveBeenCalledWith("sk_test_xxx", SUB_ID);
+    expect(updateCalls.some((c) => c.values.cancelAtPeriodEnd === 1)).toBe(true);
   });
 
   it("fires sendSubscriptionCancelledEmail to billingEmail (fire-and-forget)", async () => {

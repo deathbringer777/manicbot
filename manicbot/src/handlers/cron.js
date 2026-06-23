@@ -31,6 +31,8 @@ import { send } from '../telegram.js';
 import { getLang } from '../services/chat.js';
 import { initServices, getConfig } from '../services/services.js';
 import { checkBillingExpiry, billingLockoutDeadline } from '../billing/lifecycle.js';
+import { getSubscription, cancelSubscriptionAtPeriodEnd } from '../billing/stripe.js';
+import { updateTenantBilling } from '../billing/storage.js';
 import { notifyTenantOwner } from '../services/userNotify.js';
 import { renewExpiringGoogleWatches, syncAppointmentCalendar } from '../services/google-calendar-oauth.js';
 import { canUse } from '../billing/features.js';
@@ -86,6 +88,7 @@ export const PHASE_WINDOWS = Object.freeze({
   // Multi-salon (0117) backstop: re-derive each secondary salon's billing
   // status from its parent in case a cascade webhook was lost/out-of-order.
   billingReconcileSecondaries: 24 * 60 * 60, // 24 h
+  billingReconcileStripe: 24 * 60 * 60, // 24 h — Stripe divergence backstop
   emailPrompt: 24 * 60 * 60,  // 24 h — proactive email re-ask (Scenario C, OFF by default)
   // PR-A marketing send dispatch — tight window because we want scheduled
   // campaigns to fire within one cron tick (~15 min) of their scheduled_at.
@@ -1546,6 +1549,87 @@ export async function phaseBillingReconcileSecondaries(ctx, _now) {
   }
 }
 
+/**
+ * Stripe subscription divergence backstop. Webhook delivery is not guaranteed,
+ * and several local paths flip a tenant to inactive/canceled WITHOUT cancelling
+ * the Stripe subscription (admin `updateStatus`, account close, a dropped
+ * `customer.subscription.deleted` webhook). When that happens the live Stripe
+ * subscription keeps renewing and CHARGING the saved card while our dashboard
+ * shows the tenant as cancelled — the "I cancelled long ago but Stripe still
+ * bills me" complaint.
+ *
+ * Once a day, find tenants we consider NOT paying (billing_status inactive /
+ * canceled) that STILL hold a `stripe_subscription_id`, pull the live sub, and
+ * if Stripe says it is still active/trialing/past_due and NOT already
+ * cancel_at_period_end, flip cancel_at_period_end so it stops at the period
+ * boundary, mirror the flag locally, and alert loudly. An operator can escalate
+ * to an immediate stop+refund via the God-Mode `billing.forceCancelSubscription`
+ * tool.
+ *
+ * Safety: only rows whose `updated_at` is older than STRIPE_RECONCILE_MIN_AGE_SEC
+ * are eligible, so a fresh checkout mid-webhook (briefly inactive while holding
+ * a sub id as `customer.subscription.updated` is in flight) is never mistaken
+ * for a divergence and cancelled.
+ */
+const STRIPE_RECONCILE_MIN_AGE_SEC = 3 * 24 * 3600; // 3 days
+const STRIPE_RECONCILE_BATCH = 200;
+
+export async function phaseBillingReconcileStripe(ctx, _now) {
+  if (!ctx?.db || !ctx?.stripeSecretKey) return;
+  const ts = Math.floor(Date.now() / 1000);
+  const cutoff = ts - STRIPE_RECONCILE_MIN_AGE_SEC;
+
+  const candidates = await dbAll(
+    ctx,
+    `SELECT id, stripe_subscription_id FROM tenants WHERE updated_at < ? AND stripe_subscription_id IS NOT NULL AND (billing_status = 'inactive' OR billing_status = 'canceled') LIMIT ${STRIPE_RECONCILE_BATCH}`,
+    cutoff,
+  );
+  if (!candidates?.length) return;
+
+  let repaired = 0;
+  for (const row of candidates) {
+    try {
+      const sub = await getSubscription(ctx.stripeSecretKey, row.stripe_subscription_id);
+      // Gone in Stripe (or unreadable) → just clear our stale sub id so this
+      // row stops being re-scanned every day. getSubscription returns null on
+      // a non-2xx, so a transient error self-corrects on the next run.
+      if (!sub) {
+        await updateTenantBilling(ctx, row.id, { stripeSubscriptionId: null, updatedAt: ts });
+        continue;
+      }
+      const liveCharging =
+        (sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due') &&
+        sub.cancel_at_period_end !== true;
+      if (!liveCharging) continue;
+
+      await cancelSubscriptionAtPeriodEnd(ctx.stripeSecretKey, row.stripe_subscription_id);
+      await updateTenantBilling(ctx, row.id, { cancelAtPeriodEnd: true, updatedAt: ts });
+      repaired += 1;
+      log.warn('handlers.cron', {
+        action: 'billing_reconcile_stripe_divergence',
+        tenantId: row.id,
+        subscriptionId: row.stripe_subscription_id,
+        liveStatus: sub.status,
+      });
+    } catch (e) {
+      log.warn('handlers.cron', {
+        action: 'billing_reconcile_stripe_failed',
+        tenantId: row.id,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  if (repaired > 0) {
+    void logEvent(ctx, 'cron.billing.stripe_divergence_repaired', {
+      level: 'warn',
+      tenantId: ctx.tenantId,
+      message: `Cancelled ${repaired} live Stripe subscription(s) still charging tenants marked cancelled locally`,
+      repaired,
+    });
+  }
+}
+
 export async function handleCron(ctx) {
   try {
     await initServices(ctx);
@@ -1635,6 +1719,10 @@ export async function handleCron(ctx) {
     // Multi-salon (0117): repair any secondary-salon billing drift left by a
     // lost/out-of-order cascade webhook. Idempotent; windowed to 24h.
     await runPhase(ctx, 'billingReconcileSecondaries', () => phaseBillingReconcileSecondaries(ctx, now));
+    // Stripe divergence backstop: cancel live subscriptions that keep charging
+    // tenants we already mark cancelled/inactive locally. Idempotent; windowed
+    // to 24h; conservative (3-day staleness guard) to never nuke a fresh signup.
+    await runPhase(ctx, 'billingReconcileStripe', () => phaseBillingReconcileStripe(ctx, now));
     // Scenario C: proactive email re-ask (Telegram-only). No-op unless
     // EMAIL_CAPTURE.reaskCron is enabled; gated + capped + anti-nag inside.
     await runPhase(ctx, 'emailPrompt', () => phaseEmailPrompt(ctx, now));

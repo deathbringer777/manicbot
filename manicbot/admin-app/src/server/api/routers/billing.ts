@@ -13,6 +13,7 @@ import {
   ensureCoupon,
   applyCouponToSubscription,
   cancelSubscriptionAtPeriodEnd,
+  cancelSubscriptionNow,
   getBalance,
   listPayouts,
   listRecentCharges,
@@ -266,6 +267,121 @@ export const billingRouter = createTRPCRouter({
       return { success: true, periodEnd };
     }),
 
+  /**
+   * God-Mode force-cancel — operator escape hatch for the "cancelled with us
+   * but Stripe keeps charging" divergence. Pulls the LIVE subscription from
+   * Stripe (never trusts the denormalized `tenants` flags) and cancels it:
+   *   - `immediate`   → DELETE the sub now, stop billing this instant.
+   *   - `period_end`  → flip cancel_at_period_end, let the paid period run out.
+   * Then mirrors the result into D1 so the dashboard matches reality. `tenantId`
+   * is always taken from explicit input (God-Mode rule — never inferred).
+   *
+   * If Stripe says the subscription is already gone (404 → null), we don't
+   * error: we just reconcile the local row to `inactive` and report it.
+   */
+  forceCancelSubscription: adminProcedure
+    .input(
+      z.object({
+        tenantId: z.string(),
+        mode: z.enum(["immediate", "period_end"]).default("immediate"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const stripeKey = env.STRIPE_SECRET_KEY;
+      if (!stripeKey) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+      }
+
+      const [tenant] = await ctx.db
+        .select({
+          id: tenants.id,
+          stripeSubscriptionId: tenants.stripeSubscriptionId,
+        })
+        .from(tenants)
+        .where(eq(tenants.id, input.tenantId))
+        .limit(1);
+      if (!tenant) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Tenant not found" });
+      }
+      if (!tenant.stripeSubscriptionId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "no_active_subscription" });
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const sub = await retrieveSubscription(stripeKey, tenant.stripeSubscriptionId);
+
+      // Subscription already gone in Stripe — nothing left to charge. Reconcile
+      // the local row so the dashboard stops claiming an active subscription.
+      if (!sub) {
+        await ctx.db
+          .update(tenants)
+          .set({
+            billingStatus: "inactive",
+            subscriptionStatus: "canceled",
+            stripeSubscriptionId: null,
+            stripePriceId: null,
+            currentPeriodEnd: null,
+            nextPaymentDate: null,
+            cancelAtPeriodEnd: 0,
+            updatedAt: now,
+          })
+          .where(eq(tenants.id, input.tenantId));
+        await writeAudit(ctx.db, {
+          actor: ctx.webUser?.email ?? null,
+          action: "billing.forceCancelSubscription",
+          tenantId: input.tenantId,
+          detail: `mode=${input.mode} result=already_gone sub=${tenant.stripeSubscriptionId}`,
+          ip: ctxIp(ctx),
+        });
+        return { ok: true as const, mode: input.mode, result: "already_gone" as const };
+      }
+
+      if (input.mode === "period_end") {
+        const updated = await cancelSubscriptionAtPeriodEnd(stripeKey, tenant.stripeSubscriptionId);
+        await ctx.db
+          .update(tenants)
+          .set({ cancelAtPeriodEnd: 1, updatedAt: now })
+          .where(eq(tenants.id, input.tenantId));
+        await writeAudit(ctx.db, {
+          actor: ctx.webUser?.email ?? null,
+          action: "billing.forceCancelSubscription",
+          tenantId: input.tenantId,
+          detail: `mode=period_end sub=${tenant.stripeSubscriptionId}`,
+          ip: ctxIp(ctx),
+        });
+        return {
+          ok: true as const,
+          mode: "period_end" as const,
+          result: "scheduled" as const,
+          cancelAt: updated.current_period_end ?? null,
+        };
+      }
+
+      // immediate — stop billing now.
+      await cancelSubscriptionNow(stripeKey, tenant.stripeSubscriptionId);
+      await ctx.db
+        .update(tenants)
+        .set({
+          billingStatus: "inactive",
+          subscriptionStatus: "canceled",
+          stripeSubscriptionId: null,
+          stripePriceId: null,
+          currentPeriodEnd: null,
+          nextPaymentDate: null,
+          cancelAtPeriodEnd: 0,
+          updatedAt: now,
+        })
+        .where(eq(tenants.id, input.tenantId));
+      await writeAudit(ctx.db, {
+        actor: ctx.webUser?.email ?? null,
+        action: "billing.forceCancelSubscription",
+        tenantId: input.tenantId,
+        detail: `mode=immediate sub=${tenant.stripeSubscriptionId}`,
+        ip: ctxIp(ctx),
+      });
+      return { ok: true as const, mode: "immediate" as const, result: "canceled" as const };
+    }),
+
   // ─── God Mode real-money dashboard (Stage 2) ──────────────────────────────
   // Live Stripe state the D1 mirror can't hold: balance, payouts, recent
   // charges, open disputes. Each section is fetched independently and a failure
@@ -431,12 +547,12 @@ export const billingRouter = createTRPCRouter({
           message: "no_active_subscription",
         });
       }
-      if (tenant.cancelAtPeriodEnd) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "already_cancelling",
-        });
-      }
+      // NOTE: we intentionally do NOT short-circuit on the denormalized
+      // `tenant.cancelAtPeriodEnd` flag here. It can drift out of sync with
+      // Stripe (a dropped webhook, an out-of-band un-cancel), and trusting it
+      // would trap an owner whose Stripe sub is actually still renewing into a
+      // permanent "already_cancelling" error while Stripe keeps charging. The
+      // live `sub.cancel_at_period_end` check below is the single source of truth.
 
       // Pull live subscription state from Stripe so we know the cadence
       // (the column is not denormalized into `tenants`). This also catches
@@ -676,18 +792,24 @@ export const billingRouter = createTRPCRouter({
       if (!tenant.stripeSubscriptionId) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "no_active_subscription" });
       }
-      if (tenant.cancelAtPeriodEnd) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "already_cancelling" });
-      }
 
       const stripeKey = env.STRIPE_SECRET_KEY;
       if (!stripeKey) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
       }
 
-      // Need the live subscription so we can record `interval_at_cancel`.
+      // Live Stripe state is authoritative — never the denormalized
+      // `tenant.cancelAtPeriodEnd` flag (it can drift and would otherwise trap
+      // the owner in "already_cancelling" while Stripe keeps charging). We need
+      // the sub anyway to record `interval_at_cancel`.
       const sub = await retrieveSubscription(stripeKey, tenant.stripeSubscriptionId);
-      const item = sub?.items?.data?.[0];
+      if (!sub) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "stripe_subscription_missing" });
+      }
+      if (sub.cancel_at_period_end === true) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "already_cancelling" });
+      }
+      const item = sub.items?.data?.[0];
       const interval = item?.price?.recurring?.interval ?? item?.plan?.interval ?? "month";
 
       const nowSec = Math.floor(Date.now() / 1000);

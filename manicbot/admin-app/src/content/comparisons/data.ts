@@ -33,7 +33,7 @@ export interface ComparisonFaq {
 
 export interface ComparisonPage {
   /** URL slug — page lives at /comparisons/{slug}. */
-  slug: "manicbot-vs-booksy" | "manicbot-vs-yclients" | "manicbot-vs-fresha" | "manicbot-vs-versum";
+  slug: "manicbot-vs-yclients" | "manicbot-vs-fresha" | "manicbot-vs-versum";
   competitorName: string;
   /** Year founded + HQ for E-E-A-T context. */
   competitorEstablished: string;
@@ -67,75 +67,6 @@ const LABELS = {
 };
 
 export const COMPARISONS: ComparisonPage[] = [
-  {
-    slug: "manicbot-vs-booksy",
-    competitorName: "Booksy",
-    competitorEstablished: "2014, Warsaw → Chicago",
-    pricingSourceUrl: "https://biz.booksy.com/en-us/pricing",
-    pricingVerifiedManual: true,
-    heroSummary: {
-      pl: "Booksy to największy marketplace beauty w Polsce — i najdroższa droga do rezerwacji online. ManicBot jest 3× tańszy, nie bierze prowizji 30% od nowych klientów, i obsługuje Telegram + Instagram + WhatsApp jako natywne kanały rezerwacji.",
-      ru: "Booksy — крупнейший beauty-marketplace в Польше и самый дорогой способ принимать записи онлайн. ManicBot в 3× дешевле, не берёт 30% комиссию с новых клиентов и обслуживает Telegram + Instagram + WhatsApp как нативные каналы записи.",
-      ua: "Booksy — найбільший beauty-marketplace у Польщі та найдорожчий спосіб приймати записи онлайн. ManicBot у 3× дешевший, не бере 30% комісію з нових клієнтів і обслуговує Telegram + Instagram + WhatsApp як нативні канали запису.",
-      en: "Booksy is the biggest beauty marketplace in Poland — and the most expensive way to take online bookings. ManicBot is 3× cheaper, doesn't take a 30% new-client commission, and handles Telegram + Instagram + WhatsApp as native booking channels.",
-    },
-    rows: [
-      { label: LABELS.entryPrice,  manicbot: "45 PLN / mo", competitor: "~145 PLN / mo (PL)",                     winnerLeft: true },
-      { label: LABELS.trial,       manicbot: "14 days",      competitor: "7 days" },
-      { label: LABELS.commission,  manicbot: "0% forever",   competitor: "30% Boost on new clients (one-time per client)", winnerLeft: true },
-      { label: LABELS.telegram,    manicbot: "✓ native + AI",competitor: "✗" },
-      { label: LABELS.whatsapp,    manicbot: "✓ native",     competitor: "Outbound reminders only (some markets)" },
-      { label: LABELS.instagram,   manicbot: "✓ native + AI",competitor: "✗" },
-      { label: LABELS.ai24,        manicbot: "✓ PL/RU/UK/EN",competitor: "✗" },
-      { label: LABELS.gcal,        manicbot: "✓ two-way",    competitor: "Limited" },
-      { label: LABELS.hq,          manicbot: "Poland / EU",  competitor: "Chicago, USA" },
-      { label: LABELS.langs,       manicbot: "PL, RU, UK, EN",competitor: "30+ but US-first product" },
-    ],
-    whyManicbot: {
-      pl: [
-        "Realny koszt. 145 PLN/mc Booksy plus 30% Boost od nowych klientów to typowo 1500–3000 PLN/mc dla rosnącego salonu. ManicBot 45–90 PLN/mc, flat, na zawsze.",
-        "Kanały, w których są klienci. Polki piszą do salonów na Instagramie i WhatsAppie. Booksy każe im pobrać kolejną aplikację. ManicBot odpowiada w tych samych DM-ach.",
-        "Twoi klienci są Twoi. Booksy marketuje Twój salon w swojej apce, a potem bierze 30% od pierwszej wizyty — klient «należy» do Booksy. ManicBot booking lata przez Twój własny bot, IG i numer.",
-      ],
-      ru: [
-        "Реальная стоимость. 145 PLN/мес Booksy + 30% Boost с новых клиентов — это типично 1500–3000 PLN/мес для растущего салона. ManicBot 45–90 PLN/мес flat, навсегда.",
-        "Каналы, где клиенты на самом деле есть. Польские клиенты пишут салонам в Instagram и WhatsApp. Booksy заставляет скачать ещё одно приложение. ManicBot отвечает в тех же DM.",
-        "Ваши клиенты — ваши. Booksy продвигает ваш салон в своём приложении, а затем берёт 30% с первой записи — клиент «принадлежит» Booksy. ManicBot booking идёт через ВАШ бот, IG и номер.",
-      ],
-      ua: [
-        "Реальна вартість. 145 PLN/міс Booksy + 30% Boost з нових клієнтів — типово 1500–3000 PLN/міс для зростаючого салону. ManicBot 45–90 PLN/міс flat, назавжди.",
-        "Канали, де клієнти насправді є. Польські клієнти пишуть салонам в Instagram і WhatsApp. Booksy змушує завантажити ще один додаток. ManicBot відповідає в тих самих DM.",
-        "Ваші клієнти — ваші. Booksy просуває ваш салон у своєму додатку, а потім бере 30% з першого запису — клієнт «належить» Booksy. ManicBot booking іде через ВАШ бот, IG і номер.",
-      ],
-      en: [
-        "Real total cost. 145 PLN/mo Booksy plus 30% Boost on new clients is typically 1,500–3,000 PLN/mo for a growing salon. ManicBot is 45–90 PLN/mo flat, forever.",
-        "Channels where clients actually live. Polish nail clients message salons on Instagram and WhatsApp. Booksy makes them download yet another app. ManicBot answers in those same DMs.",
-        "Your clients are yours. Booksy markets your salon in its app and then takes 30% on the first visit — the client \"belongs\" to Booksy. ManicBot bookings flow through your own bot, IG account, and phone number.",
-      ],
-    },
-    faqs: {
-      pl: [
-        { q: "Czy ManicBot zastąpi Booksy bez utraty istniejących klientów?", a: "Tak — możesz prowadzić oba systemy równolegle przez 30–60 dni. Klienci z Booksy nadal Cię znajdują przez marketplace; nowi rezerwują przez ManicBot na Telegramie/IG/WhatsAppie bez 30% prowizji. Po sezonowym cyklu większość salonów rezygnuje z Booksy." },
-        { q: "Czy są klienci, którzy WOLĄ rezerwować przez Booksy?", a: "Tak — głównie ci, którzy używają Booksy jako «odkrywaczy» (znajdują nowy salon w obcym mieście). Dla regularnych klientów, którzy już Cię znają, Telegram/IG/WhatsApp są wygodniejsze." },
-        { q: "Co z tym, że Booksy promuje mój salon w marketplace?", a: "Promocja nie jest darmowa — to dokładnie ten 30% Boost który płacisz. Wielu właścicieli liczy ROI i odkrywa, że ten sam budżet na Instagram Ads daje więcej nowych klientów bez stałego haraczu." },
-      ],
-      ru: [
-        { q: "Можно ли заменить Booksy на ManicBot, не теряя существующих клиентов?", a: "Да — можно вести оба системы параллельно 30–60 дней. Клиенты из Booksy продолжают находить вас через marketplace; новые записываются через ManicBot в Telegram/IG/WhatsApp без 30% комиссии. После сезонного цикла большинство салонов уходят с Booksy." },
-        { q: "Есть ли клиенты, которые ПРЕДПОЧИТАЮТ Booksy?", a: "Да — в основном те, кто использует Booksy как «discovery» (находит новый салон в чужом городе). Для постоянных клиентов, которые вас уже знают, Telegram/IG/WhatsApp удобнее." },
-        { q: "А как же продвижение моего салона в Booksy marketplace?", a: "Продвижение не бесплатное — это именно тот 30% Boost, который вы платите. Многие владельцы считают ROI и обнаруживают, что тот же бюджет на Instagram Ads даёт больше новых клиентов без постоянной дани." },
-      ],
-      ua: [
-        { q: "Чи можна замінити Booksy на ManicBot, не втрачаючи існуючих клієнтів?", a: "Так — можна вести обидві системи паралельно 30–60 днів. Клієнти з Booksy продовжують знаходити вас через marketplace; нові записуються через ManicBot у Telegram/IG/WhatsApp без 30% комісії. Після сезонного циклу більшість салонів йдуть з Booksy." },
-        { q: "Чи є клієнти, які НАДАЮТЬ ПЕРЕВАГУ Booksy?", a: "Так — переважно ті, хто використовує Booksy як «discovery» (знаходить новий салон у чужому місті). Для постійних клієнтів, які вас уже знають, Telegram/IG/WhatsApp зручніші." },
-        { q: "А як же просування мого салону у Booksy marketplace?", a: "Просування не безкоштовне — це саме той 30% Boost, який ви платите. Багато власників рахують ROI і виявляють, що той самий бюджет на Instagram Ads дає більше нових клієнтів без постійної данини." },
-      ],
-      en: [
-        { q: "Can I replace Booksy with ManicBot without losing existing clients?", a: "Yes — run both for 30–60 days. Booksy-discovered clients keep finding you through the marketplace; new clients book via ManicBot on Telegram/IG/WhatsApp without the 30% commission. After one seasonal cycle most salons drop Booksy." },
-        { q: "Are there clients who actually prefer Booksy?", a: "Yes — mostly those who use Booksy as a discovery tool (finding a new salon in an unfamiliar city). For regulars who already know you, Telegram/IG/WhatsApp is more convenient." },
-        { q: "What about Booksy promoting my salon in the marketplace?", a: "The promotion isn't free — it's exactly the 30% Boost you pay. Many owners run the ROI math and find that the same budget spent on Instagram Ads brings more new clients without a recurring cut." },
-      ],
-    },
-  },
   {
     slug: "manicbot-vs-fresha",
     competitorName: "Fresha",

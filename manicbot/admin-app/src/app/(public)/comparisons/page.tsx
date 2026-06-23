@@ -21,17 +21,17 @@ function pickLang(raw: string | string[] | undefined): Lang {
 }
 
 const TITLES: Record<Lang, string> = {
-  pl: "Porównania ManicBot vs konkurencja — Booksy, Fresha, Yclients, Versum",
-  ru: "Сравнения ManicBot и конкурентов — Booksy, Fresha, Yclients, Versum",
-  ua: "Порівняння ManicBot і конкурентів — Booksy, Fresha, Yclients, Versum",
-  en: "ManicBot vs competitors — Booksy, Fresha, Yclients, Versum compared",
+  pl: "Porównania ManicBot vs konkurencja — Fresha, Yclients, Versum",
+  ru: "Сравнения ManicBot и конкурентов — Fresha, Yclients, Versum",
+  ua: "Порівняння ManicBot і конкурентів — Fresha, Yclients, Versum",
+  en: "ManicBot vs competitors — Fresha, Yclients, Versum compared",
 };
 
 const DESCRIPTIONS: Record<Lang, string> = {
-  pl: "Szczegółowe porównania ManicBot z głównymi platformami booking dla salonów: Booksy, Fresha, Yclients i Versum. Ceny, kanały, prowizje i funkcje AI w jednym miejscu.",
-  ru: "Подробные сравнения ManicBot с основными booking-платформами для салонов: Booksy, Fresha, Yclients и Versum. Цены, каналы, комиссии и AI-функции в одном месте.",
-  ua: "Детальні порівняння ManicBot з основними booking-платформами для салонів: Booksy, Fresha, Yclients і Versum. Ціни, канали, комісії та AI-функції в одному місці.",
-  en: "Detailed comparisons of ManicBot against the major salon booking platforms: Booksy, Fresha, Yclients, and Versum. Pricing, channels, commissions, and AI features in one place.",
+  pl: "Szczegółowe porównania ManicBot z głównymi platformami booking dla salonów: Fresha, Yclients i Versum. Ceny, kanały, prowizje i funkcje AI w jednym miejscu.",
+  ru: "Подробные сравнения ManicBot с основными booking-платформами для салонов: Fresha, Yclients и Versum. Цены, каналы, комиссии и AI-функции в одном месте.",
+  ua: "Детальні порівняння ManicBot з основними booking-платформами для салонів: Fresha, Yclients і Versum. Ціни, канали, комісії та AI-функції в одному місці.",
+  en: "Detailed comparisons of ManicBot against the major salon booking platforms: Fresha, Yclients, and Versum. Pricing, channels, commissions, and AI features in one place.",
 };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
@@ -42,8 +42,8 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     description: DESCRIPTIONS[lang],
     path: "/comparisons",
     keywords: [
-      "Booksy alternatywa", "альтернатива Booksy",
       "Fresha alternative", "Yclients alternative",
+      "Versum alternatywa",
       "porównanie booking salonu",
       "сравнение booking платформ",
     ],

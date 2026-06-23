@@ -68,7 +68,6 @@ const ADMIN_APP_PUBLIC_ROUTES = [
   { loc: '/comparisons', priority: '0.8', changefreq: 'monthly' },
   // Individual comparison pages — added inline so the data file stays the
   // single source of truth for available competitors.
-  { loc: '/comparisons/manicbot-vs-booksy',   priority: '0.7', changefreq: 'monthly' },
   { loc: '/comparisons/manicbot-vs-fresha',   priority: '0.7', changefreq: 'monthly' },
   { loc: '/comparisons/manicbot-vs-yclients', priority: '0.7', changefreq: 'monthly' },
   { loc: '/comparisons/manicbot-vs-versum',   priority: '0.7', changefreq: 'monthly' },
@@ -150,7 +149,6 @@ export const ROUTE_LASTMOD = {
   '/pricing':     '2026-05-20',
   '/about':       '2026-05-20',
   '/comparisons': '2026-05-20',
-  '/comparisons/manicbot-vs-booksy':   '2026-05-20',
   '/comparisons/manicbot-vs-fresha':   '2026-05-20',
   '/comparisons/manicbot-vs-yclients': '2026-05-20',
   '/comparisons/manicbot-vs-versum':   '2026-05-20',
@@ -456,7 +454,6 @@ const LLMS_TOP_GUIDES = [
  * @type {Array<{ slug: string; competitor: string; hook: string }>}
  */
 const LLMS_COMPARISONS = [
-  { slug: 'manicbot-vs-booksy',   competitor: 'Booksy',   hook: '0% commission vs 30% Boost; Telegram + IG + WhatsApp booking vs Booksy app only; 45 PLN/mo vs ~145 PLN/mo.' },
   { slug: 'manicbot-vs-yclients', competitor: 'Yclients', hook: 'EU-region D1 storage and Polish-first UX vs Russia-domiciled platform; native multi-channel inbox vs paid 3rd-party messenger integrations.' },
   { slug: 'manicbot-vs-fresha',   competitor: 'Fresha',   hook: '0% commission forever vs 20% Fresha new-client fee; Telegram + AI receptionist vs marketplace funnel; flat 45-90 PLN/mo vs per-message WhatsApp fees.' },
   { slug: 'manicbot-vs-versum',   competitor: 'Versum',   hook: 'Active product roadmap vs Booksy-owned legacy; modern conversational booking vs SMS+forms; transparent pricing vs quote-only.' },
@@ -485,7 +482,7 @@ const LLMS_FAQS = [
  *
  * SEO audit 2026-05-20 P1-7 (initial) + 2026-05-20 P1-8 (expansion).
  * Adds: ## Top guides (10 blog articles with one-line summaries),
- * ## Comparisons (vs Booksy / Yclients / Fresha / Versum),
+ * ## Comparisons (vs Yclients / Fresha / Versum),
  * ## Frequently asked questions (6 short Q&A pairs).
  *
  * @param {string} origin

@@ -545,12 +545,14 @@ describe('seo', () => {
       expect(txt).toContain('/blog/booking-conversion');
     });
 
-    it('emits ## Comparisons with all 4 competitor pages', () => {
+    it('emits ## Comparisons with the competitor pages (Booksy removed)', () => {
       expect(txt).toContain('## Comparisons');
-      expect(txt).toContain('/comparisons/manicbot-vs-booksy');
       expect(txt).toContain('/comparisons/manicbot-vs-yclients');
       expect(txt).toContain('/comparisons/manicbot-vs-fresha');
       expect(txt).toContain('/comparisons/manicbot-vs-versum');
+      // The Booksy comparison page was pulled from prod — it must not be
+      // advertised to LLM crawlers (the page now 404s).
+      expect(txt).not.toContain('/comparisons/manicbot-vs-booksy');
     });
 
     it('emits ## Frequently asked questions with at least 6 Q&A pairs', () => {
@@ -608,8 +610,10 @@ describe('seo', () => {
 
     it('links to blog guides, comparison pages and city directories', () => {
       expect(html).toContain('/blog/instagram-bookings-2026');
-      expect(html).toContain('/comparisons/manicbot-vs-booksy');
+      expect(html).toContain('/comparisons/manicbot-vs-fresha');
       expect(html).toContain('/salons/');
+      // Booksy comparison page is pulled — no link to a 404.
+      expect(html).not.toContain('/comparisons/manicbot-vs-booksy');
     });
 
     describe('JSON-LD', () => {

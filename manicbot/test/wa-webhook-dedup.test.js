@@ -46,7 +46,10 @@ vi.mock('../src/channels/meta-verify.js', () => ({
 
 vi.mock('../src/channels/whatsapp.js', () => ({
   WhatsAppAdapter: class {
-    constructor() { this.normalize = normalizeSpy; }
+    constructor() {
+      this.normalize = normalizeSpy;     // back-compat single-message path
+      this.normalizeOne = normalizeSpy;  // per-message path used by the HTTP layer
+    }
   },
 }));
 
@@ -181,6 +184,48 @@ describe('WhatsApp webhook — inbound dedup by wamid', () => {
 
     expect(claimSpy).toHaveBeenCalledTimes(2);
     expect(handleInboundSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('processes EVERY message in a batched change, not just the first', async () => {
+    // Two fresh messages in ONE change. The old normalize(entry) only ever read
+    // messages[0], so messages[1..] were claimed (24h TTL) then dropped — the
+    // customer's second message vanished and could never be re-delivered.
+    claimSpy.mockResolvedValue(true);
+    normalizeSpy.mockImplementation((msg) => ({ channel: 'whatsapp', tenantId: 't_test', _wamid: msg?.id }));
+    const url = new URL('https://manicbot.com/webhook/wa');
+    const execCtx = makeExecCtx();
+    const res = await tryMetaWebhooks(makeReq(buildWAEntry([WAMID_A, WAMID_B])), env, url, execCtx);
+    expect(res?.status).toBe(200);
+    await Promise.all(execCtx._tasks);
+
+    expect(claimSpy).toHaveBeenCalledTimes(2);
+    expect(handleInboundSpy).toHaveBeenCalledTimes(2);
+    const handledIds = handleInboundSpy.mock.calls.map((c) => c[1]?._wamid);
+    expect(handledIds).toEqual(expect.arrayContaining([WAMID_A, WAMID_B]));
+  });
+
+  it('processes messages spread across MULTIPLE changes in one entry', async () => {
+    // The old code re-read changes[0].messages[0] on every change iteration, so
+    // a 2-change entry double-handled change[0] and never touched change[1].
+    claimSpy.mockResolvedValue(true);
+    normalizeSpy.mockImplementation((msg) => ({ channel: 'whatsapp', tenantId: 't_test', _wamid: msg?.id }));
+    const body = {
+      entry: [{
+        id: 'WA_BUSINESS_ACCOUNT_ID',
+        changes: [
+          { value: { metadata: { phone_number_id: PHONE_NUMBER_ID }, messages: [{ from: '1', id: WAMID_A, timestamp: '1700000000', type: 'text', text: { body: 'a' } }] } },
+          { value: { metadata: { phone_number_id: PHONE_NUMBER_ID }, messages: [{ from: '1', id: WAMID_B, timestamp: '1700000000', type: 'text', text: { body: 'b' } }] } },
+        ],
+      }],
+    };
+    const url = new URL('https://manicbot.com/webhook/wa');
+    const execCtx = makeExecCtx();
+    const res = await tryMetaWebhooks(makeReq(body), env, url, execCtx);
+    expect(res?.status).toBe(200);
+    await Promise.all(execCtx._tasks);
+
+    const handledIds = handleInboundSpy.mock.calls.map((c) => c[1]?._wamid);
+    expect(handledIds).toEqual(expect.arrayContaining([WAMID_A, WAMID_B]));
   });
 
   it('forwards the DB binding to claimWAMessage so the atomic D1 path engages (A4)', async () => {

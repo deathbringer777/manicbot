@@ -71,25 +71,29 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               const phoneNumberId = change.value?.metadata?.phone_number_id;
               if (!phoneNumberId) continue;
 
-              // Dedup by wamid. Meta retries WA webhooks for up to 24h on 5xx —
-              // without dedup every retry replays the message (duplicate AI
-              // replies, duplicate bookings, duplicate analytics). Status
-              // updates (delivered/read receipts) carry no message id; we
-              // claim once per message, never on receipts.
-              const wamids = (change.value?.messages ?? [])
-                .map(m => m?.id)
-                .filter(Boolean);
-              if (wamids.length) {
-                let anyFresh = false;
-                for (const wamid of wamids) {
-                  // Forward DB so the dual/D1 dedup backend can claim atomically (KV has no CAS).
-                  const fresh = await claimWAMessage(
-                    { MANICBOT: env.MANICBOT, DB: env.DB }, String(phoneNumberId), String(wamid),
-                  );
-                  if (fresh) anyFresh = true;
-                }
-                if (!anyFresh) continue; // every message in this change is a replay
+              const messages = change.value?.messages ?? [];
+              const statuses = change.value?.statuses ?? [];
+
+              // Dedup by wamid — PER MESSAGE. Meta retries WA webhooks for up to
+              // 24h on 5xx (without dedup every retry replays: duplicate AI
+              // replies, bookings, analytics), AND a single change can batch
+              // several inbound messages. Claim each independently and keep the
+              // fresh ones, so a batched webhook never drops messages[1..]
+              // (a claimed-but-unprocessed wamid can never be re-delivered).
+              // Status updates (delivered/read receipts) carry no message id and
+              // are never claimed.
+              const freshMessages = [];
+              for (const m of messages) {
+                const wamid = m?.id;
+                if (!wamid) { freshMessages.push(m); continue; } // no id → can't dedup, process once
+                // Forward DB so the dual/D1 dedup backend can claim atomically (KV has no CAS).
+                const fresh = await claimWAMessage(
+                  { MANICBOT: env.MANICBOT, DB: env.DB }, String(phoneNumberId), String(wamid),
+                );
+                if (fresh) freshMessages.push(m);
               }
+              // Pure replay AND no delivery receipts → nothing to do.
+              if (!freshMessages.length && !statuses.length) continue;
 
               const resolved = await resolveTenantFromWhatsApp(ec, phoneNumberId);
               if (!resolved) {
@@ -99,7 +103,7 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               // Delivery receipts (statuses[]) carry the wamid of OUR outbound
               // message — advance its persisted delivery_state. Correlation works
               // now that the external_msg_id .data-hop bug is fixed (Phase 1).
-              for (const st of change.value?.statuses ?? []) {
+              for (const st of statuses) {
                 if (!st?.id) continue;
                 if (st.status === 'delivered' || st.status === 'read') {
                   await markOutboundDeliveryState(ec, resolved.tenantId, String(st.id), 'delivered');
@@ -110,6 +114,8 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
                   );
                 }
               }
+              if (!freshMessages.length) continue; // status-only change — receipts handled above
+
               const channelConfig = await getChannelConfig(ec, resolved.tenantId, 'whatsapp', env.BOT_ENCRYPTION_KEY || null);
               if (!channelConfig) continue;
               const adapter = new WhatsAppAdapter({ tenantId: resolved.tenantId, channelConfig });
@@ -117,8 +123,11 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
               if (!ctx) continue;
               adapter._ctx = ctx; // give adapter access to db for 24h window check
               await initServices(ctx);
-              const inbound = adapter.normalize(entry);
-              if (inbound) await handleInbound(ctx, inbound);
+              // Process EVERY fresh message in this change — not just messages[0].
+              for (const m of freshMessages) {
+                const inbound = adapter.normalizeOne(m, change.value, entry);
+                if (inbound) await handleInbound(ctx, inbound);
+              }
             }
           }
         } catch (e) {

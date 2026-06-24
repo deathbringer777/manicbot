@@ -53,18 +53,35 @@ export class WhatsAppAdapter {
   // ── normalize ──────────────────────────────────────────────────────────────
 
   /**
-   * Convert a raw WhatsApp webhook entry into an InboundMessage.
+   * Convert the FIRST message of a raw WhatsApp webhook entry into an
+   * InboundMessage. Back-compat single-message entry point.
+   *
    * WA sends: { object: 'whatsapp_business_account', entry: [{ changes: [{ value: { messages, metadata } }] }] }
+   * A single change can batch MULTIPLE inbound messages, so the HTTP webhook
+   * layer iterates and calls normalizeOne() per message — a lone normalize()
+   * call only ever sees messages[0] and would silently drop messages[1..].
    *
    * @param {object} entry - A single entry from the webhook payload
    * @returns {import('./types.js').InboundMessage|null}
    */
   normalize(entry) {
-    try {
-      const change = entry?.changes?.[0]?.value;
-      if (!change?.messages?.length) return null;
+    const changeValue = entry?.changes?.[0]?.value;
+    const msg = changeValue?.messages?.[0];
+    if (!msg) return null;
+    return this.normalizeOne(msg, changeValue, entry);
+  }
 
-      const msg = change.messages[0];
+  /**
+   * Convert ONE WhatsApp message object into an InboundMessage.
+   *
+   * @param {object} msg - A single element of change.value.messages[]
+   * @param {object} changeValue - The enclosing change.value (carries the contacts/profile array)
+   * @param {object} entry - The full webhook entry, preserved as rawEvent
+   * @returns {import('./types.js').InboundMessage|null}
+   */
+  normalizeOne(msg, changeValue, entry) {
+    try {
+      if (!msg) return null;
       const from = msg.from; // phone number string
       const ts = parseInt(msg.timestamp ?? '0', 10) * 1000 || Date.now();
 
@@ -110,8 +127,8 @@ export class WhatsAppAdapter {
           break;
       }
 
-      // Profile / display name from contacts array in change.value
-      const profile = change.contacts?.find(c => c.wa_id === from);
+      // Profile / display name from the contacts array in change.value
+      const profile = changeValue?.contacts?.find(c => c.wa_id === from);
       const userName = profile?.profile?.name ?? null;
 
       return makeInbound({

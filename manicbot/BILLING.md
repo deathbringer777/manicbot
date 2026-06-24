@@ -191,13 +191,32 @@ stays authoritative for execution): `pending_plan`, `pending_price_id`, `pending
 ## Cancellation & divergence repair
 
 **Owner cancellation** (retention flow, `billing` router): `requestCancellation` →
-`acceptRetentionOffer` (counter-offer) → `confirmCancellation` (flip Stripe
-`cancel_at_period_end`). The eligibility/cancel guards key off the **live Stripe**
-`sub.cancel_at_period_end`, never the denormalized `tenants.cancel_at_period_end`
-flag — the local flag can drift (dropped webhook / out-of-band un-cancel) and
-trusting it would trap an owner whose Stripe sub is still renewing in a permanent
-`already_cancelling` error while the card keeps being charged. A stale local flag
-that disagrees with Stripe therefore self-heals: the owner can still cancel.
+`acceptRetentionOffer` (counter-offer) → `confirmCancellation`. The eligibility/cancel
+guards key off the **live Stripe** `sub.cancel_at_period_end`, never the denormalized
+`tenants.cancel_at_period_end` flag — the local flag can drift (dropped webhook /
+out-of-band un-cancel) and trusting it would trap an owner whose Stripe sub is still
+renewing in a permanent `already_cancelling` error while the card keeps being charged.
+A stale local flag that disagrees with Stripe therefore self-heals: the owner can still
+cancel.
+
+`confirmCancellation` keeps access **until the date the tenant actually paid through**:
+
+- **Healthy sub** (`active`/`trialing`) → `cancel_at_period_end`: access runs to
+  `current_period_end` (already paid for), then Stripe deletes the sub.
+- **Dunning sub** (`past_due`/`unpaid` — a renewal payment failed) → cancelled
+  **immediately** (`cancelSubscriptionNow`): the current period was never paid, so
+  there's nothing extra to grant. A dunning customer is now allowed to cancel
+  (`requestCancellation` accepts `past_due`/`unpaid`) — trapping them in
+  `subscription_not_cancelable` is exactly what kept Stripe dunning them.
+
+In **both** cases (and in force-cancel + the reconcile cron) any **open/unpaid invoices
+are voided** (`voidOpenInvoicesForCustomer`). Cancelling a subscription does NOT void an
+already-finalised invoice, so without this the failed renewal keeps getting Stripe
+retry charges + "update your card" emails after the customer has left. Voiding is
+best-effort — it never blocks the cancel.
+
+> Stripe-side companion: set Dashboard → Billing → *Manage failed payments* → "If all
+> retries fail → **Cancel subscription**" so no sub sits in `past_due` dunning forever.
 
 **God-Mode force-cancel** (`billing.forceCancelSubscription`, `adminProcedure`):
 operator escape hatch for the "cancelled with us but Stripe keeps charging"
@@ -226,3 +245,4 @@ unattended counterpart (see Lifecycle → Cron task).
 | `updateTenantBilling(ctx, …)`| `billing/storage.js`         | Update billing in D1                      |
 | `phaseBillingReconcileStripe(ctx)` | `handlers/cron.js`     | Cancel live subs still charging locally-cancelled tenants (daily) |
 | `cancelSubscriptionNow(key, id)` | `admin-app/.../lib/stripe.ts` | `DELETE` a subscription — stop billing immediately |
+| `voidOpenInvoicesForCustomer(key, cus)` | `billing/stripe.js` + `admin-app/.../lib/stripe.ts` | Void open/unpaid invoices on cancel — stop dunning retries + emails |

@@ -8,7 +8,7 @@
  * in stripe-lib-version.test.ts.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getBalance, listRecentCharges, listPayouts, listDisputes } from "~/server/lib/stripe";
+import { getBalance, listRecentCharges, listPayouts, listDisputes, voidOpenInvoicesForCustomer } from "~/server/lib/stripe";
 
 const KEY = "sk_test_fin";
 
@@ -97,5 +97,43 @@ describe("admin-app stripe.ts — live financial read helpers", () => {
 
     expect(res.data[0]).toMatchObject({ id: "dp_1", amount: 4500, currency: "pln", reason: "fraudulent", status: "needs_response", created: 1500, dueBy: 1800 });
     expect(urlOf(fetchMock.mock.calls[0]!).pathname).toBe("/v1/disputes");
+  });
+
+  it("voidOpenInvoicesForCustomer lists status=open then POSTs /void for each", async () => {
+    // 1st call: list open invoices for the customer
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [{ id: "in_1" }, { id: "in_2" }] }),
+    });
+    // 2nd + 3rd calls: void each
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: "in_1", status: "void" }) });
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: "in_2", status: "void" }) });
+
+    const res = await voidOpenInvoicesForCustomer(KEY, "cus_abc");
+
+    expect(res.voided).toEqual(["in_1", "in_2"]);
+    const listUrl = urlOf(fetchMock.mock.calls[0]!);
+    expect(listUrl.pathname).toBe("/v1/invoices");
+    expect(listUrl.searchParams.get("customer")).toBe("cus_abc");
+    expect(listUrl.searchParams.get("status")).toBe("open");
+    expect(urlOf(fetchMock.mock.calls[1]!).pathname).toBe("/v1/invoices/in_1/void");
+    expect(urlOf(fetchMock.mock.calls[2]!).pathname).toBe("/v1/invoices/in_2/void");
+  });
+
+  it("voidOpenInvoicesForCustomer skips an invoice whose void fails (best-effort)", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: [{ id: "in_1" }, { id: "in_2" }] }) });
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({ error: { message: "cannot void" } }) });
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: "in_2", status: "void" }) });
+
+    const res = await voidOpenInvoicesForCustomer(KEY, "cus_abc");
+
+    expect(res.voided).toEqual(["in_2"]);
+  });
+
+  it("voidOpenInvoicesForCustomer returns empty (no list call) without a customer id", async () => {
+    const res = await voidOpenInvoicesForCustomer(KEY, "");
+    expect(res.voided).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

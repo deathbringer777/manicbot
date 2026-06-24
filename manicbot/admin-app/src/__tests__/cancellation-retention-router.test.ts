@@ -34,6 +34,8 @@ vi.mock("~/server/lib/stripe", () => ({
   ensureCoupon: vi.fn(),
   applyCouponToSubscription: vi.fn(),
   cancelSubscriptionAtPeriodEnd: vi.fn(),
+  cancelSubscriptionNow: vi.fn(async () => ({ id: "sub_demo_123", status: "canceled" })),
+  voidOpenInvoicesForCustomer: vi.fn(async () => ({ voided: [] })),
 }));
 
 vi.mock("~/server/email/emailService", () => ({
@@ -53,6 +55,8 @@ import {
   ensureCoupon,
   applyCouponToSubscription,
   cancelSubscriptionAtPeriodEnd,
+  cancelSubscriptionNow,
+  voidOpenInvoicesForCustomer,
 } from "~/server/lib/stripe";
 import { sendSubscriptionCancelledEmail } from "~/server/email/emailService";
 import {
@@ -202,11 +206,25 @@ describe("requestCancellation — eligibility branches", () => {
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "already_cancelling" });
   });
 
-  it("rejects when subscription status is past_due", async () => {
-    const { db } = createDbMock([[tenantRow()]]);
+  it("ALLOWS cancelling a past_due (dunning) subscription — the customer must be able to leave", async () => {
+    const { db } = createDbMock([[tenantRow()], []]);
     vi.mocked(retrieveSubscription).mockResolvedValueOnce({
       id: SUB_ID,
       status: "past_due",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
+    const caller = ownerCaller(db);
+    const res = await caller.requestCancellation({ tenantId: TENANT });
+    expect(res.stripeSubId).toBe(SUB_ID);
+    expect(res.currentInterval).toBe("month");
+  });
+
+  it("rejects an uncancelable status (incomplete_expired)", async () => {
+    const { db } = createDbMock([[tenantRow()]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "incomplete_expired",
       cancel_at_period_end: false,
       items: { data: [{ price: { recurring: { interval: "month" } } }] },
     });
@@ -215,7 +233,7 @@ describe("requestCancellation — eligibility branches", () => {
       caller.requestCancellation({ tenantId: TENANT }),
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message: "subscription_not_cancelable:past_due",
+      message: "subscription_not_cancelable:incomplete_expired",
     });
   });
 
@@ -737,6 +755,53 @@ describe("confirmCancellation — validation + happy path", () => {
     expect(res.ok).toBe(true);
     expect(cancelSubscriptionAtPeriodEnd).toHaveBeenCalledWith("sk_test_xxx", SUB_ID);
     expect(updateCalls.some((c) => c.values.cancelAtPeriodEnd === 1)).toBe(true);
+  });
+
+  // Dunning customer leaves: cancel NOW + void the failed invoice so Stripe
+  // stops retrying + emailing. Access ends at the last paid-through date.
+  it("past_due sub → cancels immediately, voids open invoices, marks inactive", async () => {
+    const { db, updateCalls } = createDbMock([[tenantRow({ stripeCustomerId: "cus_x" })]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "past_due",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
+    const caller = ownerCaller(db);
+    const res = await caller.confirmCancellation({
+      tenantId: TENANT,
+      reasonTags: ["too_expensive"],
+      retentionOfferShown: false,
+    });
+    expect(res).toMatchObject({ ok: true, immediate: true, cancelAt: null });
+    expect(cancelSubscriptionNow).toHaveBeenCalledWith("sk_test_xxx", SUB_ID);
+    expect(cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
+    expect(voidOpenInvoicesForCustomer).toHaveBeenCalledWith("sk_test_xxx", "cus_x");
+    expect(updateCalls.some((c) =>
+      c.values.billingStatus === "inactive" && c.values.stripeSubscriptionId === null,
+    )).toBe(true);
+  });
+
+  it("healthy sub → cancels at period end AND voids any open invoices", async () => {
+    const { db } = createDbMock([[tenantRow({ stripeCustomerId: "cus_y" })]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: SUB_ID,
+      status: "active",
+      cancel_at_period_end: false,
+      items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    });
+    vi.mocked(cancelSubscriptionAtPeriodEnd).mockResolvedValueOnce({
+      id: SUB_ID, cancel_at_period_end: true, current_period_end: NOW + 7 * 86400,
+    });
+    const caller = ownerCaller(db);
+    const res = await caller.confirmCancellation({
+      tenantId: TENANT,
+      reasonTags: ["temporary_break"],
+      retentionOfferShown: false,
+    });
+    expect(res).toMatchObject({ ok: true, immediate: false });
+    expect(cancelSubscriptionNow).not.toHaveBeenCalled();
+    expect(voidOpenInvoicesForCustomer).toHaveBeenCalledWith("sk_test_xxx", "cus_y");
   });
 
   it("fires sendSubscriptionCancelledEmail to billingEmail (fire-and-forget)", async () => {

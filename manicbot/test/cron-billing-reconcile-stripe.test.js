@@ -27,10 +27,11 @@ vi.mock('../src/billing/stripe.js', async (importActual) => {
     ...actual,
     getSubscription: vi.fn(),
     cancelSubscriptionAtPeriodEnd: vi.fn(async () => ({ id: 'sub', cancel_at_period_end: true })),
+    voidOpenInvoicesForCustomer: vi.fn(async () => ({ voided: [] })),
   };
 });
 
-const { getSubscription, cancelSubscriptionAtPeriodEnd } = await import('../src/billing/stripe.js');
+const { getSubscription, cancelSubscriptionAtPeriodEnd, voidOpenInvoicesForCustomer } = await import('../src/billing/stripe.js');
 const { phaseBillingReconcileStripe } = await import('../src/handlers/cron.js');
 
 const DAY = 86400;
@@ -50,6 +51,7 @@ async function seedTenant(ctx, id, overrides = {}) {
     plan: 'pro',
     billingStatus: 'inactive',
     stripeSubscriptionId: `sub_${id}`,
+    stripeCustomerId: `cus_${id}`,
     cancelAtPeriodEnd: false,
     updatedAt: OLD,
     createdAt: OLD,
@@ -61,6 +63,8 @@ beforeEach(() => {
   getSubscription.mockReset();
   cancelSubscriptionAtPeriodEnd.mockReset();
   cancelSubscriptionAtPeriodEnd.mockResolvedValue({ id: 'sub', cancel_at_period_end: true });
+  voidOpenInvoicesForCustomer.mockReset();
+  voidOpenInvoicesForCustomer.mockResolvedValue({ voided: [] });
 });
 
 describe('phaseBillingReconcileStripe — divergence repair', () => {
@@ -72,6 +76,8 @@ describe('phaseBillingReconcileStripe — divergence repair', () => {
     await phaseBillingReconcileStripe(ctx, Date.now());
 
     expect(cancelSubscriptionAtPeriodEnd).toHaveBeenCalledWith('sk_test_x', 'sub_t_div');
+    // Open/unpaid invoices are voided too so dunning retries + emails stop.
+    expect(voidOpenInvoicesForCustomer).toHaveBeenCalledWith('sk_test_x', 'cus_t_div');
     const t = await getTenant(ctx, 't_div');
     expect(t.cancelAtPeriodEnd).toBe(true);
   });

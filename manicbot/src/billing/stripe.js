@@ -402,6 +402,45 @@ export async function cancelSubscriptionAtPeriodEnd(secretKey, subscriptionId) {
 }
 
 /**
+ * Void every still-open invoice for a customer. Cancelling a subscription does
+ * NOT void invoices Stripe already finalised, so an unpaid renewal keeps getting
+ * dunning retries + emails even after the sub is gone. The reconcile cron voids
+ * them so collection stops. Best-effort per invoice — one bad void never aborts
+ * the rest. Mirrors admin-app `voidOpenInvoicesForCustomer`.
+ *
+ * @param {string} secretKey
+ * @param {string} customerId
+ * @returns {Promise<{ voided: string[] }>}
+ */
+export async function voidOpenInvoicesForCustomer(secretKey, customerId) {
+  const voided = [];
+  if (!customerId) return { voided };
+  const listRes = await fetch(
+    `${STRIPE_API}/invoices?customer=${encodeURIComponent(customerId)}&status=open&limit=100`,
+    { method: 'GET', headers: authHeader(secretKey), signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS) },
+  );
+  if (!listRes.ok) {
+    const err = await listRes.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Stripe invoices list failed: ${listRes.status}`);
+  }
+  const list = await listRes.json();
+  for (const inv of Array.isArray(list.data) ? list.data : []) {
+    if (!inv?.id) continue;
+    try {
+      const r = await fetch(`${STRIPE_API}/invoices/${encodeURIComponent(inv.id)}/void`, {
+        method: 'POST',
+        headers: { ...authHeader(secretKey), 'Content-Type': 'application/x-www-form-urlencoded' },
+        signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+      });
+      if (r.ok) voided.push(inv.id);
+    } catch {
+      // best-effort: skip an invoice that can't be voided
+    }
+  }
+  return { voided };
+}
+
+/**
  * Map Stripe subscription status to internal BILLING_STATUS.
  */
 export function mapStripeStatusToBilling(stripeStatus) {

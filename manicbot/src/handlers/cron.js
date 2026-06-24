@@ -31,7 +31,7 @@ import { send } from '../telegram.js';
 import { getLang } from '../services/chat.js';
 import { initServices, getConfig } from '../services/services.js';
 import { checkBillingExpiry, billingLockoutDeadline } from '../billing/lifecycle.js';
-import { getSubscription, cancelSubscriptionAtPeriodEnd } from '../billing/stripe.js';
+import { getSubscription, cancelSubscriptionAtPeriodEnd, voidOpenInvoicesForCustomer } from '../billing/stripe.js';
 import { updateTenantBilling } from '../billing/storage.js';
 import { notifyTenantOwner } from '../services/userNotify.js';
 import { renewExpiringGoogleWatches, syncAppointmentCalendar } from '../services/google-calendar-oauth.js';
@@ -1581,7 +1581,7 @@ export async function phaseBillingReconcileStripe(ctx, _now) {
 
   const candidates = await dbAll(
     ctx,
-    `SELECT id, stripe_subscription_id FROM tenants WHERE updated_at < ? AND stripe_subscription_id IS NOT NULL AND (billing_status = 'inactive' OR billing_status = 'canceled') LIMIT ${STRIPE_RECONCILE_BATCH}`,
+    `SELECT id, stripe_subscription_id, stripe_customer_id FROM tenants WHERE updated_at < ? AND stripe_subscription_id IS NOT NULL AND (billing_status = 'inactive' OR billing_status = 'canceled') LIMIT ${STRIPE_RECONCILE_BATCH}`,
     cutoff,
   );
   if (!candidates?.length) return;
@@ -1606,12 +1606,28 @@ export async function phaseBillingReconcileStripe(ctx, _now) {
 
       await cancelSubscriptionAtPeriodEnd(ctx.stripeSecretKey, row.stripe_subscription_id);
       await updateTenantBilling(ctx, row.id, { cancelAtPeriodEnd: true, updatedAt: ts });
+      // Void any open/unpaid invoices so dunning retries + emails stop too —
+      // cancelling the sub alone does not void an already-finalised invoice.
+      let voidedCount = 0;
+      if (row.stripe_customer_id) {
+        try {
+          const { voided } = await voidOpenInvoicesForCustomer(ctx.stripeSecretKey, row.stripe_customer_id);
+          voidedCount = voided.length;
+        } catch (e) {
+          log.warn('handlers.cron', {
+            action: 'billing_reconcile_stripe_void_failed',
+            tenantId: row.id,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
       repaired += 1;
       log.warn('handlers.cron', {
         action: 'billing_reconcile_stripe_divergence',
         tenantId: row.id,
         subscriptionId: row.stripe_subscription_id,
         liveStatus: sub.status,
+        voidedInvoices: voidedCount,
       });
     } catch (e) {
       log.warn('handlers.cron', {

@@ -319,6 +319,12 @@ export function validateOutput(out) {
   if (typeof out.caption_pl !== 'string' || out.caption_pl.length < 40) {
     throw new Error('captionGen: caption_pl too short');
   }
+  // Instagram rejects captions over 2200 chars (instagram-publish.js); fail
+  // fast here so a runaway caption is caught on the first generation tick
+  // instead of after MAX_ERRORS_PER_SLOT failed Meta round-trips kill the slot.
+  if (out.caption_pl.length > 2000) {
+    throw new Error(`captionGen: caption_pl too long (${out.caption_pl.length} > 2000; IG hard cap 2200)`);
+  }
   if (!Array.isArray(out.hashtags) || out.hashtags.length < 8 || out.hashtags.length > 30) {
     throw new Error(`captionGen: hashtags count out of range (got ${out.hashtags?.length})`);
   }

@@ -546,7 +546,7 @@ export async function runWorkersAIViaRESTOne(ctx, accountId, token, modelId, pro
   });
   if (!res.ok) {
     if (res.status === 429) log.error('ai.rest', new Error('Workers AI REST rate limit (429), trying next model'), { status: 429 });
-    else log.error('ai.rest', new Error(`Workers AI REST error ${res.status}`), { status: res.status, body: await res.text().catch(() => '').slice(0, 200) });
+    else log.error('ai.rest', new Error(`Workers AI REST error ${res.status}`), { status: res.status, body: (await res.text().catch(() => '')).slice(0, 200) });
     return null;
   }
   let data;

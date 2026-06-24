@@ -34,10 +34,6 @@ export function makeICS(ctx, apt, lang) {
 }
 
 const CAL_HMAC_MIN_KEY_LEN = 32;
-// #S6: outstanding signed URLs in customers' calendar apps were minted before
-// HKDF subkeys existed. We accept legacy signatures (raw key) until this date,
-// then strictly require subkey signatures. Clients re-fetch on calendar refresh.
-const LEGACY_HMAC_GRACE_UNTIL_TS = 1781827200; // 2026-06-17 (60 days from #S6 deploy)
 
 // P2-15 — every freshly-minted URL gets an `exp` claim 30 days into the future.
 // Tying it to the HMAC payload means an attacker cannot extend the expiry
@@ -121,15 +117,6 @@ export async function verifyCalendarSig(secret, aptId, ts, sig, exp) {
     if (timingSafeHexEq(expected, sig)) return true;
   } catch { /* fall through */ }
 
-  // #S6 — raw-key signatures only during legacy grace window.
-  if (Math.floor(Date.now() / 1000) < LEGACY_HMAC_GRACE_UNTIL_TS) {
-    try {
-      const enc = new TextEncoder();
-      const rawKey = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-      const expected = await hexSign(rawKey, legacyPayload);
-      if (timingSafeHexEq(expected, sig)) return true;
-    } catch { /* fall through */ }
-  }
   return false;
 }
 

@@ -56,6 +56,7 @@ vi.mock('../src/services/users.js', () => ({
 }));
 
 const { notifyAptStaff, notifyAptStaffAutoConfirmed } = await import('../src/notifications.js');
+const users = await import('../src/services/users.js');
 
 async function seedOwner(ctx, tenantId, webUserId) {
   await ctx.db.prepare(
@@ -182,5 +183,36 @@ describe('notifyAptStaffAutoConfirmed → appointment.confirmed in-app', () => {
       title: 'Запись подтверждена',
       source_id: 'apt_d:appointment.confirmed',
     });
+  });
+});
+
+describe('notifyAptStaff → resilient to a transient recipient-lookup failure', () => {
+  it('still notifies the admin when listMasters throws', async () => {
+    const ctx = makeCtx({ tenantId: 't_r1' });
+    ctx.svc = [{ id: 'mani', name: 'Маникюр', price: 100 }];
+    // Admin resolves; the masters lookup hits a transient D1 error.
+    vi.mocked(users.getAdminId).mockResolvedValueOnce(12345);
+    vi.mocked(users.listMasters).mockRejectedValueOnce(new Error('d1 transient'));
+
+    const apt = { id: 'apt_r1', tenantId: 't_r1', masterId: 555, svcId: 'mani', date: '2026-05-18', time: '11:00', userName: 'A', userPhone: '+1' };
+    // Before the fix the unguarded `await listMasters` rejected the whole
+    // fan-out — booking saved, client messaged, but nobody on staff told.
+    await expect(notifyAptStaff(ctx, apt, { name: 'A' })).resolves.toBeUndefined();
+
+    const sentTo = telegramSendMock.mock.calls.map((c) => c[1]);
+    expect(sentTo).toContain(12345);
+  });
+
+  it('still notifies the assigned master when getAdminId throws', async () => {
+    const ctx = makeCtx({ tenantId: 't_r2' });
+    ctx.svc = [{ id: 'mani', name: 'Маникюр', price: 100 }];
+    vi.mocked(users.getAdminId).mockRejectedValueOnce(new Error('d1 transient'));
+    vi.mocked(users.listMasters).mockResolvedValueOnce([{ chatId: 555, name: 'M' }]);
+
+    const apt = { id: 'apt_r2', tenantId: 't_r2', masterId: 555, svcId: 'mani', date: '2026-05-18', time: '12:00', userName: 'B', userPhone: '+1' };
+    await expect(notifyAptStaff(ctx, apt, { name: 'B' })).resolves.toBeUndefined();
+
+    const sentTo = telegramSendMock.mock.calls.map((c) => c[1]);
+    expect(sentTo).toContain(555);
   });
 });

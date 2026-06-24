@@ -593,6 +593,34 @@ export async function cancelSubscriptionAtPeriodEnd(
   });
 }
 
+/**
+ * Immediately cancel a subscription (DELETE /v1/subscriptions/{id}). Unlike
+ * `cancelSubscriptionAtPeriodEnd`, this stops billing NOW with no further
+ * renewal charge. Used by the God-Mode force-cancel tool to halt a subscription
+ * that kept charging in Stripe after the tenant was (locally) marked
+ * cancelled/inactive — i.e. when local state and Stripe drifted apart.
+ *
+ * Returns the cancelled subscription (`status: "canceled"`). A 404 means the
+ * subscription is already gone in Stripe — we surface that as `null` so the
+ * caller can treat it as "nothing left to charge" rather than an error.
+ */
+export async function cancelSubscriptionNow(
+  secretKey: string,
+  subscriptionId: string,
+): Promise<{ id: string; status: string; cancel_at_period_end?: boolean } | null> {
+  const res = await fetch(`${STRIPE_API}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: "DELETE",
+    headers: stripeAuthHeaders(secretKey),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (res.status === 404) return null;
+  const json = (await res.json()) as { id: string; status: string; error?: { message?: string } };
+  if (!res.ok) {
+    throw new Error((json as any).error?.message ?? `Stripe error: ${res.status}`);
+  }
+  return json;
+}
+
 // ─── In-app subscription self-service (plan change + pause) ──────────────────
 
 /**

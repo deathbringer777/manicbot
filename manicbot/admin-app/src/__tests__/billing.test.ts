@@ -11,7 +11,11 @@
  *  - Auth guards (UNAUTHORIZED / FORBIDDEN for non-admins)
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 vi.mock("~/server/db", () => ({ getDb: () => null }));
 vi.mock("~/env", () => ({
@@ -21,11 +25,29 @@ vi.mock("~/env", () => ({
     ADMIN_CHAT_ID: "12345",
     TELEGRAM_BOT_TOKEN: "0:TEST",
     AUTH_SECRET: "test-secret",
+    STRIPE_SECRET_KEY: "sk_test_xxx",
   },
+}));
+
+vi.mock("~/server/lib/stripe", () => ({
+  retrieveSubscription: vi.fn(),
+  cancelSubscriptionAtPeriodEnd: vi.fn(),
+  cancelSubscriptionNow: vi.fn(),
+  ensureCoupon: vi.fn(),
+  applyCouponToSubscription: vi.fn(),
+  getBalance: vi.fn(),
+  listPayouts: vi.fn(),
+  listRecentCharges: vi.fn(),
+  listDisputes: vi.fn(),
 }));
 
 import { createCallerFactory } from "~/server/api/trpc";
 import { billingRouter } from "~/server/api/routers/billing";
+import {
+  retrieveSubscription,
+  cancelSubscriptionAtPeriodEnd,
+  cancelSubscriptionNow,
+} from "~/server/lib/stripe";
 import {
   createDbMock,
   makeAdminCtx,
@@ -316,5 +338,115 @@ describe("manualActivate", () => {
     await expect(
       caller.manualActivate({ tenantId: "t_1", plan: "pro", months: 25 })
     ).rejects.toThrow();
+  });
+});
+
+// ─── forceCancelSubscription (God-Mode escape hatch) ─────────────────────────
+
+describe("forceCancelSubscription", () => {
+  const FC_TENANT = "t_force";
+  const FC_SUB = "sub_force_1";
+
+  function fcTenant(overrides: Record<string, unknown> = {}) {
+    return { id: FC_TENANT, stripeSubscriptionId: FC_SUB, ...overrides };
+  }
+
+  it("throws UNAUTHORIZED when unauthenticated", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeUnauthCtx(db) as never);
+    await expect(
+      caller.forceCancelSubscription({ tenantId: FC_TENANT }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("throws FORBIDDEN for non-admin (tenant_owner)", async () => {
+    const { db } = createDbMock();
+    const caller = createCaller(makeForbiddenWebCtx(db) as never);
+    await expect(
+      caller.forceCancelSubscription({ tenantId: FC_TENANT }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("404 when tenant not found", async () => {
+    const { db } = createDbMock([[]]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await expect(
+      caller.forceCancelSubscription({ tenantId: FC_TENANT }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("BAD_REQUEST when tenant has no Stripe subscription", async () => {
+    const { db } = createDbMock([[fcTenant({ stripeSubscriptionId: null })]]);
+    const caller = createCaller(makeAdminCtx(db) as never);
+    await expect(
+      caller.forceCancelSubscription({ tenantId: FC_TENANT }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "no_active_subscription" });
+  });
+
+  it("immediate mode → DELETEs the sub now and nulls local subscription state", async () => {
+    const { db, updateCalls } = createDbMock([[fcTenant()]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: FC_SUB,
+      status: "active",
+      cancel_at_period_end: false,
+    });
+    vi.mocked(cancelSubscriptionNow).mockResolvedValueOnce({ id: FC_SUB, status: "canceled" });
+
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const res = await caller.forceCancelSubscription({ tenantId: FC_TENANT, mode: "immediate" });
+
+    expect(res).toMatchObject({ ok: true, mode: "immediate", result: "canceled" });
+    expect(cancelSubscriptionNow).toHaveBeenCalledWith("sk_test_xxx", FC_SUB);
+    expect(cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
+    expect(updateCalls.some((c) =>
+      c.values.billingStatus === "inactive" &&
+      c.values.stripeSubscriptionId === null &&
+      c.values.subscriptionStatus === "canceled",
+    )).toBe(true);
+  });
+
+  it("defaults to immediate mode when mode omitted", async () => {
+    const { db } = createDbMock([[fcTenant()]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: FC_SUB, status: "active", cancel_at_period_end: false,
+    });
+    vi.mocked(cancelSubscriptionNow).mockResolvedValueOnce({ id: FC_SUB, status: "canceled" });
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const res = await caller.forceCancelSubscription({ tenantId: FC_TENANT });
+    expect(res.mode).toBe("immediate");
+    expect(cancelSubscriptionNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("period_end mode → flips cancel_at_period_end, mirrors flag locally", async () => {
+    const { db, updateCalls } = createDbMock([[fcTenant()]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce({
+      id: FC_SUB, status: "active", cancel_at_period_end: false,
+    });
+    const periodEnd = Math.floor(Date.now() / 1000) + 10 * 86400;
+    vi.mocked(cancelSubscriptionAtPeriodEnd).mockResolvedValueOnce({
+      id: FC_SUB, cancel_at_period_end: true, current_period_end: periodEnd,
+    });
+
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const res = await caller.forceCancelSubscription({ tenantId: FC_TENANT, mode: "period_end" });
+
+    expect(res).toMatchObject({ ok: true, mode: "period_end", result: "scheduled", cancelAt: periodEnd });
+    expect(cancelSubscriptionNow).not.toHaveBeenCalled();
+    expect(updateCalls.some((c) => c.values.cancelAtPeriodEnd === 1)).toBe(true);
+  });
+
+  it("Stripe sub already gone (null) → reconciles local to inactive, no cancel call", async () => {
+    const { db, updateCalls } = createDbMock([[fcTenant()]]);
+    vi.mocked(retrieveSubscription).mockResolvedValueOnce(null);
+
+    const caller = createCaller(makeAdminCtx(db) as never);
+    const res = await caller.forceCancelSubscription({ tenantId: FC_TENANT, mode: "immediate" });
+
+    expect(res).toMatchObject({ ok: true, result: "already_gone" });
+    expect(cancelSubscriptionNow).not.toHaveBeenCalled();
+    expect(cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
+    expect(updateCalls.some((c) =>
+      c.values.billingStatus === "inactive" && c.values.stripeSubscriptionId === null,
+    )).toBe(true);
   });
 });

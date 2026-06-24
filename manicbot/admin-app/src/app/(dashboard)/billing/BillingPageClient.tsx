@@ -95,6 +95,11 @@ export default function BillingPageClient() {
   const manualActivateMut = api.billing.manualActivate.useMutation({
     onSuccess: () => { utils.billing.getOverview.invalidate(); setModal(null); },
   });
+  // God-Mode escape hatch — cancel a live Stripe sub that keeps charging a
+  // tenant we already treat as cancelled (local/Stripe divergence).
+  const forceCancelMut = api.billing.forceCancelSubscription.useMutation({
+    onSuccess: () => { utils.billing.getOverview.invalidate(); setModal(null); },
+  });
 
   const handleExport = async () => {
     const res = await exportQuery.refetch();
@@ -477,6 +482,30 @@ export default function BillingPageClient() {
               >
                 {updateStatusMut.isPending ? "..." : t("gmBilling.changeStatus", lang)}
               </button>
+
+              {/* Force-cancel the live Stripe subscription NOW. Stops the
+                  "cancelled with us but Stripe keeps charging" divergence. */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-700/40">
+                {forceCancelMut.error && (
+                  <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 mb-2">
+                    {/^[A-Z][A-Z0-9_]+$/.test((forceCancelMut.error.message ?? "").trim())
+                      ? t("common.error", lang)
+                      : forceCancelMut.error.message}
+                  </p>
+                )}
+                <button
+                  onClick={() => {
+                    if (window.confirm(t("gmBilling.forceCancelConfirm", lang))) {
+                      forceCancelMut.mutate({ tenantId: modal.tenantId, mode: "immediate" });
+                    }
+                  }}
+                  disabled={forceCancelMut.isPending}
+                  className="w-full py-2.5 rounded-2xl border border-red-500/40 text-red-500 font-semibold text-xs active:bg-red-500/10 disabled:opacity-50"
+                >
+                  {forceCancelMut.isPending ? "..." : t("gmBilling.forceCancelStripe", lang)}
+                </button>
+                <p className="text-[11px] text-slate-400 mt-1.5">{t("gmBilling.forceCancelHint", lang)}</p>
+              </div>
             </div>
           </div>
         </div>

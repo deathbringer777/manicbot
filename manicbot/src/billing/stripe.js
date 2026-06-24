@@ -135,10 +135,22 @@ export async function createPortalSession(env, opts) {
  * @param {string} subscriptionId
  */
 export async function getSubscription(secretKey, subscriptionId) {
-  const data = await stripeRequest(`${STRIPE_API}/subscriptions/${subscriptionId}`, {
+  // Distinguish a genuine 404 (subscription truly gone in Stripe) from a
+  // transient failure (5xx / 429 / network / timeout). The reconcile cron
+  // CLEARS stripe_subscription_id when this returns null, so a transient error
+  // must THROW — not return null — otherwise a momentary Stripe blip would
+  // orphan a live subscription's id, drop the tenant out of the candidate set,
+  // and make the divergence permanently invisible. The cron's per-row try/catch
+  // swallows the throw and the row is retried on the next run.
+  const res = await fetch(`${STRIPE_API}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
     headers: authHeader(secretKey),
+    signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
   });
-  if (data.error) return null;
+  if (res.status === 404) return null; // genuinely gone → caller may clear the local id
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error?.message || `Stripe getSubscription failed: ${res.status}`);
+  }
   return data;
 }
 

@@ -104,6 +104,16 @@ Registration → trialing (14 days)
 - Calls `checkBillingExpiry()` (`billing/lifecycle.js`)
 - Transitions `trialing` → `inactive` when `trial_ends_at` has expired
 - Transitions `grace_period` → `inactive` when `grace_ends_at` has expired
+- `phaseBillingReconcileStripe` (24h window) — **Stripe divergence backstop.**
+  Webhook delivery is not guaranteed and several local paths flip a tenant to
+  `inactive`/`canceled` WITHOUT cancelling the Stripe subscription (admin
+  `updateStatus`, account close, a dropped `customer.subscription.deleted`). For
+  tenants we treat as not-paying that STILL hold a `stripe_subscription_id`, it
+  pulls the live sub and — if Stripe says it is still active/trialing/past_due
+  and NOT already `cancel_at_period_end` — flips `cancel_at_period_end` so the
+  card stops being charged, then alerts (`cron.billing.stripe_divergence_repaired`).
+  A 3-day `updated_at` staleness guard prevents a fresh checkout mid-webhook from
+  being mistaken for a divergence.
 
 **Real-time bridge** (between cron ticks): both `auth.getMyRole` and `salon.getBillingStatus` evaluate `evaluateTrialState()` (`admin-app/src/lib/billing/trialState.ts`) on every call. If a trial has expired in the DB but cron hasn't flipped it yet, they return the post-flip status synchronously and fire-and-forget the persisting UPDATE. The admin-app `BillingGate` component reads `isTrialExpired` from `getMyRole` and blocks the whole tenant dashboard (with `/billing`, `/settings`, `/plugins`, `/plugin/*` whitelisted) so staff-side features become unreachable the moment the trial ends, without waiting for cron.
 
@@ -178,6 +188,29 @@ stays authoritative for execution): `pending_plan`, `pending_price_id`, `pending
 
 ---
 
+## Cancellation & divergence repair
+
+**Owner cancellation** (retention flow, `billing` router): `requestCancellation` →
+`acceptRetentionOffer` (counter-offer) → `confirmCancellation` (flip Stripe
+`cancel_at_period_end`). The eligibility/cancel guards key off the **live Stripe**
+`sub.cancel_at_period_end`, never the denormalized `tenants.cancel_at_period_end`
+flag — the local flag can drift (dropped webhook / out-of-band un-cancel) and
+trusting it would trap an owner whose Stripe sub is still renewing in a permanent
+`already_cancelling` error while the card keeps being charged. A stale local flag
+that disagrees with Stripe therefore self-heals: the owner can still cancel.
+
+**God-Mode force-cancel** (`billing.forceCancelSubscription`, `adminProcedure`):
+operator escape hatch for the "cancelled with us but Stripe keeps charging"
+divergence. Pulls the live sub and cancels it — `immediate` (`DELETE` the sub,
+stop billing now, via `cancelSubscriptionNow`) or `period_end`
+(`cancel_at_period_end`). Reconciles the local row to match. If Stripe says the
+sub is already gone (404), it just clears the local subscription state. Surfaced
+in the God-Mode Billing dashboard tenant modal. `tenantId` is always explicit
+input (God-Mode rule). The daily `phaseBillingReconcileStripe` cron is the
+unattended counterpart (see Lifecycle → Cron task).
+
+---
+
 ## Utility Functions
 
 | Function                      | File                         | Description                               |
@@ -191,3 +224,5 @@ stays authoritative for execution): `pending_plan`, `pending_price_id`, `pending
 | `graceRemainingDays(ctx)`    | `billing/features.js`        | Days until grace_period ends              |
 | `checkBillingExpiry(ctx)`    | `billing/lifecycle.js`       | Check and transition statuses (cron)      |
 | `updateTenantBilling(ctx, …)`| `billing/storage.js`         | Update billing in D1                      |
+| `phaseBillingReconcileStripe(ctx)` | `handlers/cron.js`     | Cancel live subs still charging locally-cancelled tenants (daily) |
+| `cancelSubscriptionNow(key, id)` | `admin-app/.../lib/stripe.ts` | `DELETE` a subscription — stop billing immediately |

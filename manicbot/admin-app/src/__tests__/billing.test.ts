@@ -33,6 +33,7 @@ vi.mock("~/server/lib/stripe", () => ({
   retrieveSubscription: vi.fn(),
   cancelSubscriptionAtPeriodEnd: vi.fn(),
   cancelSubscriptionNow: vi.fn(),
+  voidOpenInvoicesForCustomer: vi.fn(async () => ({ voided: [] })),
   ensureCoupon: vi.fn(),
   applyCouponToSubscription: vi.fn(),
   getBalance: vi.fn(),
@@ -47,6 +48,7 @@ import {
   retrieveSubscription,
   cancelSubscriptionAtPeriodEnd,
   cancelSubscriptionNow,
+  voidOpenInvoicesForCustomer,
 } from "~/server/lib/stripe";
 import {
   createDbMock,
@@ -348,7 +350,7 @@ describe("forceCancelSubscription", () => {
   const FC_SUB = "sub_force_1";
 
   function fcTenant(overrides: Record<string, unknown> = {}) {
-    return { id: FC_TENANT, stripeSubscriptionId: FC_SUB, ...overrides };
+    return { id: FC_TENANT, stripeSubscriptionId: FC_SUB, stripeCustomerId: "cus_fc", ...overrides };
   }
 
   it("throws UNAUTHORIZED when unauthenticated", async () => {
@@ -398,6 +400,8 @@ describe("forceCancelSubscription", () => {
     expect(res).toMatchObject({ ok: true, mode: "immediate", result: "canceled" });
     expect(cancelSubscriptionNow).toHaveBeenCalledWith("sk_test_xxx", FC_SUB);
     expect(cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
+    // Open/unpaid invoices are voided so dunning emails + retries stop.
+    expect(voidOpenInvoicesForCustomer).toHaveBeenCalledWith("sk_test_xxx", "cus_fc");
     expect(updateCalls.some((c) =>
       c.values.billingStatus === "inactive" &&
       c.values.stripeSubscriptionId === null &&

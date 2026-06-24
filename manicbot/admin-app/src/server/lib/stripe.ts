@@ -621,6 +621,42 @@ export async function cancelSubscriptionNow(
   return json;
 }
 
+/**
+ * Void every still-open invoice for a customer. Cancelling a subscription does
+ * NOT void invoices Stripe already finalised, so an unpaid renewal (`status:
+ * "open"`, the customer is `past_due`) keeps getting dunning retries + "update
+ * your card" emails even after the subscription is gone. On cancellation we void
+ * those so collection and the emails stop — the customer keeps what they paid
+ * for, we don't chase them for a period they're not using.
+ *
+ * Only `open` invoices are voidable; `paid`/`uncollectible`/`void` are skipped
+ * by the status filter. Per-invoice failures are swallowed (best-effort) so one
+ * bad invoice can't block the rest — the caller treats this as a cleanup step,
+ * never a reason to fail the cancel.
+ */
+export async function voidOpenInvoicesForCustomer(
+  secretKey: string,
+  customerId: string,
+): Promise<{ voided: string[] }> {
+  if (!customerId) return { voided: [] };
+  const res = await stripeGet<{ data?: Array<{ id: string }> }>(secretKey, "/invoices", {
+    customer: customerId,
+    status: "open",
+    limit: "100",
+  });
+  const voided: string[] = [];
+  for (const inv of res.data ?? []) {
+    if (!inv?.id) continue;
+    try {
+      await stripePost(secretKey, `/invoices/${encodeURIComponent(inv.id)}/void`, {});
+      voided.push(inv.id);
+    } catch {
+      // best-effort: skip an invoice that can't be voided (race, state change)
+    }
+  }
+  return { voided };
+}
+
 // ─── In-app subscription self-service (plan change + pause) ──────────────────
 
 /**

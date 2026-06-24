@@ -14,6 +14,7 @@ import {
   applyCouponToSubscription,
   cancelSubscriptionAtPeriodEnd,
   cancelSubscriptionNow,
+  voidOpenInvoicesForCustomer,
   getBalance,
   listPayouts,
   listRecentCharges,
@@ -296,6 +297,7 @@ export const billingRouter = createTRPCRouter({
         .select({
           id: tenants.id,
           stripeSubscriptionId: tenants.stripeSubscriptionId,
+          stripeCustomerId: tenants.stripeCustomerId,
         })
         .from(tenants)
         .where(eq(tenants.id, input.tenantId))
@@ -307,12 +309,28 @@ export const billingRouter = createTRPCRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "no_active_subscription" });
       }
 
+      // Best-effort: void any open/unpaid invoices so dunning retries + "update
+      // your card" emails stop once we cancel. Never blocks the cancel.
+      const voidInvoices = async (): Promise<number> => {
+        if (!tenant.stripeCustomerId) return 0;
+        try {
+          const { voided } = await voidOpenInvoicesForCustomer(stripeKey, tenant.stripeCustomerId);
+          return voided.length;
+        } catch (e) {
+          log.warn("billing.forceCancel.voidInvoicesFailed", {
+            err: e instanceof Error ? e.message : String(e),
+          });
+          return 0;
+        }
+      };
+
       const now = Math.floor(Date.now() / 1000);
       const sub = await retrieveSubscription(stripeKey, tenant.stripeSubscriptionId);
 
       // Subscription already gone in Stripe — nothing left to charge. Reconcile
       // the local row so the dashboard stops claiming an active subscription.
       if (!sub) {
+        const voided = await voidInvoices();
         await ctx.db
           .update(tenants)
           .set({
@@ -330,14 +348,15 @@ export const billingRouter = createTRPCRouter({
           actor: ctx.webUser?.email ?? null,
           action: "billing.forceCancelSubscription",
           tenantId: input.tenantId,
-          detail: `mode=${input.mode} result=already_gone sub=${tenant.stripeSubscriptionId}`,
+          detail: `mode=${input.mode} result=already_gone sub=${tenant.stripeSubscriptionId} voidedInvoices=${voided}`,
           ip: ctxIp(ctx),
         });
-        return { ok: true as const, mode: input.mode, result: "already_gone" as const };
+        return { ok: true as const, mode: input.mode, result: "already_gone" as const, voidedInvoices: voided };
       }
 
       if (input.mode === "period_end") {
         const updated = await cancelSubscriptionAtPeriodEnd(stripeKey, tenant.stripeSubscriptionId);
+        const voided = await voidInvoices();
         await ctx.db
           .update(tenants)
           .set({ cancelAtPeriodEnd: 1, updatedAt: now })
@@ -346,7 +365,7 @@ export const billingRouter = createTRPCRouter({
           actor: ctx.webUser?.email ?? null,
           action: "billing.forceCancelSubscription",
           tenantId: input.tenantId,
-          detail: `mode=period_end sub=${tenant.stripeSubscriptionId}`,
+          detail: `mode=period_end sub=${tenant.stripeSubscriptionId} voidedInvoices=${voided}`,
           ip: ctxIp(ctx),
         });
         return {
@@ -354,11 +373,13 @@ export const billingRouter = createTRPCRouter({
           mode: "period_end" as const,
           result: "scheduled" as const,
           cancelAt: updated.current_period_end ?? null,
+          voidedInvoices: voided,
         };
       }
 
       // immediate — stop billing now.
       await cancelSubscriptionNow(stripeKey, tenant.stripeSubscriptionId);
+      const voided = await voidInvoices();
       await ctx.db
         .update(tenants)
         .set({
@@ -376,10 +397,10 @@ export const billingRouter = createTRPCRouter({
         actor: ctx.webUser?.email ?? null,
         action: "billing.forceCancelSubscription",
         tenantId: input.tenantId,
-        detail: `mode=immediate sub=${tenant.stripeSubscriptionId}`,
+        detail: `mode=immediate sub=${tenant.stripeSubscriptionId} voidedInvoices=${voided}`,
         ip: ctxIp(ctx),
       });
-      return { ok: true as const, mode: "immediate" as const, result: "canceled" as const };
+      return { ok: true as const, mode: "immediate" as const, result: "canceled" as const, voidedInvoices: voided };
     }),
 
   // ─── God Mode real-money dashboard (Stage 2) ──────────────────────────────
@@ -569,7 +590,12 @@ export const billingRouter = createTRPCRouter({
       if (sub.cancel_at_period_end) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "already_cancelling" });
       }
-      if (sub.status !== "active" && sub.status !== "trialing") {
+      // A dunning customer (`past_due`/`unpaid` — a renewal payment failed) must
+      // be allowed to leave: trapping them in `subscription_not_cancelable` is
+      // exactly what keeps Stripe retrying the failed invoice + emailing them.
+      // confirmCancellation cancels these immediately and voids the open invoice.
+      const CANCELABLE = new Set(["active", "trialing", "past_due", "unpaid"]);
+      if (!CANCELABLE.has(sub.status)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: `subscription_not_cancelable:${sub.status}`,
@@ -781,6 +807,7 @@ export const billingRouter = createTRPCRouter({
           plan: tenants.plan,
           billingEmail: tenants.billingEmail,
           stripeSubscriptionId: tenants.stripeSubscriptionId,
+          stripeCustomerId: tenants.stripeCustomerId,
           cancelAtPeriodEnd: tenants.cancelAtPeriodEnd,
         })
         .from(tenants)
@@ -830,26 +857,68 @@ export const billingRouter = createTRPCRouter({
         createdAt: nowSec,
       });
 
+      // Best-effort: void any open/unpaid invoices so Stripe stops dunning
+      // (retry charges + "update your card" emails) once the tenant leaves.
+      const voidOpenInvoices = async (): Promise<void> => {
+        if (!tenant.stripeCustomerId) return;
+        try {
+          await voidOpenInvoicesForCustomer(stripeKey, tenant.stripeCustomerId);
+        } catch (err) {
+          log.warn("billing.confirmCancel.voidInvoicesFailed", {
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
+      };
+
       // 2. Flip Stripe. If this throws, the audit row stays and the caller
       //    sees an error — operator can re-run the cancel manually later.
-      const updated = await cancelSubscriptionAtPeriodEnd(stripeKey, tenant.stripeSubscriptionId);
-
-      // 3. Reflect cancel_at_period_end locally so the dashboard renders the
-      //    "cancelled — active until …" pill immediately (the webhook will
-      //    eventually do this too, but UI cannot wait 200ms for it).
-      await ctx.db
-        .update(tenants)
-        .set({
-          cancelAtPeriodEnd: 1,
-          updatedAt: nowSec,
-        })
-        .where(eq(tenants.id, input.tenantId));
+      //
+      //    A dunning subscription (`past_due`/`unpaid` — the current period's
+      //    renewal failed) is cancelled IMMEDIATELY: the customer never paid for
+      //    this period, so per "access until the date you paid through" they keep
+      //    nothing extra, and we void the failed invoice so the retries + emails
+      //    stop. A healthy subscription is cancelled at period end so the tenant
+      //    keeps the access they already paid for.
+      const unpaid = sub.status === "past_due" || sub.status === "unpaid";
+      let cancelAt: number | null;
+      if (unpaid) {
+        await cancelSubscriptionNow(stripeKey, tenant.stripeSubscriptionId);
+        await voidOpenInvoices();
+        await ctx.db
+          .update(tenants)
+          .set({
+            billingStatus: "inactive",
+            subscriptionStatus: "canceled",
+            stripeSubscriptionId: null,
+            stripePriceId: null,
+            currentPeriodEnd: null,
+            nextPaymentDate: null,
+            cancelAtPeriodEnd: 0,
+            updatedAt: nowSec,
+          })
+          .where(eq(tenants.id, input.tenantId));
+        cancelAt = null;
+      } else {
+        const updated = await cancelSubscriptionAtPeriodEnd(stripeKey, tenant.stripeSubscriptionId);
+        await voidOpenInvoices();
+        // 3. Reflect cancel_at_period_end locally so the dashboard renders the
+        //    "cancelled — active until …" pill immediately (the webhook will
+        //    eventually do this too, but UI cannot wait 200ms for it).
+        await ctx.db
+          .update(tenants)
+          .set({
+            cancelAtPeriodEnd: 1,
+            updatedAt: nowSec,
+          })
+          .where(eq(tenants.id, input.tenantId));
+        cancelAt = updated.current_period_end ?? null;
+      }
 
       await writeAudit(ctx.db, {
         actor: ctx.webUser?.email ?? null,
         action: "billing.confirmCancellation",
         tenantId: input.tenantId,
-        detail: `reasons=${input.reasonTags.join(",")} hasFreeText=${!!sanitizedFreeText} hasPhoto=${!!input.photoUrl}`,
+        detail: `reasons=${input.reasonTags.join(",")} immediate=${unpaid} hasFreeText=${!!sanitizedFreeText} hasPhoto=${!!input.photoUrl}`,
         ip: ctxIp(ctx),
       });
 
@@ -864,7 +933,8 @@ export const billingRouter = createTRPCRouter({
 
       return {
         ok: true as const,
-        cancelAt: updated.current_period_end ?? null,
+        cancelAt,
+        immediate: unpaid,
       };
     }),
 });

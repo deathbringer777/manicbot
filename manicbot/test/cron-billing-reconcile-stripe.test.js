@@ -108,6 +108,23 @@ describe('phaseBillingReconcileStripe — divergence repair', () => {
     expect(t.stripeSubscriptionId).toBeNull();
   });
 
+  it('preserves the local sub id when getSubscription throws (transient error — no orphaning)', async () => {
+    const ctx = makeCtx();
+    await seedTenant(ctx, 't_transient', { billingStatus: 'inactive' });
+    // A transient Stripe failure (5xx / 429 / network / timeout) now THROWS —
+    // only a genuine 404 returns null. The per-row try/catch must swallow it
+    // WITHOUT clearing stripe_subscription_id; otherwise the row drops out of
+    // the `stripe_subscription_id IS NOT NULL` candidate set and the divergence
+    // becomes permanently invisible (the customer keeps getting charged).
+    getSubscription.mockRejectedValue(new Error('Stripe getSubscription failed: 500'));
+
+    await phaseBillingReconcileStripe(ctx, Date.now());
+
+    expect(cancelSubscriptionAtPeriodEnd).not.toHaveBeenCalled();
+    const t = await getTenant(ctx, 't_transient');
+    expect(t.stripeSubscriptionId).toBe('sub_t_transient');
+  });
+
   it('never touches a FRESH row inside the 3-day staleness guard', async () => {
     const ctx = makeCtx();
     await seedTenant(ctx, 't_fresh', { billingStatus: 'inactive', updatedAt: NOW - 60 });

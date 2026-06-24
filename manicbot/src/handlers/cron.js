@@ -1590,9 +1590,11 @@ export async function phaseBillingReconcileStripe(ctx, _now) {
   for (const row of candidates) {
     try {
       const sub = await getSubscription(ctx.stripeSecretKey, row.stripe_subscription_id);
-      // Gone in Stripe (or unreadable) → just clear our stale sub id so this
-      // row stops being re-scanned every day. getSubscription returns null on
-      // a non-2xx, so a transient error self-corrects on the next run.
+      // Gone in Stripe (HTTP 404) → clear our stale sub id so this row stops
+      // being re-scanned every day. getSubscription returns null ONLY on a
+      // genuine 404; a transient error (5xx / 429 / network / timeout) THROWS
+      // and is caught below, so the sub id is preserved and the row is retried
+      // next run — never orphaned (which would hide the divergence forever).
       if (!sub) {
         await updateTenantBilling(ctx, row.id, { stripeSubscriptionId: null, updatedAt: ts });
         continue;

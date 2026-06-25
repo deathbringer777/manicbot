@@ -128,6 +128,7 @@ const BLOG_ARTICLES = [
   { slug: 'whatsapp-instagram-channels', lastmod: '2026-05-16' },
   { slug: 'google-calendar-sync',        lastmod: '2026-05-16' },
   { slug: 'first-client-in-10-minutes',  lastmod: '2026-05-16' },
+  { slug: 'salon-booking-software-poland-2026', lastmod: '2026-06-25' },
 ];
 
 /**
@@ -424,6 +425,7 @@ export function renderRobotsTxt(origin = DEFAULT_SITE_ORIGIN) {
  * @type {Array<{ slug: string; title: string; summary: string }>}
  */
 const LLMS_TOP_GUIDES = [
+  { slug: 'salon-booking-software-poland-2026', title: 'Salon booking software in Poland 2026: Booksy vs Fresha vs Versum vs ManicBot', summary: 'An honest buyer’s guide to salon booking platforms in Poland — Booksy for marketplace discovery, Fresha and Versum for established multi-chair salons, and ManicBot for 0%-commission AI booking across Instagram, WhatsApp and Telegram. Explains which tool fits which salon and why the channels matter more than the calendar.' },
   { slug: 'instagram-bookings-2026',     title: 'Instagram for nail salons: DMs, Stories and Reels into bookings',     summary: 'How nail salons turn Instagram into a booking channel — Reels for reach (+35% followers/month), saveable carousels, link-in-bio, comment-to-DM automation, and 5-minute DM replies.' },
   { slug: 'tiktok-for-nail-salons',      title: 'TikTok for nail salons: viral views into booked appointments',        summary: 'A TikTok playbook for nail salons — short-form process and before/after formats, trending audio, and converting roughly 3x-faster follower growth into bookings via a profile link.' },
   { slug: 'local-seo-nail-salon',        title: 'Local SEO for nail salons: rank for "nail salon near me"',             summary: 'How nail salons rank in Google local search — a complete Google Business Profile, reviews, photos, NAP consistency, and a realistic 3-6 month timeline.' },

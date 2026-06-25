@@ -93,6 +93,10 @@ describe("blog corpus invariants", () => {
         "scale-solo-to-team",
         "seasonal-marketing-calendar",
         "tiktok-for-nail-salons",
+        // 2026-06 GEO pass — honest all-vendor buyer's guide (editorial home
+        // for the comparison content; the dedicated /comparisons/manicbot-vs-
+        // booksy page stays 404 per #492).
+        "salon-booking-software-poland-2026",
       ].sort(),
     );
   });

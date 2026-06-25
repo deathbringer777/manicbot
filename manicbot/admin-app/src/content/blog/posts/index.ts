@@ -14,6 +14,7 @@ import { nailClientsSurvey2026 } from "./nail-clients-survey-2026";
 import { nailSalonPricingGuide } from "./nail-salon-pricing-guide";
 import { nailTrends2026 } from "./nail-trends-2026";
 import { reduceNoShows } from "./reduce-no-shows";
+import { salonBookingSoftwarePoland2026 } from "./salon-booking-software-poland-2026";
 import { salonReviewsReputation } from "./salon-reviews-reputation";
 import { scaleSoloToTeam } from "./scale-solo-to-team";
 import { seasonalMarketingCalendar } from "./seasonal-marketing-calendar";
@@ -27,6 +28,7 @@ import { whatsappInstagramChannels } from "./whatsapp-instagram-channels";
  * is for editor sanity, not for the UI.
  */
 export const ALL_BLOG_ARTICLES: BlogArticle[] = [
+  salonBookingSoftwarePoland2026, // 2026-06-25
   instagramBookings2026, // 2026-06-01
   tiktokForNailSalons, // 2026-05-30
   localSeoNailSalon, // 2026-05-29

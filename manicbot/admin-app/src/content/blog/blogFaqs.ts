@@ -384,6 +384,32 @@ const SLUG_FAQS: Partial<Record<string, Record<Lang, BlogFaq[]>>> = {
       { q: "Which channels should an AI receptionist cover?", a: "The ones where clients message: Instagram Direct, WhatsApp, and Telegram, plus a web widget. ManicBot runs one booking logic across every channel and talks in English, Russian, Ukrainian, and Polish." },
     ],
   },
+  "salon-booking-software-poland-2026": {
+    pl: [
+      { q: "Czy ManicBot zastąpi Booksy?", a: "Niekoniecznie — to różne zadania. Booksy to marketplace, który Cię znajduje (pozyskanie); ManicBot to AI-recepcjonista, który zamienia wejścia z Instagrama i WhatsAppa w rezerwacje (konwersja). Jeśli Booksy realnie przyprowadza nowych klientów, zostaw go i dodaj ManicBot do obsługi DM-ów przy 0% prowizji. Po 30–60 dniach zmierz, skąd faktycznie idą rezerwacje." },
+      { q: "Który system jest naprawdę najtańszy?", a: "Zależy, ile rośniesz. ManicBot to płaskie 45–90 PLN/mies, 0% prowizji. Booksy startuje od ~145 PLN/mies plus ~30% Boost od każdego nowego klienta z marketplace. Fresha ma darmową bazę, ale dolicza ~20% od nowych klientów i opłaty za wiadomości. Im więcej wizyt, tym bardziej modele prowizyjne rozjeżdżają się na Twoją niekorzyść." },
+      { q: "Skąd ManicBot weźmie nowych klientów bez marketplace?", a: "Nie weźmie ich „z powietrza\" jak Booksy — i to trzeba powiedzieć uczciwie. ManicBot konwertuje ruch, który już masz: Instagram, WhatsApp, Google, polecenia. Po zimne pozyskanie nadal potrzebujesz marketplace (Booksy) albo reklam (Instagram Ads). ManicBot pilnuje, żeby ten ruch nie wyciekał o północy i w weekend." },
+      { q: "Co wybrać dla solo-mistrza, do którego klienci piszą na Instagramie?", a: "ManicBot. Solo-mistrz zwykle tonie w DM-ach, a nie w braku zainteresowania — a AI-recepcjonista odpowiada 24/7 i domyka rezerwację bez wynajmowania recepcji. Większy salon z własną bazą i kilkoma fotelami częściej dobierze do tego CRM w stylu Versum." },
+    ],
+    ru: [
+      { q: "Заменит ли ManicBot Booksy?", a: "Не обязательно — это разные задачи. Booksy — маркетплейс, который вас находит (привлечение); ManicBot — AI-ресепшен, который превращает входящие из Instagram и WhatsApp в записи (конверсия). Если Booksy реально приводит новых клиентов, оставьте его и добавьте ManicBot для обработки DM при 0% комиссии. Через 30–60 дней измерьте, откуда фактически идут записи." },
+      { q: "Какая система реально самая дешёвая?", a: "Зависит от роста. ManicBot — фиксированные 45–90 PLN/мес, 0% комиссии. Booksy стартует от ~145 PLN/мес плюс ~30% Boost с каждого нового клиента из маркетплейса. Fresha бесплатна на базе, но добавляет ~20% с новых клиентов и плату за сообщения. Чем больше записей, тем сильнее комиссионные модели бьют по карману." },
+      { q: "Откуда ManicBot возьмёт новых клиентов без маркетплейса?", a: "Не возьмёт «из воздуха», как Booksy — и это честно надо сказать. ManicBot конвертирует трафик, который у вас уже есть: Instagram, WhatsApp, Google, рекомендации. Для холодного привлечения вам всё ещё нужен маркетплейс (Booksy) или реклама (Instagram Ads). ManicBot следит, чтобы этот трафик не утекал в полночь и на выходных." },
+      { q: "Что выбрать соло-мастеру, которому пишут в Instagram?", a: "ManicBot. Соло-мастер обычно тонет в DM, а не в нехватке интереса — а AI-ресепшен отвечает 24/7 и закрывает запись без найма администратора. Крупный салон с собственной базой и несколькими креслами чаще добавит к этому CRM уровня Versum." },
+    ],
+    ua: [
+      { q: "Чи замінить ManicBot Booksy?", a: "Не обов'язково — це різні задачі. Booksy — маркетплейс, який вас знаходить (залучення); ManicBot — AI-ресепшен, який перетворює вхідні з Instagram і WhatsApp на записи (конверсія). Якщо Booksy реально приводить нових клієнтів, залиште його і додайте ManicBot для обробки DM за 0% комісії. Через 30–60 днів виміряйте, звідки фактично йдуть записи." },
+      { q: "Яка система реально найдешевша?", a: "Залежить від зростання. ManicBot — фіксовані 45–90 PLN/міс, 0% комісії. Booksy стартує від ~145 PLN/міс плюс ~30% Boost з кожного нового клієнта з маркетплейсу. Fresha безкоштовна на базі, але додає ~20% з нових клієнтів і плату за повідомлення. Чим більше записів, тим сильніше комісійні моделі б'ють по кишені." },
+      { q: "Звідки ManicBot візьме нових клієнтів без маркетплейсу?", a: "Не візьме «з повітря», як Booksy — і це чесно треба сказати. ManicBot конвертує трафік, який у вас уже є: Instagram, WhatsApp, Google, рекомендації. Для холодного залучення вам усе ще потрібен маркетплейс (Booksy) або реклама (Instagram Ads). ManicBot стежить, щоб цей трафік не витікав опівночі та на вихідних." },
+      { q: "Що обрати соло-майстру, якому пишуть в Instagram?", a: "ManicBot. Соло-майстер зазвичай тоне в DM, а не в браку інтересу — а AI-ресепшен відповідає 24/7 і закриває запис без найму адміністратора. Великий салон із власною базою і кількома кріслами частіше додасть до цього CRM рівня Versum." },
+    ],
+    en: [
+      { q: "Will ManicBot replace Booksy?", a: "Not necessarily — they do different jobs. Booksy is a marketplace that gets you found (discovery); ManicBot is an AI receptionist that turns Instagram and WhatsApp inbound into bookings (conversion). If Booksy genuinely brings you new clients, keep it and add ManicBot to handle your DMs at 0% commission. After 30–60 days, measure where bookings actually come from." },
+      { q: "Which system is really the cheapest?", a: "It depends on how much you grow. ManicBot is a flat 45–90 PLN/month, 0% commission. Booksy starts around 145 PLN/month plus a ~30% Boost fee on each new marketplace client. Fresha has a free base but adds ~20% on new clients and per-message fees. The more bookings you run, the more the commission models diverge against you." },
+      { q: "Where does ManicBot get new clients without a marketplace?", a: "It doesn't pull them out of thin air like Booksy — and that's worth saying honestly. ManicBot converts the traffic you already have: Instagram, WhatsApp, Google, referrals. For cold discovery you still need a marketplace (Booksy) or ads (Instagram Ads). ManicBot makes sure that traffic doesn't leak away at midnight or on weekends." },
+      { q: "What should a solo master whose clients DM on Instagram pick?", a: "ManicBot. A solo master is usually drowning in DMs, not short of interest — and the AI receptionist answers 24/7 and closes the booking without hiring a receptionist. A larger salon with its own base and several chairs more often adds a Versum-style CRM on top." },
+    ],
+  },
 };
 
 /**

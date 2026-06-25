@@ -55,7 +55,17 @@ describe('seo', () => {
       expect(entries.find((e) => e.loc === '/register')).toBeUndefined();
     });
 
-    it('includes blog article slugs (all 20 articles — May + June 2026 batches)', () => {
+    // 2026-06 GEO pass — the Booksy/Fresha/Versum/ManicBot buyer's-guide blog
+    // article is the editorial home for the recovered comparison table. The
+    // dedicated /comparisons/manicbot-vs-booksy page stays 404 (positioning
+    // decision, #492); the comparison content lives here instead, so the
+    // sitemap must surface it for AI/search engines.
+    it('includes the 2026 Poland booking-software buyer guide article', () => {
+      const slugs = entries.filter((e) => e.loc.startsWith('/blog/')).map((e) => e.loc);
+      expect(slugs).toContain('/blog/salon-booking-software-poland-2026');
+    });
+
+    it('includes blog article slugs (all 21 articles — May/June 2026 batches + GEO buyer guide)', () => {
       const slugs = entries.filter((e) => e.loc.startsWith('/blog/')).map((e) => e.loc);
       // Original 6 (rewritten long-form in 4 langs).
       expect(slugs).toContain('/blog/automate-salon-booking');
@@ -520,7 +530,7 @@ describe('seo', () => {
       expect(txt).toContain('## Contact');
     });
 
-    it('emits ## Top guides with deep links to all 20 blog articles', () => {
+    it('emits ## Top guides with deep links to the blog articles', () => {
       expect(txt).toContain('## Top guides');
       expect(txt).toContain('/blog/channels-compared-2026');
       expect(txt).toContain('/blog/ai-receptionist-247');
@@ -553,6 +563,13 @@ describe('seo', () => {
       // The Booksy comparison page was pulled from prod — it must not be
       // advertised to LLM crawlers (the page now 404s).
       expect(txt).not.toContain('/comparisons/manicbot-vs-booksy');
+    });
+
+    it('advertises the Poland booking-software buyer guide to LLM crawlers', () => {
+      // The honest, all-vendor comparison (Booksy/Fresha/Versum/ManicBot) lives
+      // in this blog article rather than a dedicated /comparisons page, so
+      // llms.txt must point crawlers at it for GEO ingestion.
+      expect(txt).toContain('/blog/salon-booking-software-poland-2026');
     });
 
     it('emits ## Frequently asked questions with at least 6 Q&A pairs', () => {

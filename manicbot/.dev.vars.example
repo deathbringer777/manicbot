@@ -56,6 +56,14 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # missing values → /meta/oauth/start returns 503 (oauth_not_configured).
 # META_INSTAGRAM_APP_ID=3756985564432185
 
+# Meta Conversions API (server-side ad-tracking → dataset "ManicBot Web").
+# META_CAPI_PIXEL_ID is the public dataset/Pixel id (lives in wrangler.toml [vars]).
+# META_CAPI_TOKEN is the secret (Events Manager → dataset → Settings → Conversions
+# API → Generate access token). Both required, else CAPI no-ops. Optional test code
+# routes events to Events Manager "Test events" instead of live.
+# META_CAPI_TOKEN=EAA...your_capi_access_token
+# META_CAPI_TEST_EVENT_CODE=TEST12345
+
 # Instagram: IGSID через запятую — игнорировать (например аккаунт самого бота)
 # INSTAGRAM_IGNORE_SENDER_IDS=1784360123456789
 

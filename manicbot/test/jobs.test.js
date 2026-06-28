@@ -68,4 +68,13 @@ describe('enqueueJob (D1 job queue)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(db._getTable('jobs')[0].id).toBe(id);
   });
+
+  it('rejects an oversized payload before inserting or kicking (SEC-008)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const huge = { blob: 'x'.repeat(33 * 1024) };
+    await expect(enqueueJob(makeEnv(db), 'campaign.generate', huge)).rejects.toThrow(/too large/);
+    expect(db._getTable('jobs')).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

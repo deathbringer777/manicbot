@@ -23,6 +23,7 @@ import { nowSec } from '../utils/time.js';
 
 const KICK_TIMEOUT_MS = 5000;
 const DEFAULT_JOBS_BASE_URL = 'https://jobs.manicbot.com';
+const MAX_PAYLOAD_BYTES = 32 * 1024; // SEC-008: cap a job's persisted payload size
 
 /**
  * Enqueue a background job for the ThinkPad sidecar to run.
@@ -41,6 +42,9 @@ const DEFAULT_JOBS_BASE_URL = 'https://jobs.manicbot.com';
 export async function enqueueJob(env, type, payload, { tenantId = null } = {}) {
   const id = crypto.randomUUID();
   const createdAt = nowSec();
+  const serialized = JSON.stringify(payload ?? {});
+  // SEC-008: cap the payload so a caller cannot persist an oversized D1 row.
+  if (serialized.length > MAX_PAYLOAD_BYTES) throw new Error('enqueueJob: payload too large');
   // tenant-scan-ignore: `jobs` is a platform-wide work queue, not tenant-isolated
   // data. tenant_id records which salon a marketing job is for (a payload
   // attribute), it is NOT an access boundary — the sidecar claims rows by status,
@@ -50,7 +54,7 @@ export async function enqueueJob(env, type, payload, { tenantId = null } = {}) {
       `INSERT INTO jobs (id, type, payload, status, tenant_id, attempts, created_at)
        VALUES (?, ?, ?, 'pending', ?, 0, ?)`,
     )
-    .bind(id, type, JSON.stringify(payload ?? {}), tenantId, createdAt)
+    .bind(id, type, serialized, tenantId, createdAt)
     .run();
 
   await kickSidecar(env, { id, type });

@@ -51,6 +51,31 @@ describe('voidOpenInvoicesForCustomer — Worker', () => {
     expect(fx.calls[2].url).toContain('/invoices/in_2/void');
   });
 
+  it('walks all pages (pagination) then voids every collected invoice', async () => {
+    // Stripe caps a list page at 100. A customer with >100 open invoices must
+    // not leave the overflow un-voided — it would keep dunning them. The list
+    // is walked fully (cursor by starting_after) BEFORE any void, so flipping
+    // invoices out of the status=open filter can't skip the overflow page.
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ id: `in_${i + 1}` }));
+    const page2 = Array.from({ length: 50 }, (_, i) => ({ id: `in_${i + 101}` }));
+    fx.responses.push({ status: 200, body: { data: page1, has_more: true } });
+    fx.responses.push({ status: 200, body: { data: page2, has_more: false } });
+    for (let i = 1; i <= 150; i++) {
+      fx.responses.push({ status: 200, body: { id: `in_${i}`, status: 'void' } });
+    }
+
+    const res = await voidOpenInvoicesForCustomer(SECRET, 'cus_big');
+
+    expect(res.voided).toHaveLength(150);
+    // 2nd fetch is the page-2 LIST carrying the cursor — not a void POST.
+    expect(fx.calls[1].method).toBe('GET');
+    expect(fx.calls[1].url).toContain('starting_after=in_100');
+    expect(fx.calls[1].url).toContain('status=open');
+    // Voids begin only after BOTH list pages are collected.
+    expect(fx.calls[2].method).toBe('POST');
+    expect(fx.calls[2].url).toContain('/invoices/in_1/void');
+  });
+
   it('swallows a per-invoice void failure (best-effort)', async () => {
     fx.responses.push({ status: 200, body: { data: [{ id: 'in_1' }, { id: 'in_2' }] } });
     fx.responses.push({ status: 400, body: { error: { message: 'cannot void' } } });

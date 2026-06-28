@@ -633,23 +633,39 @@ export async function cancelSubscriptionNow(
  * by the status filter. Per-invoice failures are swallowed (best-effort) so one
  * bad invoice can't block the rest — the caller treats this as a cleanup step,
  * never a reason to fail the cancel.
+ *
+ * Walks ALL pages of open invoices (Stripe caps a page at 100) before voiding
+ * any: voiding flips an invoice out of the status=open filter, so collecting
+ * first keeps the cursor walk over a stable, read-only set.
  */
 export async function voidOpenInvoicesForCustomer(
   secretKey: string,
   customerId: string,
 ): Promise<{ voided: string[] }> {
   if (!customerId) return { voided: [] };
-  const res = await stripeGet<{ data?: Array<{ id: string }> }>(secretKey, "/invoices", {
-    customer: customerId,
-    status: "open",
-    limit: "100",
-  });
+
+  // Caps a pathological response (never-emptying page) at 5000 invoices instead
+  // of looping unbounded; a real customer has at most a handful of open invoices.
+  const MAX_PAGES = 50;
+  const openInvoiceIds: string[] = [];
+  let startingAfter: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const params: Record<string, string> = { customer: customerId, status: "open", limit: "100" };
+    if (startingAfter) params.starting_after = startingAfter;
+    const res = await stripeGet<{ data?: Array<{ id: string }>; has_more?: boolean }>(secretKey, "/invoices", params);
+    const data = res.data ?? [];
+    for (const inv of data) {
+      if (inv?.id) openInvoiceIds.push(inv.id);
+    }
+    if (!res.has_more || data.length === 0) break;
+    startingAfter = data[data.length - 1]!.id;
+  }
+
   const voided: string[] = [];
-  for (const inv of res.data ?? []) {
-    if (!inv?.id) continue;
+  for (const id of openInvoiceIds) {
     try {
-      await stripePost(secretKey, `/invoices/${encodeURIComponent(inv.id)}/void`, {});
-      voided.push(inv.id);
+      await stripePost(secretKey, `/invoices/${encodeURIComponent(id)}/void`, {});
+      voided.push(id);
     } catch {
       // best-effort: skip an invoice that can't be voided (race, state change)
     }

@@ -12,6 +12,8 @@
  * existing crons' pure logic. `ping` + `claude.generate` are the platform MVP.
  */
 
+const { blogGenerate } = require('./blog-generate');
+
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 // SEC-006: bound attacker-influenced inputs at the trust boundary.
@@ -49,6 +51,13 @@ const HANDLERS = {
       ...(system ? { system } : {}),
     });
     return payload.json ? { json: out.json } : { text: out.text };
+  },
+
+  // On-demand blog-post DRAFT — reuses the autopilot pipeline (crons/blog), same
+  // Telegram approval, NO D1 write until publish. payload: { topic? } (else
+  // auto-discover). Honours the autopilot draft lock. See services/blog-generate.js.
+  async 'blog.generate'(payload, deps) {
+    return blogGenerate(payload, deps);
   },
 };
 

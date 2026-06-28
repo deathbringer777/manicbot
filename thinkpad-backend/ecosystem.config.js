@@ -77,5 +77,17 @@ module.exports = {
       autorestart: false,             // one-shot; collectors degrade cleanly if GSC/Trends are down
       watch: false,
     },
+    {
+      name: 'job-runner',
+      script: `${BASE}/services/job-runner.js`,
+      // PERSISTENT service (NOT a one-shot cron): drains the D1 `jobs` queue the
+      // Worker fills (migration 0127). Listens on 127.0.0.1 for the Access-gated
+      // /kick + polls D1 every JOB_POLL_INTERVAL_MS. Restart on crash.
+      autorestart: true,
+      watch: false,
+      env: {
+        NODE_PATH: `${BASE}/node_modules`,
+      },
+    },
   ],
 };

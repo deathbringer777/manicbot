@@ -26,6 +26,14 @@ const DEFAULT_JOBS_BASE_URL = 'https://jobs.manicbot.com';
 const MAX_PAYLOAD_BYTES = 32 * 1024; // SEC-008: cap a job's persisted payload size
 
 /**
+ * Allowlist of job types that may be enqueued via the HTTP trigger
+ * (POST /admin/jobs). Mirrors the sidecar handler registry
+ * (thinkpad-backend/services/handlers.js). Enqueuing an unknown type is rejected
+ * at the edge so a caller can't fill the queue with rows no handler will run.
+ */
+export const JOB_TYPES = new Set(['ping', 'claude.generate', 'blog.generate']);
+
+/**
  * Enqueue a background job for the ThinkPad sidecar to run.
  *
  * Resolves once the row is durably written; the kick is fire-and-forget and

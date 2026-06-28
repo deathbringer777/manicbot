@@ -10,6 +10,7 @@ import { audit } from '../utils/audit.js';
 import { buildSearchVariants, hasCyrillic } from '../lib/searchNormalize.js';
 import { splitTelegramText } from '../utils/telegramChunk.js';
 import { registerAdminBotWebhook } from '../adminbot/ctx.js';
+import { enqueueJob, JOB_TYPES } from '../services/jobs.js';
 
 /**
  * Roles that may be created or upserted via POST /admin/web-user.
@@ -102,6 +103,32 @@ export async function tryAdminKeyRoutes(request, env, url) {
     const { seedDemoTenants } = await import('../../scripts/seed-demo-tenants.js');
     const result = await seedDemoTenants(envCtx(env));
     return Response.json({ ok: true, result });
+  }
+
+  // Enqueue a background job for the ThinkPad sidecar compute backend.
+  // Body: { type: <allowlisted>, payload?: object, tenantId?: string }.
+  // The durable D1 row + best-effort Access-gated kick are handled by enqueueJob;
+  // the sidecar job-runner claims and runs it. See src/services/jobs.js.
+  if (request.method === 'POST' && url.pathname === '/admin/jobs') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: 'invalid_json' }, { status: 400 }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return Response.json({ error: 'invalid_json' }, { status: 400 });
+    }
+    const type = typeof body.type === 'string' ? body.type.trim() : '';
+    if (!JOB_TYPES.has(type)) {
+      return Response.json({ error: 'unknown_job_type', allowed: [...JOB_TYPES] }, { status: 400 });
+    }
+    const payload = (body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)) ? body.payload : {};
+    const tenantId = typeof body.tenantId === 'string' ? body.tenantId : null;
+    try {
+      const { id } = await enqueueJob(env, type, payload, { tenantId });
+      return Response.json({ ok: true, jobId: id });
+    } catch (e) {
+      return Response.json({ error: String(e?.message || 'enqueue_failed') }, { status: 400 });
+    }
   }
 
   // Sprint 2/6: run one pass of the BOT_ENCRYPTION_KEY rotation sweep.

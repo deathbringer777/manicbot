@@ -49,6 +49,20 @@ module.exports = {
       watch: false,
     },
     {
+      name: 'social-content-builder',
+      script: `${BASE}/crons/social-content-builder.js`,
+      cron_restart: '30 7 * * *',     // 07:30 daily — generate tomorrow's IG/FB posts → Worker social-draft seam
+      autorestart: false,             // no-ops cleanly until MESSAGING_TOKEN is set; posts gated by approval
+      watch: false,
+    },
+    {
+      name: 'comment-responder',
+      script: `${BASE}/crons/comment-responder.js`,
+      cron_restart: '*/10 * * * *',   // every 10 min — classify + draft replies to new IG/FB comments
+      autorestart: false,             // no-ops cleanly until MESSAGING_TOKEN is set; replies gated by kill-switch
+      watch: false,
+    },
+    {
       name: 'lead-scout',
       script: `${BASE}/crons/lead-scout/index.js`,
       cron_restart: '*/15 * * * *',   // every 15 min slot rotation (4× hourly)

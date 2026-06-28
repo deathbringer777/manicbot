@@ -22,6 +22,7 @@ import { ulid } from '../utils/ulid.js';
 import { mintSeasonalPromo } from '../billing/promoCodes.js';
 import { isSendPaused } from '../services/platformSettings.js';
 import { retractBroadcast } from '../services/platformRetract.js';
+import { notifyAdmin } from '../utils/notifyAdmin.js';
 
 const MAX_BODY_LEN = 8000;
 const MAX_ROWS = 500;
@@ -507,6 +508,132 @@ async function handlePromoMint(ctx, body) {
   return json({ ok: true, promo: { code: res.data.code, expires_at: res.data.expires_at, livemode: res.data.livemode } });
 }
 
+// ─── Social automation seams (migration 0127) ──────────────────────────────
+// The ThinkPad `social-content-builder` and `comment-responder` crons use these
+// to push generated captions and to pull/answer the @manicbot_com comment inbox.
+// All platform-scoped (@manicbot_com); each row carries its own tenant_id.
+
+/** GET — list inbound comments awaiting a draft (status='new'). */
+async function handleCommentsPending(ctx, url) {
+  const raw = parseInt(url.searchParams.get('limit') || '50', 10);
+  const limit = Math.min(MAX_ROWS, Math.max(1, Number.isFinite(raw) ? raw : 50));
+  // tenant-scan-ignore: platform automation — pulls the @manicbot_com comment inbox; each row carries its own tenant_id, no cross-tenant data read.
+  const rows = await dbAll(ctx,
+    `SELECT id, channel_type, tenant_id, media_id, comment_id, parent_id, from_username, text, created_at
+     FROM social_comment_inbox WHERE status = 'new' ORDER BY created_at ASC LIMIT ?`, limit);
+  return json({ ok: true, comments: rows });
+}
+
+/** POST — transition one inbox row: draft a reply, escalate, or skip. */
+async function handleCommentReply(ctx, env, body) {
+  const commentId = clean(body?.comment_id, 200);
+  if (!commentId) return json({ ok: false, error: 'comment_id required' }, 400);
+  const classification = clean(body?.classification, 60) || null;
+  const now = Math.floor(Date.now() / 1000);
+  const action = body?.action === 'escalate' ? 'escalate' : body?.action === 'skip' ? 'skip' : 'draft';
+
+  if (action === 'draft') {
+    const replyText = clean(body?.reply_text, MAX_BODY_LEN);
+    if (!replyText) return json({ ok: false, error: 'reply_text required for draft' }, 400);
+    // tenant-scan-ignore: platform automation — transitions one inbox row by its globally-unique comment_id; the row carries its own tenant_id.
+    await dbRun(ctx,
+      `UPDATE social_comment_inbox SET status = ?, reply_text = ?, classification = ?, updated_at = ?
+       WHERE comment_id = ? AND status = 'new'`, 'drafted', replyText, classification, now, commentId);
+    return json({ ok: true, status: 'drafted' });
+  }
+
+  if (action === 'skip') {
+    // tenant-scan-ignore: platform automation — transitions one inbox row by its globally-unique comment_id; the row carries its own tenant_id.
+    await dbRun(ctx,
+      `UPDATE social_comment_inbox SET status = ?, classification = ?, updated_at = ?
+       WHERE comment_id = ? AND status = 'new'`, 'skipped', classification, now, commentId);
+    return json({ ok: true, status: 'skipped' });
+  }
+
+  // escalate → leave for a human + ping the owner. Never auto-replied.
+  // tenant-scan-ignore: platform automation — transitions one inbox row by its globally-unique comment_id; the row carries its own tenant_id.
+  await dbRun(ctx,
+    `UPDATE social_comment_inbox SET status = ?, classification = ?, updated_at = ?
+     WHERE comment_id = ? AND status = 'new'`, 'escalated', classification, now, commentId);
+  // tenant-scan-ignore: platform automation — read-back by globally-unique comment_id for the operator alert.
+  const row = await dbGet(ctx,
+    `SELECT from_username, text, channel_type FROM social_comment_inbox WHERE comment_id = ?`, commentId);
+  void notifyAdmin(env,
+    `⚠️ Комментарий требует внимания (${row?.channel_type || '?'})\n` +
+    `От: ${row?.from_username || '—'}\n«${String(row?.text || '').slice(0, 300)}»\n` +
+    `Классификация: ${classification || '—'}`).catch(() => {});
+  return json({ ok: true, status: 'escalated' });
+}
+
+/** POST — upsert a @manicbot_com content-plan slot with a ThinkPad-generated caption. */
+async function handleSocialDraft(ctx, body) {
+  const scheduledAt = parseInt(body?.scheduled_at, 10);
+  if (!Number.isFinite(scheduledAt) || scheduledAt <= 0) return json({ ok: false, error: 'scheduled_at required' }, 400);
+  const captionPl = clean(body?.caption_pl, MAX_BODY_LEN);
+  if (!captionPl) return json({ ok: false, error: 'caption_pl required' }, 400);
+
+  const tenantId = body?.tenant_id ? clean(body.tenant_id, 64) : null;
+  const theme = clean(body?.theme, 200) || 'general';
+  const topic = clean(body?.topic, 500) || '';
+  const keyMessage = clean(body?.key_message, 1000) || null;
+  const headlinePl = clean(body?.headline_pl, 300) || null;
+  const imagePrompt = clean(body?.image_prompt, 1000) || null;
+  const hashtags = Array.isArray(body?.hashtags)
+    ? body.hashtags.map((h) => clean(String(h), 60)).filter(Boolean)
+    : [];
+  const hashtagsJson = JSON.stringify(hashtags);
+  const id = `sd_${tenantId || 'plat'}_${scheduledAt}`;
+  const now = Math.floor(Date.now() / 1000);
+
+  // tenant-scan-ignore: platform automation — @manicbot_com content plan, keyed by a deterministic id that embeds tenant_id; INSERT stamps tenant_id from the operator-controlled push. No cross-tenant read.
+  const existing = await dbGet(ctx, `SELECT id FROM marketing_content_plan WHERE id = ?`, id);
+  if (existing) {
+    await dbRun(ctx,
+      // tenant-scan-ignore: platform automation — updates the @manicbot_com content slot by its own deterministic id (embeds tenant_id). No cross-tenant access.
+      `UPDATE marketing_content_plan
+       SET theme = ?, topic = ?, key_message = ?, headline_pl = ?, caption_pl = ?, hashtags_json = ?, image_prompt = ?, updated_at = ?
+       WHERE id = ?`,
+      theme, topic, keyMessage, headlinePl, captionPl, hashtagsJson, imagePrompt, now, id);
+    return json({ ok: true, id, updated: true });
+  }
+  await dbRun(ctx,
+    `INSERT INTO marketing_content_plan
+       (id, tenant_id, scheduled_at, theme, topic, key_message, headline_pl, caption_pl, hashtags_json, image_prompt, status, error_count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
+    id, tenantId, scheduledAt, theme, topic, keyMessage, headlinePl, captionPl, hashtagsJson, imagePrompt, now, now);
+  return json({ ok: true, id, created: true });
+}
+
+/** GET — list posts awaiting Telegram approval (status='awaiting_approval'). */
+async function handleSocialPending(ctx, url) {
+  const raw = parseInt(url.searchParams.get('limit') || '20', 10);
+  const limit = Math.min(MAX_ROWS, Math.max(1, Number.isFinite(raw) ? raw : 20));
+  // tenant-scan-ignore: platform automation — @manicbot_com content plan awaiting approval; rows carry their own tenant_id, no cross-tenant read.
+  const rows = await dbAll(ctx,
+    `SELECT id, scheduled_at, theme, topic, headline_pl, caption_pl, hashtags_json, image_url
+     FROM marketing_content_plan WHERE status = 'awaiting_approval' ORDER BY scheduled_at ASC LIMIT ?`, limit);
+  return json({ ok: true, posts: rows });
+}
+
+/** POST — operator decision on a pending post: approve (→ready) or skip (→paused). */
+async function handleSocialApprove(ctx, body) {
+  const id = clean(body?.id, 128);
+  if (!id) return json({ ok: false, error: 'id required' }, 400);
+  const now = Math.floor(Date.now() / 1000);
+  if (body?.decision === 'skip') {
+    // tenant-scan-ignore: platform automation — updates the @manicbot_com content slot by its own id (embeds tenant_id). No cross-tenant access.
+    await dbRun(ctx,
+      `UPDATE marketing_content_plan SET status = ?, updated_at = ? WHERE id = ? AND status = 'awaiting_approval'`,
+      'paused', now, id);
+    return json({ ok: true, status: 'paused' });
+  }
+  // tenant-scan-ignore: platform automation — updates the @manicbot_com content slot by its own id (embeds tenant_id). No cross-tenant access.
+  await dbRun(ctx,
+    `UPDATE marketing_content_plan SET status = ?, approved_at = ?, updated_at = ? WHERE id = ? AND status = 'awaiting_approval'`,
+    'ready', now, now, id);
+  return json({ ok: true, status: 'ready' });
+}
+
 /**
  * @param {Request} request
  * @param {any} env
@@ -529,6 +656,8 @@ export async function tryMessagingRoutes(request, env, url) {
         case 'stats': return await handleStats(ctx, env);
         case 'plan': return await handlePlan(ctx, url);
         case 'calendar': return await handleCalendar(ctx, url);
+        case 'comments-pending': return await handleCommentsPending(ctx, url);
+        case 'social-pending': return await handleSocialPending(ctx, url);
         default: return new Response('Not Found', { status: 404 });
       }
     }
@@ -547,6 +676,9 @@ export async function tryMessagingRoutes(request, env, url) {
       case 'reschedule': return await handleReschedule(ctx, body);
       case 'flag': return await handleFlag(ctx, body);
       case 'promo-mint': return await handlePromoMint(ctx, body);
+      case 'comment-reply': return await handleCommentReply(ctx, env, body);
+      case 'social-draft': return await handleSocialDraft(ctx, body);
+      case 'social-approve': return await handleSocialApprove(ctx, body);
       default: return new Response('Not Found', { status: 404 });
     }
   } catch (e) {

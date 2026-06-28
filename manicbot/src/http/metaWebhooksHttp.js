@@ -9,6 +9,7 @@ import {
 import { WhatsAppAdapter } from '../channels/whatsapp.js';
 import { InstagramAdapter, parseInstagramIgnoreSenderIds } from '../channels/instagram.js';
 import { handleInbound } from '../handlers/inbound.js';
+import { ingestComment } from '../channels/comment-ingest.js';
 import { markOutboundDeliveryState } from '../services/messengerThreads.js';
 import { initServices } from '../services/services.js';
 import { envCtx } from './envCtx.js';
@@ -215,6 +216,25 @@ export async function tryMetaWebhooks(request, env, url, execCtx) {
             if (!channelConfig) {
               log.warn('http.metaWebhooks', { message: 'no channelConfig for IG tenant', tenantId: resolved.tenantId });
               continue;
+            }
+            // Inbound comments arrive as entry.changes[] (field 'comments' for IG,
+            // 'feed' for a Facebook Page) — NOT entry.messaging[]. Ingest them into
+            // social_comment_inbox here; this path needs only DB + dedup, not the
+            // outbound token (the reply path resolves the token later). Own-account
+            // comments and Meta 24h retries are filtered inside ingestComment.
+            if (entry.changes?.length) {
+              const ownerId = channelConfig.ig_business_id || pageId;
+              for (const change of entry.changes) {
+                if (change?.field === 'comments' || change?.field === 'feed') {
+                  await ingestComment(env, {
+                    tenantId: resolved.tenantId,
+                    channelType: change.field === 'feed' ? 'facebook' : 'instagram',
+                    pageId,
+                    ownerId,
+                    change,
+                  });
+                }
+              }
             }
             if (!channelConfig.token) {
               log.error('http.metaWebhooks', new Error('no IG token for tenant — set via POST /admin/ig-token'), { tenantId: resolved.tenantId });

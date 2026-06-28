@@ -1,11 +1,15 @@
 /**
- * Claude API caption generator for the @manicbot_com IG autopilot.
+ * Caption generator for the @manicbot_com IG autopilot — FALLBACK ONLY.
  *
- * Used for weeks 1-3 of the launch (per the 3-week roadmap). After
- * that, the planned switch is to Workers AI gpt-oss-120b via env.AI
- * to eliminate the third-party API dependency. The shape of this
- * function stays the same so the cron phase doesn't need to know
- * which backend is wired up.
+ * PRIMARY path (migration 0127): the ThinkPad `social-content-builder` cron
+ * generates captions with `claude -p` on the Max subscription (no API key) and
+ * pushes them via the /admin/messaging/social-draft seam, so `caption_pl` is
+ * already populated when the autopilot picks up the slot — processPending then
+ * SKIPS generation entirely. This module only runs when a slot reaches lead time
+ * with no caption (a safety net), and in prod resolves to Workers AI because
+ * ANTHROPIC_API_KEY is intentionally NOT set (the project bills Claude via the
+ * Max subscription on the ThinkPad, never a per-token API key). The Anthropic
+ * branch below is retained for local/dev use only.
  *
  * Inputs from the content_plan row:
  *   - theme:       'inspiration' | 'product' | 'social_proof'

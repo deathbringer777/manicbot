@@ -1299,7 +1299,10 @@ CREATE TABLE IF NOT EXISTS marketing_content_plan (
   error_count     INTEGER NOT NULL DEFAULT 0,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL,
-  published_at    INTEGER
+  published_at    INTEGER,
+  approved_at     INTEGER,
+  fb_post_id      TEXT,
+  fb_permalink    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_mcp_status_sched ON marketing_content_plan(status, scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_mcp_tenant_sched ON marketing_content_plan(tenant_id, scheduled_at);
@@ -1329,6 +1332,33 @@ CREATE TABLE IF NOT EXISTS marketing_publish_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_mpq_status_attempt ON marketing_publish_queue(status, last_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_mpq_content_plan   ON marketing_publish_queue(content_plan_id);
+
+-- ─── Social comment inbox (migration 0127) ───────────────────────────────
+-- Inbound IG/FB comments received on the Meta webhook (entry[].changes[]
+-- field 'comments'/'feed'). The Worker owns the webhook + tokens; the
+-- ThinkPad `comment-responder` cron pulls 'new' rows, classifies + drafts a
+-- reply via `claude -p`, pushes it back, and the Worker posts the reply.
+-- comment_id is the Meta id → doubles as the replay/dedup guard.
+CREATE TABLE IF NOT EXISTS social_comment_inbox (
+  id                TEXT PRIMARY KEY,
+  tenant_id         TEXT,
+  channel_type      TEXT NOT NULL,
+  media_id          TEXT,
+  comment_id        TEXT NOT NULL,
+  parent_id         TEXT,
+  from_user_id      TEXT,
+  from_username     TEXT,
+  text              TEXT,
+  status            TEXT NOT NULL DEFAULT 'new',
+  classification    TEXT,
+  reply_text        TEXT,
+  reply_comment_id  TEXT,
+  error             TEXT,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sci_comment_id ON social_comment_inbox(comment_id);
+CREATE INDEX IF NOT EXISTS idx_sci_status_created ON social_comment_inbox(status, created_at);
 
 -- ─── Appointment blocks (migration 0061) ─────────────────────────────────
 -- Master-owned non-client occupancy: short reservations and time-off

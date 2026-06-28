@@ -42,6 +42,13 @@ module.exports = {
       watch: false,
     },
     {
+      name: 'meta-ads-monitor',
+      script: `${BASE}/crons/meta-ads-monitor.js`,
+      cron_restart: '0 9 * * *',      // 09:00 daily — Meta ads spend/results 7d + Pixel health → TG
+      autorestart: false,             // no-ops cleanly until META_ADS_TOKEN (ads_read) is set
+      watch: false,
+    },
+    {
       name: 'lead-scout',
       script: `${BASE}/crons/lead-scout/index.js`,
       cron_restart: '*/15 * * * *',   // every 15 min slot rotation (4× hourly)

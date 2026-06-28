@@ -35,6 +35,7 @@ import {
   publishMediaContainer,
   getMediaPermalink,
 } from '../channels/instagram-publish.js';
+import { createPhotoPost, getFbPostPermalink } from '../channels/facebook-publish.js';
 
 const MAX_SLOTS_PER_TICK = 3;        // bound work per tick
 const MAX_ERRORS_PER_SLOT = 5;       // after this, status='failed'
@@ -62,7 +63,7 @@ export async function phaseInstagramAutopilot(env, nowMs = Date.now()) {
     slots = await env.DB.prepare(
       `SELECT id, scheduled_at, theme, topic, key_message,
               headline_pl, caption_pl, hashtags_json, image_url, image_prompt,
-              status, error_count
+              status, error_count, approved_at
        FROM marketing_content_plan
        WHERE tenant_id IS NULL
          AND status IN ('pending', 'ready', 'publishing')
@@ -171,57 +172,120 @@ async function processPending(env, slot, nowSec) {
   const imagePrompt = buildImagePrompt(captionData.headline_pl, captionData.image_prompt_visual);
   const img = await generateImage(env, { prompt: imagePrompt, key: `posts/${slot.id}.png` });
 
-  // 3) Advance to ready
+  // 3) Advance. With the approval gate on, park the slot in 'awaiting_approval'
+  //    and ping the owner once (the transition happens exactly once because
+  //    'awaiting_approval' is not re-selected by the tick). The operator
+  //    approves via the social-approve seam, which flips it to 'ready'.
+  if (env?.MARKETING_REQUIRE_APPROVAL === '1') {
+    await env.DB.prepare(
+      `UPDATE marketing_content_plan
+       SET image_url = ?, status = 'awaiting_approval', updated_at = ?
+       WHERE id = ?`,
+    )
+      .bind(img.url, nowSec, slot.id)
+      .run();
+    await notifyApprovalNeeded(env, slot, captionData, img.url);
+    log.info('marketing.autopilot', { stage: 'pending->awaiting_approval', slotId: slot.id, imageUrl: img.url });
+    return;
+  }
+
   await env.DB.prepare(
     `UPDATE marketing_content_plan
-     SET image_url = ?, status = 'ready', updated_at = ?
+     SET image_url = ?, status = 'ready', approved_at = ?, updated_at = ?
      WHERE id = ?`,
   )
-    .bind(img.url, nowSec, slot.id)
+    .bind(img.url, nowSec, nowSec, slot.id)
     .run();
 
   log.info('marketing.autopilot', { stage: 'pending->ready', slotId: slot.id, imageUrl: img.url });
 }
 
+/**
+ * Ping the owner that a generated post is waiting for approval. Fire-and-forget;
+ * never throws (a notify failure must not stall the autopilot).
+ */
+async function notifyApprovalNeeded(env, slot, captionData, imageUrl) {
+  try {
+    const { notifyAdmin } = await import('../utils/notifyAdmin.js');
+    const head = captionData?.headline_pl ? `${captionData.headline_pl}\n\n` : '';
+    const cap = String(captionData?.caption_pl ?? '').slice(0, 300);
+    await notifyAdmin(
+      env,
+      `🖼 Пост ждёт одобрения (@manicbot_com)\n${head}${cap}\n\n${imageUrl}\nОдобри в боте.`,
+    );
+  } catch (e) {
+    log.warn('marketing.autopilot', { stage: 'notifyApprovalNeeded_failed', slotId: slot?.id, error: e?.message });
+  }
+}
+
 async function processReady(env, slot, nowSec) {
   if (slot.scheduled_at > nowSec) return; // not time to publish yet
+  // Defensive: with the approval gate on, a slot only reaches 'ready' after the
+  // operator approves (which stamps approved_at). Never publish an unapproved one.
+  if (env?.MARKETING_REQUIRE_APPROVAL === '1' && !slot.approved_at) {
+    log.warn('marketing.autopilot', { skipped: 'not_approved', slotId: slot.id });
+    return;
+  }
 
-  const creds = await getIgCredentials(env);
-  if (!creds) {
-    log.warn('marketing.autopilot', { skipped: 'no_ig_credentials', slotId: slot.id });
+  const igCreds = await getIgCredentials(env);
+  const fbCreds = await getFbCredentials(env);
+  if (!igCreds && !fbCreds) {
+    log.warn('marketing.autopilot', { skipped: 'no_credentials', slotId: slot.id });
     return;
   }
 
   const hashtags = safeParseJsonArray(slot.hashtags_json);
   const fullCaption = slot.caption_pl + CAPTION_HASHTAG_SEPARATOR + hashtags.join(' ');
 
-  const res = await createMediaContainer({
-    pageId: creds.pageId,
-    imageUrl: slot.image_url,
-    caption: fullCaption,
-    token: creds.token,
-  });
-
-  if (!res.ok) {
-    throw new Error(`createMediaContainer: ${res.error}${res.tokenDead ? ' (token dead)' : ''}`);
+  // Facebook is a single-step publish — do it inline and record the result.
+  // An FB failure does NOT fail the slot (IG may still succeed); it's surfaced.
+  let fbPostId = null;
+  let fbPermalink = null;
+  if (fbCreds) {
+    const fb = await createPhotoPost({ pageId: fbCreds.pageId, imageUrl: slot.image_url, caption: fullCaption, token: fbCreds.token });
+    if (fb.ok) {
+      fbPostId = fb.postId;
+      const pl = await getFbPostPermalink({ postId: fb.postId, token: fbCreds.token }).catch(() => null);
+      if (pl?.ok) fbPermalink = pl.permalink;
+      log.info('marketing.autopilot', { stage: 'ready.fb_posted', slotId: slot.id, fbPostId });
+    } else {
+      log.error('marketing.autopilot', new Error(`createPhotoPost: ${fb.error}`), { slotId: slot.id, tokenDead: fb.tokenDead });
+    }
   }
 
-  const queueId = `pq_${slot.id}`;
-  await env.DB.prepare(
-    `INSERT OR REPLACE INTO marketing_publish_queue
-     (id, content_plan_id, page_id, meta_container_id, status, attempts, last_attempt_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'container_created', 1, ?, ?, ?)`,
-  )
-    .bind(queueId, slot.id, creds.pageId, res.containerId, nowSec, nowSec, nowSec)
-    .run();
+  // Instagram is two-step (container → publish). Start the container; the
+  // publishing tick finishes it. The FB result rides along on the same row.
+  if (igCreds) {
+    const res = await createMediaContainer({ pageId: igCreds.pageId, imageUrl: slot.image_url, caption: fullCaption, token: igCreds.token });
+    if (!res.ok) {
+      throw new Error(`createMediaContainer: ${res.error}${res.tokenDead ? ' (token dead)' : ''}`);
+    }
+    const queueId = `pq_${slot.id}`;
+    await env.DB.prepare(
+      `INSERT OR REPLACE INTO marketing_publish_queue
+       (id, content_plan_id, page_id, meta_container_id, status, attempts, last_attempt_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'container_created', 1, ?, ?, ?)`,
+    )
+      .bind(queueId, slot.id, igCreds.pageId, res.containerId, nowSec, nowSec, nowSec)
+      .run();
 
-  await env.DB.prepare(
-    `UPDATE marketing_content_plan SET status = 'publishing', updated_at = ? WHERE id = ?`,
-  )
-    .bind(nowSec, slot.id)
-    .run();
+    await env.DB.prepare(
+      `UPDATE marketing_content_plan SET status = 'publishing', fb_post_id = ?, fb_permalink = ?, updated_at = ? WHERE id = ?`,
+    )
+      .bind(fbPostId, fbPermalink, nowSec, slot.id)
+      .run();
 
-  log.info('marketing.autopilot', { stage: 'ready->publishing', slotId: slot.id, containerId: res.containerId });
+    log.info('marketing.autopilot', { stage: 'ready->publishing', slotId: slot.id, containerId: res.containerId });
+    return;
+  }
+
+  // Facebook-only slot → no IG container; it's already live, mark posted.
+  await env.DB.prepare(
+    `UPDATE marketing_content_plan SET status = 'posted', fb_post_id = ?, fb_permalink = ?, published_at = ?, updated_at = ? WHERE id = ?`,
+  )
+    .bind(fbPostId, fbPermalink, nowSec, nowSec, slot.id)
+    .run();
+  log.info('marketing.autopilot', { stage: 'ready->posted(fb-only)', slotId: slot.id, fbPostId });
 }
 
 async function processPublishing(env, slot, nowSec) {
@@ -323,6 +387,41 @@ export async function getIgCredentials(env) {
   );
   if (!cfg?.token) return null;
   const pageId = cfg.ig_business_id || cfg.config?.ig_user_id || cfg.config?.ig_account_id || cfg.page_id;
+  if (!pageId) return null;
+  return { pageId, token: cfg.token };
+}
+
+/**
+ * Resolve Facebook Page publishing credentials for @manicbot_com.
+ *
+ * Priority mirrors getIgCredentials:
+ *   1. Worker secrets MARKETING_FB_PAGE_ID + MARKETING_FB_ACCESS_TOKEN.
+ *   2. The 'facebook' channel stored under MARKETING_FB_TENANT_ID (EAA Page
+ *      token, decrypted only here inside the Worker).
+ *
+ * Returns null when no FB connection is configured — the autopilot then simply
+ * skips the FB fan-out (IG still runs). The @manicbot_com channel is IG-only
+ * today (api: 'instagram_direct'); a separate Facebook-OAuth connection must be
+ * made before this resolves.
+ *
+ * @returns {Promise<{ pageId: string, token: string } | null>}
+ */
+export async function getFbCredentials(env) {
+  if (env?.MARKETING_FB_PAGE_ID && env?.MARKETING_FB_ACCESS_TOKEN) {
+    return { pageId: env.MARKETING_FB_PAGE_ID, token: env.MARKETING_FB_ACCESS_TOKEN };
+  }
+  const tenantId = env?.MARKETING_FB_TENANT_ID;
+  if (!tenantId || !env?.DB || !env?.BOT_ENCRYPTION_KEY) return null;
+  const { getChannelConfig } = await import('../channels/resolver.js');
+  const cfg = await getChannelConfig(
+    { db: env.DB },
+    tenantId,
+    'facebook',
+    env.BOT_ENCRYPTION_KEY,
+    env.BOT_ENCRYPTION_KEY_OLD ?? null,
+  );
+  if (!cfg?.token) return null;
+  const pageId = cfg.page_id || cfg.config?.page_id;
   if (!pageId) return null;
   return { pageId, token: cfg.token };
 }

@@ -97,6 +97,9 @@ export const META_OAUTH_PROVIDERS = Object.freeze({
      * Page-Messaging scopes. `pages_manage_metadata` is required to call
      * /{page_id}/subscribed_apps post-connect. `instagram_basic` +
      * `instagram_manage_messages` cover IG-via-Page DM reception.
+     * `pages_manage_posts` + `pages_manage_engagement` + `pages_read_engagement`
+     * power the @manicbot_com social automation (Facebook Page posting + comment
+     * replies, migration 0127). All require Meta App Review.
      */
     scopes: [
       'pages_show_list',
@@ -104,6 +107,9 @@ export const META_OAUTH_PROVIDERS = Object.freeze({
       'pages_manage_metadata',
       'instagram_basic',
       'instagram_manage_messages',
+      'pages_manage_posts',
+      'pages_manage_engagement',
+      'pages_read_engagement',
     ],
     appIdEnvKey: 'META_APP_ID',
     appSecretEnvKey: 'META_APP_SECRET',

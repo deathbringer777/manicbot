@@ -834,7 +834,9 @@ async function subscribeInstagramDirect(ctx, token, igUserId) {
   if (!token || !igUserId) return { ok: false, error: 'missing_token_or_user_id' };
   try {
     const url = new URL(`https://graph.instagram.com/v21.0/${encodeURIComponent(igUserId)}/subscribed_apps`);
-    url.searchParams.set('subscribed_fields', 'messages,messaging_postbacks,messaging_seen,message_reactions');
+    // `comments` powers the @manicbot_com social-automation comment inbox
+    // (migration 0127) alongside the DM fields.
+    url.searchParams.set('subscribed_fields', 'messages,messaging_postbacks,messaging_seen,message_reactions,comments');
     url.searchParams.set('access_token', token);
     const res = await fetch(url, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
@@ -855,7 +857,9 @@ async function subscribeFacebookPage(ctx, pageId, pageToken) {
   if (!pageId || !pageToken) return { ok: false, error: 'missing_page_id_or_token' };
   try {
     const url = new URL(`https://graph.facebook.com/v21.0/${encodeURIComponent(pageId)}/subscribed_apps`);
-    url.searchParams.set('subscribed_fields', 'messages,messaging_postbacks,message_reads,message_reactions');
+    // `feed` powers the @manicbot_com social-automation comment inbox
+    // (migration 0127) alongside the DM fields.
+    url.searchParams.set('subscribed_fields', 'messages,messaging_postbacks,message_reads,message_reactions,feed');
     url.searchParams.set('access_token', pageToken);
     const res = await fetch(url, { method: 'POST' });
     const data = await res.json().catch(() => ({}));

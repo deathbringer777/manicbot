@@ -47,6 +47,16 @@ async function sendToAdmin(env, text) {
   }
 }
 
+/**
+ * Generic fire-and-forget admin Telegram ping. Safe to call from any HTTP/seam
+ * handler — silently no-ops if no bot token / chat id is configured.
+ * @param {object} env
+ * @param {string} text - HTML-safe message (caller escapes any user content)
+ */
+export async function notifyAdmin(env, text) {
+  return sendToAdmin(env, text);
+}
+
 export async function notifyAdminNewLead(env, lead) {
   const lines = [
     '🆕 <b>Новая заявка</b>',

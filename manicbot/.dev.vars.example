@@ -123,14 +123,24 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 
 # ─── ANTHROPIC ────────────────────────────────────────────────────────────────
 
-# Anthropic Claude API key — used by marketing caption generator
+# Anthropic Claude API key — LOCAL/DEV ONLY for the caption fallback. In prod it
+# is intentionally UNSET: captions come from the ThinkPad `claude -p` (Max
+# subscription) via the social-draft seam, and the in-Worker fallback uses
+# Workers AI (no key). Do NOT set this in production.
 # ANTHROPIC_API_KEY=sk-ant-...
 
 # ─── MARKETING ────────────────────────────────────────────────────────────────
 
-# Facebook Page ID + token for IG marketing autopilot posting
-# MARKETING_IG_PAGE_ID=your_page_id
-# MARKETING_IG_ACCESS_TOKEN=your_page_access_token
+# Instagram publishing override (else read from channel_configs via MARKETING_IG_TENANT_ID)
+# MARKETING_IG_PAGE_ID=your_ig_account_id
+# MARKETING_IG_ACCESS_TOKEN=your_ig_access_token
+
+# Social automation phase 2 (migration 0127)
+# MARKETING_REQUIRE_APPROVAL=1            # Telegram-approve each post before publish
+# SOCIAL_COMMENTS_AUTOREPLY_ENABLED=0     # autonomous IG/FB comment replies (kill-switch)
+# MARKETING_FB_TENANT_ID=t_...            # FB Page channel tenant (EAA token) — unset until FB connected
+# MARKETING_FB_PAGE_ID=your_fb_page_id    # OR manual FB override secrets:
+# MARKETING_FB_ACCESS_TOKEN=your_fb_page_token
 
 # ─── ADVANCED / DEVOPS ────────────────────────────────────────────────────────
 

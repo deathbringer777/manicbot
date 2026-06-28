@@ -8,6 +8,7 @@ import { listTenantIds, getBotIdsByTenantId, getTenant } from './tenant/storage.
 import { tenantHasActiveChannel } from './channels/resolver.js';
 import { handleCron } from './handlers/cron.js';
 import { phaseInstagramAutopilot } from './marketing/autopilot.js';
+import { phaseSocialCommentReply } from './marketing/social-comments.js';
 import { maybeRunD1Backup } from './services/d1Backup.js';
 import { pruneExpiredDedupRows } from './utils/dedup.js';
 import { pruneExpiredUploadNonces } from './services/upload.js';
@@ -717,6 +718,27 @@ export default {
             void captureError(env, e, {
               source: 'worker.scheduled',
               phase: 'marketing_autopilot',
+            });
+          }),
+        );
+      }
+
+      // ─── @manicbot_com autonomous comment replies ──────────────────────
+      // Posts replies the ThinkPad `comment-responder` drafted into
+      // social_comment_inbox (migration 0127). Self-gated on
+      // SOCIAL_COMMENTS_AUTOREPLY_ENABLED + rate-limited inside the phase, so
+      // it stays inert (one cheap DB read) until the kill-switch is flipped.
+      if (env.SOCIAL_COMMENTS_AUTOREPLY_ENABLED === '1') {
+        const nowMs = event.scheduledTime || Date.now();
+        _scheduledCtx.waitUntil(
+          phaseSocialCommentReply(env, nowMs).catch((e) => {
+            log.error(
+              'worker.socialCommentReply',
+              e instanceof Error ? e : new Error(String(e?.message || e)),
+            );
+            void captureError(env, e, {
+              source: 'worker.scheduled',
+              phase: 'social_comment_reply',
             });
           }),
         );

@@ -1379,6 +1379,10 @@ export const marketingContentPlan = sqliteTable("marketing_content_plan", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
   publishedAt: integer("published_at"),
+  // migration 0127: Telegram approval gate + Facebook fan-out result.
+  approvedAt: integer("approved_at"),
+  fbPostId: text("fb_post_id"),
+  fbPermalink: text("fb_permalink"),
 }, (t) => [
   index("idx_mcp_status_sched").on(t.status, t.scheduledAt),
   index("idx_mcp_tenant_sched").on(t.tenantId, t.scheduledAt),
@@ -1405,6 +1409,34 @@ export const marketingPublishQueue = sqliteTable("marketing_publish_queue", {
 }, (t) => [
   index("idx_mpq_status_attempt").on(t.status, t.lastAttemptAt),
   index("idx_mpq_content_plan").on(t.contentPlanId),
+]);
+
+// ─── Social comment inbox (migration 0127) ───────────────────────────────
+// Inbound IG/FB comments from the Meta webhook (entry[].changes[] field
+// 'comments'/'feed'). The Worker owns the webhook + tokens; the ThinkPad
+// `comment-responder` cron pulls 'new' rows, classifies + drafts a reply via
+// `claude -p`, pushes it back, and the Worker posts the reply. comment_id is
+// the Meta id → doubles as the replay/dedup guard.
+export const socialCommentInbox = sqliteTable("social_comment_inbox", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id"),
+  channelType: text("channel_type").notNull(),
+  mediaId: text("media_id"),
+  commentId: text("comment_id").notNull(),
+  parentId: text("parent_id"),
+  fromUserId: text("from_user_id"),
+  fromUsername: text("from_username"),
+  text: text("text"),
+  status: text("status").notNull().default("new"),
+  classification: text("classification"),
+  replyText: text("reply_text"),
+  replyCommentId: text("reply_comment_id"),
+  error: text("error"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  uniqueIndex("idx_sci_comment_id").on(t.commentId),
+  index("idx_sci_status_created").on(t.status, t.createdAt),
 ]);
 
 // ─── Appointment blocks (migration 0061) ─────────────────────────────────

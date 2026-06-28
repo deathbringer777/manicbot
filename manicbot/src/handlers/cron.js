@@ -145,7 +145,9 @@ async function setPhaseLastRun(ctx, phase, epochSec) {
 }
 
 const IG_RESUBSCRIBE_WINDOW_SEC = 24 * 60 * 60;
-const IG_RESUBSCRIBE_FIELDS = 'messages,messaging_postbacks,message_reads';
+// `comments` keeps the @manicbot_com social-automation comment inbox alive on
+// the daily re-subscribe alongside the DM fields (migration 0127).
+const IG_RESUBSCRIBE_FIELDS = 'messages,messaging_postbacks,message_reads,comments';
 
 /**
  * Re-subscribe the Facebook Page linked to this tenant's IG channel to the

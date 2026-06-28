@@ -66,6 +66,30 @@ MESSAGING_SEND_ENABLED = "0"
 # src/marketing/autopilot.js → getIgCredentials.
 MARKETING_IG_TENANT_ID = "t_1c305v2g5011"
 
+# ─── Social automation phase 2 (migration 0127) ──────────────────────────────
+# Require Telegram approval before a generated post is published. "1" — the
+# autopilot parks each post in 'awaiting_approval' and pings the owner; the
+# operator approves via the tg-bot (→ /admin/messaging/social-approve seam).
+# "0" — posts go live automatically once scheduled (legacy behavior).
+MARKETING_REQUIRE_APPROVAL = "1"
+
+# Autonomous AI replies to IG/FB comments. Default "0" (inert): comments are
+# still ingested into social_comment_inbox and the ThinkPad drafts replies, but
+# the Worker will NOT post any reply until this is flipped to "1". Guardrails
+# (rate-limit, escalation of negative/complaint comments, status-guarded dedup)
+# live in src/marketing/social-comments.js regardless.
+SOCIAL_COMMENTS_AUTOREPLY_ENABLED = "0"
+
+# Tenant whose `channel_configs` Facebook row holds the @manicbot_com FB Page
+# token (EAA, connected via the Facebook-OAuth path with pages_manage_posts +
+# pages_manage_engagement). UNSET today — the account is IG-only
+# (api: 'instagram_direct'); set after a Facebook Page is connected + App Review
+# grants the FB scopes. The autopilot skips the FB fan-out while unset.
+# MARKETING_FB_TENANT_ID = "t_..."
+# Alternatively, manual override secrets (bypass channel_configs):
+#   wrangler secret put MARKETING_FB_PAGE_ID
+#   wrangler secret put MARKETING_FB_ACCESS_TOKEN
+
 # ⚠️  ADMIN_CHAT_ID перенесён в секрет:
 #   wrangler secret put ADMIN_CHAT_ID
 # (значение: Telegram chat_id создателя платформы — даёт полный root-доступ)

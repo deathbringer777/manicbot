@@ -555,3 +555,90 @@ describe('marketing/autopilot — unknown status', () => {
     expect(env.AI.run).not.toHaveBeenCalled();
   });
 });
+
+// ─── WS5: Telegram approval gate ─────────────────────────────────────────────
+const resp = (body, status = 200, ok = true) => ({ ok, status, json: async () => body, text: async () => JSON.stringify(body) });
+
+describe('marketing/autopilot — approval gate (WS5)', () => {
+  it('parks a generated slot in awaiting_approval when MARKETING_REQUIRE_APPROVAL=1', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const slot = {
+      id: 'slot_ap', scheduled_at: nowSec + 60, theme: 'product', topic: 'X', key_message: null,
+      headline_pl: 'H', caption_pl: 'Existing caption', hashtags_json: '["#a"]', image_prompt: 'visual',
+      image_url: null, status: 'pending', error_count: 0,
+    };
+    const db = makeDb({ slots: [slot] });
+    const env = { ...makeEnv({ db }), MARKETING_REQUIRE_APPROVAL: '1' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp({}))); // notifyAdmin has no token → no-op
+
+    await processSlot(env, slot, nowSec);
+
+    expect(db.state.updates.find((u) => String(u.sql).includes("status = 'awaiting_approval'"))).toBeTruthy();
+    expect(db.state.updates.find((u) => String(u.sql).includes("status = 'ready'"))).toBeFalsy();
+  });
+
+  it('does not publish a ready slot that lacks approved_at when gate is on', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const slot = { id: 'slot_na', scheduled_at: nowSec - 30, caption_pl: 'c', hashtags_json: '[]', image_url: 'https://x', status: 'ready', error_count: 0, approved_at: null };
+    const db = makeDb({ slots: [slot] });
+    const env = { ...makeEnv({ db }), MARKETING_REQUIRE_APPROVAL: '1' };
+    const f = vi.fn();
+    vi.stubGlobal('fetch', f);
+    await processSlot(env, slot, nowSec);
+    expect(f).not.toHaveBeenCalled();
+  });
+});
+
+// ─── WS1: Facebook fan-out ───────────────────────────────────────────────────
+describe('marketing/autopilot — Facebook fan-out (WS1)', () => {
+  it('posts to both Facebook and Instagram on a ready slot', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const slot = {
+      id: 'slot_fb', scheduled_at: nowSec - 30, caption_pl: 'Caption',
+      hashtags_json: '["#ManicBot"]', image_url: 'https://pub-abc.r2.dev/posts/slot_fb.png',
+      status: 'ready', error_count: 0, approved_at: nowSec,
+    };
+    const db = makeDb({ slots: [slot] });
+    const env = { ...makeEnv({ db }), MARKETING_FB_PAGE_ID: 'FBPAGE', MARKETING_FB_ACCESS_TOKEN: 'EAA-fb' };
+    const fetchMock = vi.fn().mockImplementation(async (url) => {
+      if (url.includes('/photos')) return resp({ id: 'PH', post_id: 'FB_1' });
+      if (url.includes('permalink_url')) return resp({ permalink_url: 'https://facebook.com/p/1' });
+      if (url.includes('/media')) return resp({ id: 'CONT' });
+      return resp({}, 404, false);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await processSlot(env, slot, nowSec);
+
+    const calls = fetchMock.mock.calls.map((c) => c[0]);
+    expect(calls.some((u) => u.includes('/photos'))).toBe(true);  // FB
+    expect(calls.some((u) => u.includes('/media'))).toBe(true);   // IG container
+    const upd = db.state.updates.find((u) => String(u.sql).includes("status = 'publishing'"));
+    expect(upd).toBeTruthy();
+    expect(upd.args).toContain('FB_1'); // fb_post_id recorded on the slot
+  });
+
+  it('marks a Facebook-only slot posted when no IG creds', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const slot = {
+      id: 'slot_fbonly', scheduled_at: nowSec - 30, caption_pl: 'C', hashtags_json: '[]',
+      image_url: 'https://x/y.png', status: 'ready', error_count: 0, approved_at: nowSec,
+    };
+    const db = makeDb({ slots: [slot] });
+    const env = { ...makeEnv({ db, ig: false }), MARKETING_FB_PAGE_ID: 'FBPAGE', MARKETING_FB_ACCESS_TOKEN: 'EAA-fb' };
+    const fetchMock = vi.fn().mockImplementation(async (url) => {
+      if (url.includes('/photos')) return resp({ post_id: 'FB_2' });
+      if (url.includes('permalink_url')) return resp({ permalink_url: 'https://facebook.com/p/2' });
+      return resp({}, 404, false);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await processSlot(env, slot, nowSec);
+
+    const calls = fetchMock.mock.calls.map((c) => c[0]);
+    expect(calls.some((u) => u.includes('/media'))).toBe(false); // no IG
+    const upd = db.state.updates.find((u) => String(u.sql).includes("status = 'posted'"));
+    expect(upd).toBeTruthy();
+    expect(upd.args).toContain('FB_2');
+  });
+});

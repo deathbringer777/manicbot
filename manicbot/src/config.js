@@ -354,5 +354,11 @@ export function buildCtx(env) {
     // campaigns stage instead of sending). See src/services/reactiveMessaging.js.
     stripeSecretKey: env.STRIPE_SECRET_KEY || null,
     messagingSendEnabled: env.MESSAGING_SEND_ENABLED === '1',
+    // Meta Conversions API (server-side ad-tracking). Pixel/dataset id is a public
+    // var; the token is a secret. Both must be set for CAPI to fire (else no-op).
+    // Test code routes events to Events Manager "Test events" instead of live.
+    metaCapiPixelId: env.META_CAPI_PIXEL_ID || null,
+    metaCapiToken: env.META_CAPI_TOKEN || null,
+    metaCapiTestCode: env.META_CAPI_TEST_EVENT_CODE || null,
   };
 }

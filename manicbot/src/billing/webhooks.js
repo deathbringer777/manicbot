@@ -28,6 +28,9 @@ import {
 } from './referralWebhooks.js';
 import { notifyTenantOwner } from '../services/userNotify.js';
 import { fireReactiveForTenant } from '../services/reactiveMessaging.js';
+import { sendCapiEvent } from '../marketing/metaCapi.js';
+
+const CAPI_SOURCE_URL = 'https://manicbot.com';
 
 // #P1-5 (relax.md §5) — plan tier order is the single source of truth for
 // upgrade detection. Mirrored verbatim by `notificationEmails.PLAN_ORDER`.
@@ -310,6 +313,25 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
           customerId, tenantId,
         );
       }
+      // Meta CAPI: server-side CompleteRegistration when a salon completes the
+      // SUBSCRIPTION checkout (trial or paid) — the addon-purchase path (no
+      // session.subscription) is intentionally excluded. Carries the owner email
+      // for ad-match. Best-effort + feature-flagged: a CAPI failure must never
+      // affect billing state. event_id is stable per checkout for browser↔server dedup.
+      if (session.subscription) {
+        try {
+          const email = session.customer_email
+            || (await dbGet(ctx, 'SELECT billing_email FROM tenants WHERE id = ?', tenantId))?.billing_email;
+          await sendCapiEvent(ctx, {
+            eventName: 'CompleteRegistration',
+            eventId: `reg_${session.id}`,
+            email,
+            eventSourceUrl: CAPI_SOURCE_URL,
+          });
+        } catch (e) {
+          log.warn('marketing.capi', { event: 'checkout_completed', error: e?.message });
+        }
+      }
     }
   }
 
@@ -461,6 +483,26 @@ export async function handleStripeWebhook(ctx, payload, signature, webhookSecret
           // fire-and-forget: don't block 200 response on email delivery
           sendInvoiceEmail(ctx, ctx.resendApiKey, ctx.resendFrom, tenantId, invoice)
             .catch(e => log.error('webhook.invoiceEmail', e));
+        }
+        // Meta CAPI: server-side Purchase on a real paid invoice (initial + every
+        // renewal = a true revenue event). Skips $0 invoices (trial-start /
+        // fully-discounted). Best-effort + feature-flagged; never blocks billing.
+        try {
+          const amountCents = Number(invoice.amount_paid || 0);
+          if (amountCents > 0) {
+            const email = invoice.customer_email
+              || (await dbGet(ctx, 'SELECT billing_email FROM tenants WHERE id = ?', tenantId))?.billing_email;
+            await sendCapiEvent(ctx, {
+              eventName: 'Purchase',
+              eventId: `inv_${invoice.id}`,
+              email,
+              value: amountCents / 100,
+              currency: invoice.currency,
+              eventSourceUrl: CAPI_SOURCE_URL,
+            });
+          }
+        } catch (e) {
+          log.warn('marketing.capi', { event: 'invoice_paid', error: e?.message });
         }
       }
     }

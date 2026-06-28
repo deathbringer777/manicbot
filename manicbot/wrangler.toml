@@ -32,6 +32,12 @@ META_APP_ID = "1568224577592551"
 # Without this var, /meta/oauth/start with provider=instagram returns
 # 503 oauth_not_configured.
 META_INSTAGRAM_APP_ID = "3756985564432185"
+# Meta Conversions API dataset / Pixel id (public — not a secret). The SAME pixel
+# the landing's browser Pixel fires (dataset "ManicBot Web"). DISTINCT from
+# META_APP_ID above (App id != Pixel id). Server-side conversions (registration,
+# purchase) are POSTed here from src/marketing/metaCapi.js. CAPI stays a no-op
+# until the companion secret META_CAPI_TOKEN is also set (see below).
+META_CAPI_PIXEL_ID = "869658089071782"
 # Retention dry-run: when "1", phaseRetention logs counts but skips DELETE/archive.
 # Production default is "0" (live deletes with R2 archive). Flip to "1" in the
 # Cloudflare dashboard to preview a retention run without losing data.
@@ -92,6 +98,12 @@ MARKETING_IG_TENANT_ID = "t_1c305v2g5011"
 #   wrangler secret put CLOUDFLARE_ACCOUNT_ID
 #   wrangler secret put CLICK_TOKEN_SECRET         # ≥32 chars; signs /r/ click links (migration 0123)
 #                                                    # SAME value must be set on the admin-app (Pages).
+#   wrangler secret put META_CAPI_TOKEN            # Meta Conversions API access token (dataset/system-user).
+#                                                    # Generate in Events Manager → dataset "ManicBot Web"
+#                                                    # → Settings → Conversions API → Generate access token.
+#                                                    # Pairs with var META_CAPI_PIXEL_ID; without it CAPI no-ops.
+#   wrangler secret put META_CAPI_TEST_EVENT_CODE  # OPTIONAL: routes CAPI events to Events Manager "Test events"
+#                                                    # instead of live (TESTxxxxx). Unset for production.
 #
 # Без STRIPE_SECRET_KEY и STRIPE_WEBHOOK_SECRET Stripe webhooks вернут 400/401.
 # Без STRIPE_PRICE_* кнопки оплаты не будут отображаться (canCheckout = false).

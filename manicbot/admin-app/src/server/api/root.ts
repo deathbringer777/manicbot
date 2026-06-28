@@ -33,6 +33,7 @@ import { searchRouter } from "~/server/api/routers/search";
 import { consentRouter } from "~/server/api/routers/consent";
 import { errorEventsRouter } from "~/server/api/routers/errorEvents";
 import { marketingAutopilotRouter } from "~/server/api/routers/marketingAutopilot";
+import { socialRouter } from "~/server/api/routers/social";
 import { ownershipRouter } from "~/server/api/routers/ownership";
 import { clientsRouter } from "~/server/api/routers/clients";
 import { otpRouter } from "~/server/api/routers/otp";
@@ -90,6 +91,7 @@ export const appRouter = createTRPCRouter({
   consent: consentRouter,
   errorEvents: errorEventsRouter,
   marketingAutopilot: marketingAutopilotRouter,
+  social: socialRouter,
   clients: clientsRouter,
   otp: otpRouter,
   referrals: referralsRouter,

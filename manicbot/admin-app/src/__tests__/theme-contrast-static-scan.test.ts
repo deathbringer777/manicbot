@@ -286,6 +286,7 @@ const NAKED_WHITE_TEXT_SKIP = new Set([
   "app/(dashboard)/messages/_components/PlatformOwnerView.tsx", // timestamps on colored bubbles (system-admin pane)
   "app/(dashboard)/messages/_components/PlatformAdminPane.tsx", // timestamps on colored bubbles (system-admin pane)
   "app/(dashboard)/marketing-autopilot/MarketingAutopilotClient.tsx", // system-admin tool, intentionally dark-only surfaces (bg-slate-900 modals)
+  "app/(dashboard)/social/SocialClient.tsx", // system-admin tool, intentionally dark-only surfaces (bg-slate-800 cards)
 ]);
 
 // Near-white text: SOLID `text-white` or a very pale `text-{c}-{50|100}` shade.

@@ -2050,3 +2050,23 @@ export const uploadTokenUsed = sqliteTable("upload_token_used", {
 }, (t) => [
   index("idx_upload_token_used_expires").on(t.expiresAt),
 ]);
+
+// ─── Job queue (Migration 0128) ─────────────────────────────────────────────
+// Platform-wide durable work queue drained by the ThinkPad sidecar compute
+// backend (services/jobs.js enqueueJob → sidecar job-runner). NOT tenant-scoped:
+// tenant_id is the target salon, not an access boundary. Timestamps = epoch sec.
+export const jobs = sqliteTable("jobs", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  payload: text("payload").notNull(),
+  status: text("status").notNull().default("pending"),
+  tenantId: text("tenant_id"),
+  result: text("result"),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  claimedAt: integer("claimed_at"),
+  finishedAt: integer("finished_at"),
+}, (t) => [
+  index("idx_jobs_status").on(t.status, t.createdAt),
+]);

@@ -59,6 +59,19 @@ test('verifyAccessJwt: rejects an unknown kid (no matching JWKS key)', () => {
   assert.throws(() => verifyAccessJwt(token, { jwks, aud: 'AUD123', now: 1000 }), /JWKS|key/);
 });
 
+test('verifyAccessJwt: rejects a token with NO exp claim (SEC-003 — no eternal tokens)', () => {
+  const { privateKey, jwks, kid } = setup();
+  const token = signJwt({ kid, privateKey, payload: { aud: ['AUD123'] } }); // no exp
+  assert.throws(() => verifyAccessJwt(token, { jwks, aud: 'AUD123', now: 1000 }), /missing exp/);
+});
+
+test('verifyAccessJwt: refuses when no expected aud is configured (SEC-003 — fail closed)', () => {
+  const { privateKey, jwks, kid } = setup();
+  const token = signJwt({ kid, privateKey, payload: { aud: ['AUD123'], exp: 9999999999 } });
+  assert.throws(() => verifyAccessJwt(token, { jwks, aud: '', now: 1000 }), /misconfigured/);
+  assert.throws(() => verifyAccessJwt(token, { jwks, aud: undefined, now: 1000 }), /misconfigured/);
+});
+
 test('makeAccessVerifier: caches JWKS across calls', async () => {
   const { privateKey, jwks, kid } = setup();
   let fetches = 0;

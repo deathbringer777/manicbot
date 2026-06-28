@@ -23,6 +23,7 @@ function buildArgs(prompt, {
   resume = null,
   system = null,
   tools = undefined,
+  permissionMode = undefined,
 } = {}) {
   const args = [
     '-p', prompt,
@@ -33,12 +34,32 @@ function buildArgs(prompt, {
   if (resume) args.push('--resume', resume);
   if (system) args.push('--append-system-prompt', system);
   if (tools !== undefined && tools !== null) args.push('--tools', tools);
+  // SEC-001: callers running UNTRUSTED prompts pass permissionMode:'default' so a
+  // malicious prompt cannot coerce tool use even if the host's ~/.claude config is
+  // bypassPermissions. Only emitted when explicitly requested (trusted crons keep
+  // their existing behaviour).
+  if (permissionMode) args.push('--permission-mode', permissionMode);
   return args;
 }
 
+// SEC-001: the spawned `claude -p` must NEVER carry our secrets. A generation job
+// has no need for them, and stripping them caps the blast radius if tool use is
+// ever (mis)enabled by the host config. ANTHROPIC_API_KEY also forces
+// subscription billing (never the metered API).
+const SENSITIVE_ENV_KEYS = [
+  'ANTHROPIC_API_KEY', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID',
+  'D1_DATABASE_ID', 'TELEGRAM_TOKEN', 'TG_BOT_TOKEN', 'CHAT_ID', 'TG_CHAT_ID',
+  'GROQ_API_KEY', 'META_ADS_TOKEN', 'META_CAPI_TOKEN', 'GSC_SERVICE_ACCOUNT_JSON',
+  'CF_ACCESS_CLIENT_ID', 'CF_ACCESS_CLIENT_SECRET',
+];
+const SENSITIVE_ENV_RE = /(TOKEN|SECRET|API_?KEY|PASSWORD|CREDENTIALS?|PRIVATE_KEY)$/i;
+
 function cleanEnv(env = process.env) {
   const copy = { ...env };
-  delete copy.ANTHROPIC_API_KEY; // subscription only — never fall back to metered API
+  for (const k of SENSITIVE_ENV_KEYS) delete copy[k];
+  for (const k of Object.keys(copy)) {
+    if (SENSITIVE_ENV_RE.test(k)) delete copy[k];
+  }
   return copy;
 }
 

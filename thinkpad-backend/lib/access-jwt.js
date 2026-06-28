@@ -47,9 +47,14 @@ function verifyAccessJwt(token, { jwks, aud, now = Math.floor(Date.now() / 1000)
 
   let payload;
   try { payload = decodeSegment(p); } catch { throw new Error('access: malformed payload'); }
-  if (payload.exp && now >= payload.exp) throw new Error('access: token expired');
+  // SEC-003: require exp and aud — do NOT "check only if present". A token without
+  // exp would never expire (eternal replay); an unconfigured aud would accept any
+  // token the team's Access ever issues for any other app (JWKS is team-wide).
+  if (typeof payload.exp !== 'number') throw new Error('access: token missing exp');
+  if (now >= payload.exp) throw new Error('access: token expired');
+  if (!aud) throw new Error('access: verifier misconfigured (no expected aud)');
   const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-  if (aud && !auds.includes(aud)) throw new Error('access: aud mismatch');
+  if (!auds.includes(aud)) throw new Error('access: aud mismatch');
   return payload;
 }
 

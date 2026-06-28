@@ -14,6 +14,13 @@
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
+// SEC-006: bound attacker-influenced inputs at the trust boundary.
+const MAX_PROMPT_CHARS = 20_000;
+const MAX_SYSTEM_CHARS = 4_000;
+const MIN_TIMEOUT_MS = 10_000;
+const MAX_TIMEOUT_MS = 300_000;
+const DEFAULT_TIMEOUT_MS = 120_000;
+
 const HANDLERS = {
   // Liveness probe — proves the enqueue → claim → run → write-back pipe.
   async ping(payload) {
@@ -21,13 +28,25 @@ const HANDLERS = {
   },
 
   // Generic Claude-on-Max generation. payload: { prompt, json?, system?, timeoutMs? }
+  //
+  // SECURITY: payload is attacker-influenceable. The prompt drives an autonomous
+  // agent, so the guard is CAPABILITY, not text filtering:
+  //   - tools:'' disables ALL tools (no file/bash) → pure text generation (SEC-001);
+  //   - permissionMode:'default' refuses to inherit a host bypassPermissions posture;
+  //   - prompt/system are length-capped and timeoutMs is clamped so one job can't
+  //     pin the single-flight runner or blow up cost (SEC-006).
   async 'claude.generate'(payload, { askClaude }) {
     const prompt = String(payload?.prompt || '').trim();
     if (!prompt) throw new Error('claude.generate: payload.prompt is required');
+    if (prompt.length > MAX_PROMPT_CHARS) throw new Error('claude.generate: prompt too long');
+    const system = payload.system ? String(payload.system).slice(0, MAX_SYSTEM_CHARS) : null;
+    const timeoutMs = Math.min(Math.max(Number(payload.timeoutMs) || DEFAULT_TIMEOUT_MS, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS);
     const out = await askClaude(prompt, {
       json: !!payload.json,
-      ...(payload.system ? { system: payload.system } : {}),
-      ...(payload.timeoutMs ? { timeoutMs: payload.timeoutMs } : {}),
+      tools: '',                 // SEC-001: no tools
+      permissionMode: 'default', // SEC-001: never inherit host bypassPermissions
+      timeoutMs,
+      ...(system ? { system } : {}),
     });
     return payload.json ? { json: out.json } : { text: out.text };
   },

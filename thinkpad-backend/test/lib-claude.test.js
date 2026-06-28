@@ -55,6 +55,28 @@ test('buildArgs: resume, system prompt and tools are passed through', () => {
   assert.equal(args[args.indexOf('--tools') + 1], '');
 });
 
+test('buildArgs: emits --permission-mode only when requested (SEC-001)', () => {
+  assert.ok(!claude.buildArgs('hi', {}).includes('--permission-mode'), 'absent by default (trusted crons)');
+  const args = claude.buildArgs('hi', { permissionMode: 'default' });
+  assert.equal(args[args.indexOf('--permission-mode') + 1], 'default');
+});
+
+test('cleanEnv: strips secrets from the child env, keeps benign vars (SEC-001)', () => {
+  const child = claude.cleanEnv({
+    PATH: '/usr/bin', HOME: '/home/kirill', LANG: 'en_US.UTF-8',
+    ANTHROPIC_API_KEY: 'sk-ant', CLOUDFLARE_API_TOKEN: 'cf', D1_DATABASE_ID: 'd1',
+    TELEGRAM_TOKEN: 'tg', CHAT_ID: '123', SOME_SECRET: 's', FOO_PASSWORD: 'p',
+  });
+  // benign vars survive (claude needs HOME for ~/.claude creds, PATH for the binary)
+  assert.equal(child.PATH, '/usr/bin');
+  assert.equal(child.HOME, '/home/kirill');
+  assert.equal(child.LANG, 'en_US.UTF-8');
+  // secrets are gone — explicit list + pattern (*_SECRET, *_PASSWORD, *_TOKEN, etc.)
+  for (const k of ['ANTHROPIC_API_KEY', 'CLOUDFLARE_API_TOKEN', 'D1_DATABASE_ID', 'TELEGRAM_TOKEN', 'CHAT_ID', 'SOME_SECRET', 'FOO_PASSWORD']) {
+    assert.ok(!(k in child), `${k} must be stripped`);
+  }
+});
+
 test('askClaude: returns text + sessionId from the CLI envelope', async () => {
   const exec = fakeExec({ stdout: envelope() });
   const out = await claude.askClaude('hi', { exec });

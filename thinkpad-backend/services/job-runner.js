@@ -2,7 +2,7 @@
 /**
  * ThinkPad job-runner — persistent PM2 service (autorestart: true, NOT a
  * one-shot cron_restart). Drains the D1 `jobs` queue the Worker fills
- * (manicbot/src/services/jobs.js on `main`, migration 0127).
+ * (manicbot/src/services/jobs.js on `main`, migration 0128).
  *
  *   - poll loop: every JOB_POLL_INTERVAL_MS, claim + run pending jobs;
  *   - POST /kick (127.0.0.1 only, behind the Access-gated tunnel): trigger an
@@ -18,7 +18,6 @@
  *   CF_ACCESS_TEAM_DOMAIN + CF_ACCESS_AUD (kick JWT verification).
  */
 require('dotenv').config();
-const http = require('http');
 const { createD1 } = require('../lib/d1');
 const { createTg } = require('../lib/tg');
 const { createLogger } = require('../lib/log');
@@ -26,6 +25,7 @@ const { askClaude } = require('../lib/claude');
 const { makeAccessVerifier } = require('../lib/access-jwt');
 const { processPending } = require('./job-core');
 const { HANDLERS } = require('./handlers');
+const { createServer } = require('./job-server');
 
 const PORT = Number(process.env.JOB_RUNNER_PORT) || 8791;
 const POLL_INTERVAL_MS = Number(process.env.JOB_POLL_INTERVAL_MS) || 30_000;
@@ -36,35 +36,10 @@ function buildVerifier(logger) {
   const teamDomain = process.env.CF_ACCESS_TEAM_DOMAIN;
   const aud = process.env.CF_ACCESS_AUD;
   if (!teamDomain || !aud) {
-    logger.log('[job-runner] WARNING: CF_ACCESS_TEAM_DOMAIN/AUD unset — /kick JWT verification DISABLED (tunnel Access still gates the network path)');
+    logger.log('[job-runner] WARNING: CF_ACCESS_TEAM_DOMAIN/AUD unset — /kick will be REFUSED (503, fail-closed); the poll loop still drains the queue');
     return null;
   }
   return makeAccessVerifier({ teamDomain, aud });
-}
-
-function createServer({ drain, verifyAccess, logger }) {
-  return http.createServer(async (req, res) => {
-    if (req.method === 'GET' && req.url === '/health') {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      return res.end('ok');
-    }
-    if (req.method === 'POST' && req.url === '/kick') {
-      if (verifyAccess) {
-        try {
-          await verifyAccess(req.headers['cf-access-jwt-assertion']);
-        } catch (e) {
-          logger.log(`[job-runner] /kick rejected: ${e.message}`);
-          res.writeHead(403, { 'content-type': 'text/plain' });
-          return res.end('forbidden');
-        }
-      }
-      drain('kick').catch(() => {});
-      res.writeHead(202, { 'content-type': 'application/json' });
-      return res.end(JSON.stringify({ ok: true }));
-    }
-    res.writeHead(404, { 'content-type': 'text/plain' });
-    res.end('not found');
-  });
 }
 
 /** Single-flight drain: never run two passes at once; coalesce a kick during a run. */
@@ -115,4 +90,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { createServer, makeDrain, main };
+module.exports = { makeDrain, main };

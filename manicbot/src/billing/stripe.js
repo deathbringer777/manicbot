@@ -408,6 +408,10 @@ export async function cancelSubscriptionAtPeriodEnd(secretKey, subscriptionId) {
  * them so collection stops. Best-effort per invoice — one bad void never aborts
  * the rest. Mirrors admin-app `voidOpenInvoicesForCustomer`.
  *
+ * Walks ALL pages of open invoices (Stripe caps a page at 100) before voiding
+ * any: voiding flips an invoice out of the status=open filter, so collecting
+ * first keeps the cursor walk over a stable, read-only set.
+ *
  * @param {string} secretKey
  * @param {string} customerId
  * @returns {Promise<{ voided: string[] }>}
@@ -415,24 +419,41 @@ export async function cancelSubscriptionAtPeriodEnd(secretKey, subscriptionId) {
 export async function voidOpenInvoicesForCustomer(secretKey, customerId) {
   const voided = [];
   if (!customerId) return { voided };
-  const listRes = await fetch(
-    `${STRIPE_API}/invoices?customer=${encodeURIComponent(customerId)}&status=open&limit=100`,
-    { method: 'GET', headers: authHeader(secretKey), signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS) },
-  );
-  if (!listRes.ok) {
-    const err = await listRes.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Stripe invoices list failed: ${listRes.status}`);
+
+  // Caps a pathological response (never-emptying page) at 5000 invoices instead
+  // of looping unbounded; a real customer has at most a handful of open invoices.
+  const MAX_PAGES = 50;
+  const openInvoiceIds = [];
+  let startingAfter = null;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const params = new URLSearchParams({ customer: customerId, status: 'open', limit: '100' });
+    if (startingAfter) params.set('starting_after', startingAfter);
+    const listRes = await fetch(`${STRIPE_API}/invoices?${params}`, {
+      method: 'GET',
+      headers: authHeader(secretKey),
+      signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
+    });
+    if (!listRes.ok) {
+      const err = await listRes.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `Stripe invoices list failed: ${listRes.status}`);
+    }
+    const list = await listRes.json();
+    const data = Array.isArray(list.data) ? list.data : [];
+    for (const inv of data) {
+      if (inv?.id) openInvoiceIds.push(inv.id);
+    }
+    if (!list.has_more || data.length === 0) break;
+    startingAfter = data[data.length - 1].id;
   }
-  const list = await listRes.json();
-  for (const inv of Array.isArray(list.data) ? list.data : []) {
-    if (!inv?.id) continue;
+
+  for (const id of openInvoiceIds) {
     try {
-      const r = await fetch(`${STRIPE_API}/invoices/${encodeURIComponent(inv.id)}/void`, {
+      const r = await fetch(`${STRIPE_API}/invoices/${encodeURIComponent(id)}/void`, {
         method: 'POST',
         headers: { ...authHeader(secretKey), 'Content-Type': 'application/x-www-form-urlencoded' },
         signal: AbortSignal.timeout(STRIPE_TIMEOUT_MS),
       });
-      if (r.ok) voided.push(inv.id);
+      if (r.ok) voided.push(id);
     } catch {
       // best-effort: skip an invoice that can't be voided
     }

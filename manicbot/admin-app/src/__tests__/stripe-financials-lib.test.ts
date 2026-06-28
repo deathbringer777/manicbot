@@ -121,6 +121,30 @@ describe("admin-app stripe.ts — live financial read helpers", () => {
     expect(urlOf(fetchMock.mock.calls[2]!).pathname).toBe("/v1/invoices/in_2/void");
   });
 
+  it("voidOpenInvoicesForCustomer walks all pages before voiding (pagination)", async () => {
+    // >100 open invoices must not leave the overflow un-voided. Both list pages
+    // are fetched (cursor by starting_after) BEFORE any void, so flipping
+    // invoices out of the status=open filter can't skip the overflow page.
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ id: `in_${i + 1}` }));
+    const page2 = Array.from({ length: 50 }, (_, i) => ({ id: `in_${i + 101}` }));
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: page1, has_more: true }) });
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: page2, has_more: false }) });
+    for (let i = 1; i <= 150; i++) {
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: `in_${i}`, status: "void" }) });
+    }
+
+    const res = await voidOpenInvoicesForCustomer(KEY, "cus_big");
+
+    expect(res.voided).toHaveLength(150);
+    // 2nd call is the page-2 LIST carrying the cursor, not a void POST.
+    const page2Url = urlOf(fetchMock.mock.calls[1]!);
+    expect(page2Url.pathname).toBe("/v1/invoices");
+    expect(page2Url.searchParams.get("starting_after")).toBe("in_100");
+    expect(page2Url.searchParams.get("status")).toBe("open");
+    // Voids begin only after both list pages are collected.
+    expect(urlOf(fetchMock.mock.calls[2]!).pathname).toBe("/v1/invoices/in_1/void");
+  });
+
   it("voidOpenInvoicesForCustomer skips an invoice whose void fails (best-effort)", async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: [{ id: "in_1" }, { id: "in_2" }] }) });
     fetchMock.mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({ error: { message: "cannot void" } }) });

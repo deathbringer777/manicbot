@@ -2038,3 +2038,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_sgc_code_hash
   ON subscription_grant_codes(code_hash);
 CREATE INDEX IF NOT EXISTS idx_sgc_status_created
   ON subscription_grant_codes(status, created_at);
+
+-- ─── Job queue (Migration 0128) ─────────────────────────────────────────────
+-- Platform-wide durable work queue drained by the ThinkPad sidecar compute
+-- backend. NOT tenant-isolated: tenant_id is the target salon (payload), not an
+-- access boundary. Timestamps are epoch SECONDS. See migration 0128 header.
+CREATE TABLE IF NOT EXISTS jobs (
+  id          TEXT PRIMARY KEY,
+  type        TEXT NOT NULL,
+  payload     TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'pending',
+  tenant_id   TEXT,
+  result      TEXT,
+  error       TEXT,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  claimed_at  INTEGER,
+  finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, created_at);

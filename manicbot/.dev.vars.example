@@ -167,3 +167,14 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # Нужны только при использовании POST /webhook без botId И ALLOW_LEGACY_BOT_CTX=1
 # BOT_TOKEN=123456:ABCdef...
 # WEBHOOK_SECRET=your_webhook_secret
+
+# ─── JOBS QUEUE → THINKPAD SIDECAR (migration 0128) ──────────────────────────
+# The Worker enqueues heavy/long/Claude-on-Max marketing jobs into the D1 `jobs`
+# table (services/jobs.js enqueueJob); the ThinkPad sidecar claims & runs them.
+# These two are the Cloudflare Access SERVICE TOKEN that gates the machine-to-
+# machine "kick" POST to the sidecar tunnel. If unset, enqueue still works
+# durably — the sidecar's poller drains the queue (just without the instant kick).
+# CF_ACCESS_CLIENT_ID=your_access_service_token_client_id
+# CF_ACCESS_CLIENT_SECRET=your_access_service_token_client_secret
+# Override the sidecar base URL (default https://jobs.manicbot.com); used in tests.
+# JOBS_KICK_URL=https://jobs.manicbot.com

@@ -33,6 +33,32 @@ const MAX_PAYLOAD_BYTES = 32 * 1024; // SEC-008: cap a job's persisted payload s
  */
 export const JOB_TYPES = new Set(['ping', 'claude.generate', 'blog.generate']);
 
+const LIST_COLS = 'id, type, status, tenant_id, attempts, error, created_at, claimed_at, finished_at';
+
+/**
+ * Fetch a single job by id (full row incl. payload + result). Read-only.
+ * @returns {Promise<object|null>}
+ */
+export async function getJob(env, id) {
+  // tenant-scan-ignore: `jobs` is a platform-wide queue (see enqueueJob); the id
+  // is an unguessable uuid and the only caller is the ADMIN_KEY-gated GET route.
+  return env.DB.prepare(`SELECT ${LIST_COLS}, payload, result FROM jobs WHERE id = ?`).bind(id).first();
+}
+
+/**
+ * List recent jobs (newest first), optionally filtered by status. `payload` and
+ * `result` are omitted to keep the list light. Read-only; limit clamped 1..100.
+ */
+export async function listRecentJobs(env, { limit = 20, status = null } = {}) {
+  const lim = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  if (status) {
+    // tenant-scan-ignore: platform-wide queue, ADMIN_KEY-gated read.
+    return (await env.DB.prepare(`SELECT ${LIST_COLS} FROM jobs WHERE status = ? ORDER BY created_at DESC LIMIT ?`).bind(status, lim).all()).results ?? [];
+  }
+  // tenant-scan-ignore: platform-wide queue, ADMIN_KEY-gated read.
+  return (await env.DB.prepare(`SELECT ${LIST_COLS} FROM jobs ORDER BY created_at DESC LIMIT ?`).bind(lim).all()).results ?? [];
+}
+
 /**
  * Enqueue a background job for the ThinkPad sidecar to run.
  *

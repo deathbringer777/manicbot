@@ -10,7 +10,7 @@ import { audit } from '../utils/audit.js';
 import { buildSearchVariants, hasCyrillic } from '../lib/searchNormalize.js';
 import { splitTelegramText } from '../utils/telegramChunk.js';
 import { registerAdminBotWebhook } from '../adminbot/ctx.js';
-import { enqueueJob, JOB_TYPES } from '../services/jobs.js';
+import { enqueueJob, JOB_TYPES, getJob, listRecentJobs } from '../services/jobs.js';
 
 /**
  * Roles that may be created or upserted via POST /admin/web-user.
@@ -129,6 +129,23 @@ export async function tryAdminKeyRoutes(request, env, url) {
     } catch (e) {
       return Response.json({ error: String(e?.message || 'enqueue_failed') }, { status: 400 });
     }
+  }
+
+  // Observe the job queue (GET /admin/jobs?id=<id>  OR  ?status=<s>&limit=<n>).
+  if (request.method === 'GET' && url.pathname === '/admin/jobs') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    const id = url.searchParams.get('id');
+    if (id) {
+      const job = await getJob(env, id);
+      if (!job) return Response.json({ error: 'not_found' }, { status: 404 });
+      return Response.json({ ok: true, job });
+    }
+    const jobs = await listRecentJobs(env, {
+      limit: url.searchParams.get('limit'),
+      status: url.searchParams.get('status'),
+    });
+    return Response.json({ ok: true, jobs });
   }
 
   // Sprint 2/6: run one pass of the BOT_ENCRYPTION_KEY rotation sweep.

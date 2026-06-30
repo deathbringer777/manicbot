@@ -249,6 +249,7 @@ export function createMockD1() {
             local_tickets: ['tenant_id', 'client_cid'], human_requests: ['tenant_id', 'chat_id'],
             stripe_customers: ['customer_id'], appointments: ['id'],
             platform_tickets: ['id'],
+            rag_chunks: ['tenant_id', 'id'], salon_faq: ['tenant_id', 'id'],
           };
           const pkCols = pkMap[parsed.table] || [parsed.cols[0]];
           const idx = table.findIndex(r => pkCols.every(pk => r[pk] === row[pk]));

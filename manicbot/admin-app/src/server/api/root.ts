@@ -52,6 +52,7 @@ import { platformCustomersRouter } from "~/server/api/routers/platformCustomers"
 import { analyticsEventsRouter } from "~/server/api/routers/analyticsEvents";
 import { adminBotsRouter } from "~/server/api/routers/adminBots";
 import { salonMetricsRouter } from "~/server/api/routers/salonMetrics";
+import { salonFaqRouter } from "~/server/api/routers/salonFaq";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -81,6 +82,7 @@ export const appRouter = createTRPCRouter({
   ownership: ownershipRouter,
   onboarding: onboardingRouter,
   promoCodes: promoCodesRouter,
+  salonFaq: salonFaqRouter,
   stampCard: stampCardRouter,
   leads: leadsRouter,
   marketing: marketingRouter,

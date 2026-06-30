@@ -1,4 +1,4 @@
-import { uniqueIndex, index, sqliteTable, text, integer, real, primaryKey } from "drizzle-orm/sqlite-core";
+import { uniqueIndex, index, sqliteTable, text, integer, real, primaryKey, blob } from "drizzle-orm/sqlite-core";
 
 export const tenants = sqliteTable("tenants", {
   id: text("id").primaryKey(),
@@ -2069,4 +2069,39 @@ export const jobs = sqliteTable("jobs", {
   finishedAt: integer("finished_at"),
 }, (t) => [
   index("idx_jobs_status").on(t.status, t.createdAt),
+]);
+
+// ─── RAG knowledge base (Migration 0129) ────────────────────────────────────
+// Tenant-isolated: tenant_id IS the access boundary. salon_faq = owner-authored
+// source; rag_chunks = derived bge-m3 Float32-BLOB index brute-forced in the Worker.
+export const salonFaq = sqliteTable("salon_faq", {
+  tenantId: text("tenant_id").notNull(),
+  id: text("id").notNull(),
+  questionJson: text("question_json").notNull(),
+  answerJson: text("answer_json").notNull(),
+  active: integer("active").notNull().default(1),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.id] }),
+  index("idx_salon_faq_tenant").on(t.tenantId, t.active),
+]);
+
+export const ragChunks = sqliteTable("rag_chunks", {
+  tenantId: text("tenant_id").notNull(),
+  id: text("id").notNull(),
+  sourceTable: text("source_table").notNull(),
+  sourceId: text("source_id").notNull(),
+  lang: text("lang"),
+  chunkIx: integer("chunk_ix").notNull().default(0),
+  content: text("content").notNull(),
+  embedding: blob("embedding").notNull(),
+  dim: integer("dim").notNull().default(1024),
+  model: text("model").notNull(),
+  contentHash: text("content_hash").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.id] }),
+  index("idx_rag_chunks_tenant").on(t.tenantId),
 ]);

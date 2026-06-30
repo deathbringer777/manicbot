@@ -86,6 +86,10 @@ export const PHASE_WINDOWS = Object.freeze({
   cleanup: 24 * 60 * 60,      // 24 h
   retention: 24 * 60 * 60,    // 24 h (P1-10)
   attachmentGc: 24 * 60 * 60, // 24 h — orphaned messenger attachment sweep
+  // RAG KB freshness backstop (flag-gated). 1h: edits to FAQ/services/masters
+  // are reflected within the hour. Cheap — reindexTenantKb sha256-skips
+  // unchanged chunks, so steady-state re-embeds nothing.
+  ragReindex: 60 * 60,        // 1 h
   // Multi-salon (0117) backstop: re-derive each secondary salon's billing
   // status from its parent in case a cascade webhook was lost/out-of-order.
   billingReconcileSecondaries: 24 * 60 * 60, // 24 h
@@ -998,6 +1002,20 @@ export async function phasePostVisit(ctx, now) {
   return processPostVisitConfirmations(ctx, now);
 }
 
+// ─── Phase: RAG knowledge-base reindex (flag-gated) ─────────────────────
+/**
+ * Keep the per-tenant RAG index (`rag_chunks`) fresh as the salon edits its
+ * FAQ / services / masters, so the bot's grounded answers stay current without
+ * any manual reindex or cross-service call. Gated behind RAG_KB_ENABLED so it
+ * costs nothing until the feature is switched on; idempotent (sha256-skip in
+ * reindexTenantKb) so steady-state ticks re-embed nothing.
+ */
+export async function phaseRagReindex(ctx, _now) {
+  if (ctx?.RAG_KB_ENABLED !== '1' || !ctx?.tenantId) return;
+  const { reindexTenantKb } = await import('../services/ragIngest.js');
+  await reindexTenantKb(ctx, ctx.tenantId);
+}
+
 // ─── Phase 5: auto-promo (birthday + returning client) ──────────────────
 export async function phasePromos(ctx, now) {
   return processBirthdayAndReturningPromos(ctx, now);
@@ -1737,6 +1755,9 @@ export async function handleCron(ctx) {
     await runPhase(ctx, 'cleanup', () => phaseCleanup(ctx, now));
     await runPhase(ctx, 'retention', () => phaseRetention(ctx, ctx.tenantId, now));
     await runPhase(ctx, 'attachmentGc', () => phaseAttachmentGc(ctx, ctx.tenantId, now));
+    // RAG KB reindex (flag-gated): keep rag_chunks current with the tenant's
+    // FAQ/services/masters so grounded bot answers don't go stale.
+    await runPhase(ctx, 'ragReindex', () => phaseRagReindex(ctx, now));
     // Multi-salon (0117): repair any secondary-salon billing drift left by a
     // lost/out-of-order cascade webhook. Idempotent; windowed to 24h.
     await runPhase(ctx, 'billingReconcileSecondaries', () => phaseBillingReconcileSecondaries(ctx, now));

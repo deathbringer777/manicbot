@@ -52,6 +52,16 @@ vi.mock('../src/services/appointmentAutomations.js', () => ({
   }),
 }));
 
+// reject-action deps: stub the side-effecting ones, keep REAL helpers so that
+// `fill` is actually exercised (C2 regression: fill was imported from
+// i18n/index.js where it isn't exported → undefined → TypeError on reject).
+vi.mock('../src/telegram.js', () => ({ send: vi.fn(async () => {}) }));
+vi.mock('../src/services/chat.js', () => ({ getLang: vi.fn(async () => 'ru') }));
+vi.mock('../src/utils/helpers.js', async (importActual) => {
+  const actual = await importActual();
+  return { ...actual, svcName: () => 'TestService' };
+});
+
 import { tryAdminKeyRoutes } from '../src/http/adminKeyHttp.js';
 
 const ADMIN_KEY = 'a'.repeat(48);
@@ -123,6 +133,22 @@ describe('POST /admin/appointment-action — new status actions', () => {
       aptId: 'apt_done_1',
       eventType: 'appointment.no_show_master',
     });
+  });
+
+  it('action=reject runs fill() and sends a localized rejection without throwing (C2)', async () => {
+    const { send } = await import('../src/telegram.js');
+    const req = makeRequest({ action: 'reject', appointmentId: 'apt_done_1', tenantId: 't1' });
+    const res = await tryAdminKeyRoutes(req, makeEnv(), new URL(req.url));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.notified).toBe(true);
+    expect(send).toHaveBeenCalled();
+    // fill(t(clg,'apt_rejected'), {...}) actually ran → a non-empty string.
+    const msg = send.mock.calls.at(-1)?.[2];
+    expect(typeof msg).toBe('string');
+    expect(msg.length).toBeGreaterThan(0);
   });
 
   it('returns 400 for unknown actions', async () => {

@@ -64,21 +64,13 @@ jobs:
       - name: Semgrep — install
         run: python3 -m pip install --user semgrep==1.164.0
       - name: Semgrep — SAST scan
-        # 2026-06-30: the hosted Semgrep registry added the supply-chain rule
-        # package_managers.npm.npm-missing-minimum-release-age, which began
-        # BLOCKING every deploy on the pre-existing manicbot/admin-app/.npmrc
-        # (Gitleaks secret-scan stays green — no leak). We opt out of this single
-        # advisory to restore the pipeline. Adopting an npm release-age cooldown
-        # (`minimumReleaseAge` in .npmrc) is a deliberate follow-up that must first
-        # be verified against the Cloudflare Pages `npm install` build.
         run: |
           semgrep ci \
             --config p/owasp-top-ten \
             --config p/typescript \
             --config p/nextjs \
             --config p/jwt \
-            --config .semgrep/manicbot-rules.yml \
-            --exclude-rule package_managers.npm.npm-missing-minimum-release-age.npm-missing-minimum-release-age
+            --config .semgrep/manicbot-rules.yml
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 

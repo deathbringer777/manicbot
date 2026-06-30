@@ -1188,9 +1188,11 @@ export async function tryAdminKeyRoutes(request, env, url) {
       } else if (action === 'reject') {
         const { getLang } = await import('../services/chat.js');
         const { send } = await import('../telegram.js');
-        const { t, fill } = await import('../i18n/index.js');
+        const { t } = await import('../i18n/index.js');
         const { fmtDT } = await import('../utils/date.js');
-        const { svcName } = await import('../utils/helpers.js');
+        // fill lives in utils/helpers, NOT i18n/index — importing it from i18n
+        // (which only exports L + t) left it undefined → TypeError on reject.
+        const { svcName, fill } = await import('../utils/helpers.js');
         const { CB } = await import('../config.js');
         const clg = (await getLang(ctx, apt.chatId)) || 'ru';
         let clientMsg = fill(t(clg, 'apt_rejected'), { svc: svcName(ctx, clg, apt.svcId), dt: fmtDT(clg, apt.date, apt.time) });

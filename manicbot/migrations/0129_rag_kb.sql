@@ -27,8 +27,8 @@
 CREATE TABLE IF NOT EXISTS salon_faq (
   tenant_id     TEXT NOT NULL,
   id            TEXT NOT NULL,
-  question_json TEXT NOT NULL,                  -- {ru,uk,en,pl}
-  answer_json   TEXT NOT NULL,                  -- {ru,uk,en,pl}
+  question_json TEXT NOT NULL,                  -- {ru,ua,en,pl}
+  answer_json   TEXT NOT NULL,                  -- {ru,ua,en,pl}
   active        INTEGER NOT NULL DEFAULT 1,
   sort_order    INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL,               -- epoch seconds
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS rag_chunks (
   id           TEXT NOT NULL,                   -- `${source_table}:${source_id}:${lang}:${chunk_ix}`
   source_table TEXT NOT NULL,                   -- services | masters | tenants | album_photos | salon_faq
   source_id    TEXT NOT NULL,
-  lang         TEXT,                            -- ru | uk | pl | en | NULL
+  lang         TEXT,                            -- ru | ua | pl | en | NULL
   chunk_ix     INTEGER NOT NULL DEFAULT 0,
   content      TEXT NOT NULL,                   -- sanitized chunk text (sanitizeTenantField at write time)
   embedding    BLOB NOT NULL,                   -- Float32Array(dim) little-endian = dim*4 bytes

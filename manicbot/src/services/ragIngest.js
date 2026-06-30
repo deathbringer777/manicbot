@@ -17,7 +17,9 @@ import { RAG_EMBED_MODEL, RAG_EMBED_DIM } from '../config.js';
 import { nowSec } from '../utils/time.js';
 import { log } from '../utils/logger.js';
 
-const FAQ_LANGS = ['ru', 'uk', 'en', 'pl'];
+// Language keys match the codebase convention (LANG_HINT in config.js): Ukrainian
+// is 'ua' (not the ISO 'uk') — using 'uk' would silently drop Ukrainian content.
+const FAQ_LANGS = ['ru', 'ua', 'en', 'pl'];
 
 function parseJsonObj(s) {
   if (!s) return {};
@@ -69,7 +71,7 @@ export function buildTenantChunks({ faqs = [], services = [], masters = [] } = {
   for (const s of services) {
     if (s.active === 0 || s.hidden === 1) continue;
     const names = parseJsonObj(s.names);
-    const name = String(names.ru || names.en || names.uk || names.pl || s.svc_id || '').trim();
+    const name = String(names.ru || names.en || names.ua || names.pl || s.svc_id || '').trim();
     const desc = String(s.description || '').trim();
     const promo = String(s.promo || '').trim();
     if (!name && !desc) continue;

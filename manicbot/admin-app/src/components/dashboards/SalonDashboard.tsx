@@ -54,6 +54,7 @@ import { TimeOffDialog } from "~/components/dashboard/TimeOffDialog";
 import { OnboardingChecklist } from "~/components/dashboard/OnboardingChecklist";
 import { ReferralOverviewTeaser } from "~/components/dashboard/ReferralOverviewTeaser";
 import { PromoCodesTab } from "~/components/dashboard/PromoCodesTab";
+import { SalonFaqTab } from "~/components/dashboard/SalonFaqTab";
 import { TestBadge } from "~/components/ui/TestBadge";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { Switch } from "~/components/ui/Switch";
@@ -91,7 +92,7 @@ const HomeWidgetBoard = dynamic(
   { ssr: false },
 );
 
-type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff";
+type Tab = "overview" | "appointments" | "masters" | "services" | "clients" | "channels" | "reviews" | "settings" | "public_profile" | "analytics" | "promo_codes" | "staff" | "faq";
 
 // ─── Service Edit Modal ──────────────────────────────────────────
 const PROMO_PRESETS = ["-10%", "-15%", "-20%", "Хит", "Новинка", "Скидка"];
@@ -1500,7 +1501,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
   const inWeb = useInWebShell();
   const { prefs: dashPrefs, setAppointmentDialog } = useDashboardPrefs();
 
-  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "analytics", "promo_codes", "staff"];
+  const VALID_SALON_TABS: Tab[] = ["overview", "appointments", "masters", "services", "clients", "channels", "analytics", "promo_codes", "staff", "faq"];
   const urlTab = searchParams.get("tab");
   const fallbackTab = (dashPrefs.defaultTab && VALID_SALON_TABS.includes(dashPrefs.defaultTab as Tab)) ? (dashPrefs.defaultTab as Tab) : "overview";
   const resolvedSalonTab: Tab =
@@ -2059,6 +2060,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
     { key: "clients", label: t("salon.clients", lang), perm: "clients.view" },
     { key: "analytics", label: `📊 ${t("salon.tabs.analytics", lang)}`, perm: null, ownerOnly: true },
     { key: "promo_codes", label: `🎟 ${t("salon.tabs.promoCodes", lang)}`, perm: null, ownerOnly: true },
+    { key: "faq", label: `❓ ${t("salon.tabs.faq", lang)}`, perm: null, ownerOnly: true },
     { key: "channels", label: t("salon.tabs.channels", lang), perm: "settings.manage" },
     { key: "public_profile", label: `🌐 ${t("salon.tabs.publicProfile", lang)}`, perm: "branding.manage" },
     { key: "staff", label: `👥 ${t("salon.tabs.staff", lang)}`, perm: null, ownerOnly: true },
@@ -2970,6 +2972,7 @@ export function SalonDashboard({ tenantId }: { tenantId: string }) {
 
       {/* ── PROMO CODES ── */}
       {tab === "promo_codes" && <PromoCodesTab tenantId={tenantId} />}
+      {tab === "faq" && <SalonFaqTab tenantId={tenantId} />}
 
       {/* ── STAFF (tenant_owner only) ── */}
       {tab === "staff" && <StaffTab tenantId={tenantId} />}

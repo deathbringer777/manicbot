@@ -18,13 +18,15 @@ import { and, eq, asc, desc } from "drizzle-orm";
 
 function nowSec(): number { return Math.floor(Date.now() / 1000); }
 
-const LANGS = ["ru", "uk", "en", "pl"] as const;
+// Ukrainian is 'ua' per the app convention (i18n Lang / Worker LANG_HINT), not
+// the ISO 'uk' — must match so the Worker's chunker indexes Ukrainian content.
+const LANGS = ["ru", "ua", "en", "pl"] as const;
 
 // Per-language free text. At least one language must carry BOTH a question and
 // an answer (enforced in the handler) — an empty FAQ is not worth indexing.
 const langText = z.object({
   ru: z.string().max(2000).optional(),
-  uk: z.string().max(2000).optional(),
+  ua: z.string().max(2000).optional(),
   en: z.string().max(2000).optional(),
   pl: z.string().max(2000).optional(),
 });

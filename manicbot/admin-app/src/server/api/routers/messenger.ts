@@ -471,7 +471,11 @@ export const messengerRouter = createTRPCRouter({
       return {
         thread,
         // Soft-deleted rows keep their place (tombstone) but never leak content.
-        messages: messages
+        // C5: map over `messagesWithLive` (NOT the original `messages`) so the
+        // per-card `liveAppointment` overlay actually reaches the client —
+        // otherwise request cards render the frozen-at-send status forever and
+        // an already-claimed/cancelled request still looks actionable.
+        messages: messagesWithLive
           .map((m) => (m.deletedAt ? { ...m, body: "", attachmentsJson: null } : m))
           .reverse(), // chronological in render
         nextCursor,

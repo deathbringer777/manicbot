@@ -832,6 +832,27 @@ export const appointmentsRouter = createTRPCRouter({
         }
       } catch { /* non-fatal */ }
 
+      // C4: re-sync the EXISTING Google Calendar event to the new slot.
+      // `phaseGcalSync` only re-picks rows where google_event_id IS NULL, so the
+      // syncRetries reset above never re-syncs an already-synced booking — the
+      // GCal event stayed at the OLD time after every drag-move/resize. Fire a
+      // calendar-only "sync_calendar" notify (does NOT message the client, so it
+      // preserves the deliberate no-spam intent of drag-reschedule); the Worker
+      // PATCHes the kept google_event_id to the new date/time/master.
+      notifyWorker("sync_calendar", apt.id, input.tenantId, null, {
+        apt: {
+          id: apt.id,
+          tenantId: input.tenantId,
+          chatId: apt.chatId,
+          svcId: apt.svcId,
+          date: input.newDate,
+          time: input.newTime,
+          ts: newTs,
+          status: apt.status,
+          masterId: newMasterId,
+        },
+      }).catch(() => {});
+
       return { ok: true, appointmentId: apt.id, unchanged: false };
     }),
 

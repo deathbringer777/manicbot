@@ -200,6 +200,15 @@ export async function onCb(ctx, cb) {
     if (!isAuthorized) {
       return send(ctx, cid, 'Нет доступа к этой записи.');
     }
+    // M2 — idempotency: a second tap on an already-confirmed appointment must
+    // be a no-op. Without this guard a repeat tap re-bumps the stamp card,
+    // re-sends the review request, and re-fires dispatchAppointmentAutomation
+    // (double lifetime_visits / no_show_count). `visit_confirmed_at` is stamped
+    // on the first successful tap, so its presence marks the row as already
+    // processed.
+    if (apt.visit_confirmed_at != null) {
+      return send(ctx, cid, 'Этот визит уже отмечен.');
+    }
     const now = Math.floor(Date.now() / 1000);
     const newStatus = isOk ? 'done' : 'no_show';
     await _dbRun(ctx,
@@ -266,6 +275,30 @@ export async function onCb(ctx, cb) {
       } catch (e) {
         log.warn('callback.stampCard', { phase: 'config_lookup', tenantId: ctx.tenantId, aptId, message: e?.message || String(e) });
       }
+    }
+    // C6 — route through the same dispatcher the admin-app path uses
+    // (adminKeyHttp.js `done` / `no_show_client`). This bumps
+    // users.lifetime_visits (done) / users.no_show_count (client no-show),
+    // clears reminder flags, writes the lifecycle analytics row, and fires
+    // any matching marketing automations — none of which the local writes
+    // above do. The dispatcher needs a camelCase apt doc (apt.chatId, …); the
+    // handler loaded the raw row, so map the fields it reads. The M2 guard
+    // above guarantees this runs at most once per confirmed apt.
+    try {
+      const aptDoc = {
+        id: apt.id,
+        tenantId: apt.tenant_id,
+        chatId: apt.chat_id,
+        svcId: apt.svc_id,
+        masterId: apt.master_id,
+        date: apt.date,
+        time: apt.time,
+      };
+      const { dispatchAppointmentAutomation } = await import('../services/appointmentAutomations.js');
+      const eventType = isOk ? 'appointment.done' : 'appointment.no_show_client';
+      await dispatchAppointmentAutomation(ctx, aptDoc, eventType);
+    } catch (e) {
+      log.error('callback.visitConfirm', e instanceof Error ? e : new Error(String(e?.message)), { phase: 'dispatch', tenantId: ctx.tenantId, aptId });
     }
     return send(ctx, cid, isOk ? '✅ Визит отмечен выполненным.' : '❌ Визит отмечен как no-show.');
   }

@@ -130,7 +130,11 @@ export const metricsRouter = createTRPCRouter({
   getChartData: adminProcedure
     .input(z.object({ days: z.number().default(30) }))
     .query(async ({ ctx, input }) => {
-      const since = Math.floor(Date.now() / 1000) - input.days * 86400;
+      // M4: appointments.ts is epoch MILLISECONDS (every sibling — salonMetrics,
+      // salon, masterRouter — compares against ms). A seconds bound (~1.75e9) is
+      // always < every ms ts (~1.75e12), so `gte(appointments.ts, since)` was a
+      // no-op → full-table scan and the N-day window only happened in JS.
+      const since = Date.now() - input.days * 86400 * 1000;
       const result = await ctx.db
         .select({ date: appointments.date, count: sql<number>`count(*)` })
         .from(appointments)

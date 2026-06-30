@@ -400,6 +400,40 @@ describe("appointmentsRouter", () => {
       expect(vals.ts).toBeGreaterThan(0);
     });
 
+    it("C4: re-syncs the existing Google Calendar event via notifyWorker(sync_calendar)", async () => {
+      // phaseGcalSync only re-picks rows where google_event_id IS NULL, so the
+      // syncRetries reset alone never re-syncs an already-synced booking — the
+      // GCal event stayed at the OLD time after a drag. rescheduleAppointment
+      // must fire a calendar-only "sync_calendar" notify (no client message).
+      const dbMock = createDbMock([
+        [baseApt],
+        [{ svcId: "manicure", duration: 60 }],
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await caller.rescheduleAppointment({
+        tenantId: "t_demo",
+        appointmentId: "apt_1",
+        newDate: "2026-05-21",
+        newTime: "14:30",
+        newMasterId: 200,
+      });
+
+      const syncCall = fetchMock.mock.calls.find((c) => {
+        try { return JSON.parse((c[1] as { body: string }).body).action === "sync_calendar"; }
+        catch { return false; }
+      });
+      expect(syncCall).toBeDefined();
+      const body = JSON.parse((syncCall![1] as { body: string }).body);
+      expect(body.action).toBe("sync_calendar");
+      expect(body.tenantId).toBe("t_demo");
+      // The new slot is carried in the payload so the Worker PATCHes the kept
+      // google_event_id to the new time (read-after-write safe).
+      expect(body.apt?.date).toBe("2026-05-21");
+      expect(body.apt?.time).toBe("14:30");
+      expect(body.apt?.masterId).toBe(200);
+    });
+
     it("keeps existing masterId when newMasterId is omitted", async () => {
       const dbMock = createDbMock([
         [baseApt],

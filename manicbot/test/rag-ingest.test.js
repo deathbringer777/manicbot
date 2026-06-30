@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeCtx } from './helpers/mock-db.js';
 import { buildTenantChunks, reindexTenantKb } from '../src/services/ragIngest.js';
+import { phaseRagReindex } from '../src/handlers/cron.js';
 
 const J = (o) => JSON.stringify(o);
 
@@ -153,5 +154,23 @@ describe('reindexTenantKb', () => {
     const res = await reindexTenantKb(ctx, 'A');
     expect(res.error).toBeTruthy();
     expect(ctx.db._getTable('rag_chunks').length).toBe(before); // unchanged — no data loss
+  });
+});
+
+describe('phaseRagReindex — cron freshness (flag-gated)', () => {
+  it('is a no-op when RAG_KB_ENABLED is off (zero cost)', async () => {
+    const ctx = embedCtx('A');
+    seedSources(ctx, 'A'); // no ctx.RAG_KB_ENABLED
+    await phaseRagReindex(ctx, Date.now());
+    expect(ctx.db._getTable('rag_chunks').length).toBe(0);
+    expect(ctx._embedBatches).toBe(0);
+  });
+
+  it('reindexes the tenant when the flag is on', async () => {
+    const ctx = embedCtx('A');
+    ctx.RAG_KB_ENABLED = '1';
+    seedSources(ctx, 'A');
+    await phaseRagReindex(ctx, Date.now());
+    expect(ctx.db._getTable('rag_chunks').length).toBe(4);
   });
 });

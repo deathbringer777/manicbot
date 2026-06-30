@@ -313,6 +313,20 @@ export const AI_MODEL_FALLBACK2 = '@cf/meta/llama-3.1-8b-instruct';
 export const AI_MAX_TOKENS = 280;
 export const LANG_HINT = { ru: 'русском', ua: 'українській', en: 'English', pl: 'polsku' };
 
+// ─── RAG (retrieval-augmented generation) knowledge base ────────────────────
+// Multilingual embedding model — the corpus is ru/uk/pl/en, so the English-only
+// bge-base-en would silently degrade recall. 1024 dims is FIXED at Vectorize
+// index creation; the model id is stored per chunk so query/ingest drift between
+// the REST and binding embed paths is detectable and refused.
+export const RAG_EMBED_MODEL = '@cf/baai/bge-m3';
+export const RAG_EMBED_DIM = 1024;
+// Retrieval is ADDITIVE context. Keep it tightly bounded so it can never crowd
+// the action-tag/booking instructions or history out of the 6000-char prompt cap.
+export const RAG_TOP_K = 3;
+export const RAG_MIN_SCORE = 0.5;             // cosine floor — drop weak matches
+export const RAG_MAX_CONTEXT_CHARS = 1500;    // hard cap on the injected СПРАВКА block
+export const RAG_RETRIEVAL_TIMEOUT_MS = 800;  // embed+search budget, well under AI_TIMEOUT_MS (4000)
+
 export const BROKEN_ABOUT_PHOTO_ID = '33412989';
 export const FALLBACK_ABOUT_PHOTO = 'https://images.pexels.com/photos/3997354/pexels-photo-3997354.jpeg?w=600';
 

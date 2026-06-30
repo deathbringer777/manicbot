@@ -2087,3 +2087,38 @@ CREATE TABLE IF NOT EXISTS jobs (
   finished_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, created_at);
+
+-- ─── RAG knowledge base (Migration 0129) ────────────────────────────────────
+-- Per-tenant retrieval-augmented generation. TENANT-ISOLATED: tenant_id IS the
+-- access boundary (unlike `jobs`). salon_faq = owner-authored source; rag_chunks
+-- = derived bge-m3 (1024-dim) Float32-BLOB index, brute-forced in the Worker.
+-- The public blog + internal-docs corpora use Vectorize, NOT these tables.
+CREATE TABLE IF NOT EXISTS salon_faq (
+  tenant_id     TEXT NOT NULL,
+  id            TEXT NOT NULL,
+  question_json TEXT NOT NULL,
+  answer_json   TEXT NOT NULL,
+  active        INTEGER NOT NULL DEFAULT 1,
+  sort_order    INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_salon_faq_tenant ON salon_faq(tenant_id, active);
+
+CREATE TABLE IF NOT EXISTS rag_chunks (
+  tenant_id    TEXT NOT NULL,
+  id           TEXT NOT NULL,
+  source_table TEXT NOT NULL,
+  source_id    TEXT NOT NULL,
+  lang         TEXT,
+  chunk_ix     INTEGER NOT NULL DEFAULT 0,
+  content      TEXT NOT NULL,
+  embedding    BLOB NOT NULL,
+  dim          INTEGER NOT NULL DEFAULT 1024,
+  model        TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_rag_chunks_tenant ON rag_chunks(tenant_id);

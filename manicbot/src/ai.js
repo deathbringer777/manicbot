@@ -1,4 +1,5 @@
-import { AI_MODEL, AI_MODEL_FALLBACK, AI_MODEL_FALLBACK2, AI_MAX_TOKENS, LANG_HINT, SALON, ADDRESS, HOURS_STR, PHONE, CB, STEP } from './config.js';
+import { AI_MODEL, AI_MODEL_FALLBACK, AI_MODEL_FALLBACK2, AI_MAX_TOKENS, LANG_HINT, SALON, ADDRESS, HOURS_STR, PHONE, CB, STEP, RAG_MAX_CONTEXT_CHARS } from './config.js';
+import { retrieveContext } from './services/ragRetrieval.js';
 import { todayStr, getDayOfWeek, dateStrForOffset, resolveDateHint } from './utils/date.js';
 import { escHtml, fill, t } from './utils/helpers.js';
 import { send } from './telegram.js';
@@ -116,7 +117,30 @@ const PREVIEW_GUARDRAIL = `
 РЕЖИМ ДЕМО-ЛЕНДИНГА: это публичное превью-окно на сайте, а не настоящий чат клиента. Держи ответы короткими (1–2 предложения) и строго по теме салона: запись, услуги и цены, мастера, часы работы, контакты. На любые off-topic вопросы (погода, политика, общая болтовня, вопросы про ИИ) вежливо возвращай к теме: «Я помогу записаться на маникюр — выбрать услугу или время?». Используй только услуги и мастеров из предоставленного контекста — ничего не выдумывай.
 `.trim();
 
-export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = null, bookingAdjust = null) {
+/**
+ * Render retrieved KB chunks into a bounded "СПРАВКА" block for the system
+ * prompt. Each chunk is tenant/author-authored text reaching the model, so it
+ * passes sanitizeTenantField (same #S7 hardening as static tenant fields) and
+ * the whole block is capped at RAG_MAX_CONTEXT_CHARS so retrieval can never
+ * crowd the action-tag instructions out of the prompt budget. Empty/absent
+ * retrieval → '' (prompt is byte-identical to the pre-RAG behavior).
+ */
+function buildReferenceBlock(retrieved) {
+  if (!Array.isArray(retrieved) || !retrieved.length) return '';
+  let used = 0;
+  const lines = [];
+  for (const r of retrieved) {
+    const clean = sanitizeTenantField(String(r?.content || ''), 400);
+    if (!clean) continue;
+    if (used + clean.length > RAG_MAX_CONTEXT_CHARS) break;
+    used += clean.length;
+    lines.push(`- ${clean}`);
+  }
+  if (!lines.length) return '';
+  return `СПРАВКА САЛОНА (используй эти факты, если релевантны вопросу; НЕ выдумывай вне них):\n${lines.join('\n')}`;
+}
+
+export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = null, bookingAdjust = null, retrieved = null) {
   const lang = langHint || 'русском';
   const td = today || todayStr();
   // #S7: All tenant-controlled fields go through sanitizeTenantField before
@@ -272,14 +296,16 @@ export function buildAISystemPrompt(role, langHint, today = null, tenantCtx = nu
 
   const adj = bookingAdjustPromptExtra(bookingAdjust);
   const previewPrefix = tenantCtx?.previewMode ? `${PREVIEW_GUARDRAIL}\n\n` : '';
+  const refBlock = buildReferenceBlock(retrieved);
+  const refPart = refBlock ? `${refBlock}\n\n` : '';
   if (role === 'system_admin' || role === 'support') {
     // Strip the "never say you're AI" restriction — use \n (single, after newline collapse)
     const adminBase = base.replace(/КРИТИЧНО — ИДЕНТИЧНОСТЬ:[^\n]*\n?/g, '').trim();
-    return `${previewPrefix}${adminBase}\n\n${sysAdminActions}${adj}`;
+    return `${previewPrefix}${adminBase}\n\n${refPart}${sysAdminActions}${adj}`;
   }
-  if (role === 'tenant_owner') return `${previewPrefix}${base}\n\n${adminActions}${adj}`;
-  if (role === 'master') return `${previewPrefix}${base}\n\n${masterActions}${adj}`;
-  return `${previewPrefix}${base}\n\n${clientActions}${adj}`;
+  if (role === 'tenant_owner') return `${previewPrefix}${base}\n\n${refPart}${adminActions}${adj}`;
+  if (role === 'master') return `${previewPrefix}${base}\n\n${refPart}${masterActions}${adj}`;
+  return `${previewPrefix}${base}\n\n${refPart}${clientActions}${adj}`;
 }
 
 export function parseAIResponse(out) {
@@ -581,22 +607,39 @@ function buildTenantCtxForAI(ctx) {
   };
 }
 
-export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client', history = [], bookingAdjust = null) {
+/**
+ * Assemble the REST prompt within `cap` chars while GUARANTEEING the system
+ * instructions (head) and the latest user turn (tail) are never truncated.
+ * History fills the middle with the MOST RECENT turns that fit; oldest are
+ * dropped first. The pre-RAG code concatenated sys+history+user then sliced
+ * from the END, which — once a retrieval block enlarges the head — could
+ * silently drop the user's actual question. Exported for unit testing.
+ */
+export function assemblePromptString(sys, history, userText, cap = 6000) {
+  const userLine = `User: ${userText}`;
+  let budget = cap - (sys.length + 2 + userLine.length);
+  const kept = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    const roleLabel = m.role === 'user' ? 'User' : 'Assistant';
+    const line = `${roleLabel}: ${sanitizeHistoryContent(m.content)}`;
+    if (line.length + 2 > budget) break;
+    budget -= line.length + 2;
+    kept.unshift(line);
+  }
+  return [sys, ...kept, userLine].join('\n\n').slice(0, cap);
+}
+
+export async function runWorkersAIViaREST(ctx, userMessage, lg, role = 'client', history = [], bookingAdjust = null, retrieved = []) {
   const token = ctx.WORKERS_AI_API_TOKEN;
   const accountId = ctx.CLOUDFLARE_ACCOUNT_ID;
   if (!token || !accountId || !userMessage || userMessage.length < 2) return null;
   const langHint = LANG_HINT[lg] || 'русском';
   const tenantCtx = buildTenantCtxForAI(ctx);
-  const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx, bookingAdjust);
+  const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx, bookingAdjust, retrieved);
   const userText = sanitizeUserInput(userMessage.slice(0, 500));
-  let prompt = sys + '\n\n';
-  for (const m of history) {
-    const roleLabel = m.role === 'user' ? 'User' : 'Assistant';
-    const safeContent = sanitizeHistoryContent(m.content);
-    prompt += `${roleLabel}: ${safeContent}\n\n`;
-  }
-  prompt += `User: ${userText}`;
-  const promptBody = { prompt: prompt.slice(0, 6000), max_tokens: AI_MAX_TOKENS };
+  const prompt = assemblePromptString(sys, history, userText, 6000);
+  const promptBody = { prompt, max_tokens: AI_MAX_TOKENS };
   const models = [AI_MODEL, AI_MODEL_FALLBACK, AI_MODEL_FALLBACK2];
   for (const modelId of models) {
     try {
@@ -629,8 +672,21 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
     }
   }
 
+  // RAG — retrieve grounding context ONCE per message, AFTER the budget gate
+  // (an over-budget tenant pays nothing) and BEFORE both model paths (a
+  // REST→binding failover must never re-embed). Flag-gated; degrades to [] on
+  // any failure, so the prompt is byte-identical to the pre-RAG behavior.
+  let retrieved = [];
+  if (ctx?.RAG_KB_ENABLED === '1' && ctx?.tenantId) {
+    retrieved = await retrieveContext(ctx, { queryText: sanitizeUserInput(userMessage.slice(0, 500)), role });
+    try {
+      const { recordAiUsage } = await import('./services/aiUsage.js');
+      await recordAiUsage(ctx, Math.ceil(userMessage.length / 4), 0, 'embed');
+    } catch { /* non-fatal */ }
+  }
+
   if (ctx.WORKERS_AI_API_TOKEN && ctx.CLOUDFLARE_ACCOUNT_ID) {
-    const rest = await runWorkersAIViaREST(ctx, userMessage, lg, role, history, bookingAdjust);
+    const rest = await runWorkersAIViaREST(ctx, userMessage, lg, role, history, bookingAdjust, retrieved);
     if (rest) {
       // Best-effort usage record; coarse token estimate from text length.
       try {
@@ -644,7 +700,7 @@ export async function runWorkersAI(ctx, userMessage, lg, role = 'client', histor
   if (ctx.AI) {
     const langHint = LANG_HINT[lg] || 'русском';
     const tenantCtx = buildTenantCtxForAI(ctx);
-    const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx, bookingAdjust);
+    const sys = buildAISystemPrompt(role, langHint, todayStr(), tenantCtx, bookingAdjust, retrieved);
     const userText = sanitizeUserInput(userMessage.slice(0, 500));
     const messages = [{ role: 'system', content: sys }];
     for (const m of history) {

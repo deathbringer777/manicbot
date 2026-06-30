@@ -317,20 +317,35 @@ export function createMockD1() {
                 return null;
               })
               .filter(Boolean);
-            // Optional partial-index filter: ON CONFLICT (...) WHERE <col> = <num> DO ...
-            // Need a balanced-paren match because the conflict spec may contain
-            // function calls like COALESCE(master_id, -1).
-            const whereMatch = sql.match(/WHERE\s+(\w+)\s*=\s*(-?\d+)\s+DO/i);
-            const partialFilter = whereMatch
-              ? (r => {
-                  const col = whereMatch[1];
-                  const want = parseInt(whereMatch[2], 10);
-                  const got = r[col];
-                  if (got == null) return want === 0; // SQLite default for INTEGER NOT NULL DEFAULT 0
-                  return got === want;
+            // Optional partial-index filter: ON CONFLICT (...) WHERE <preds> DO ...
+            // Supports a conjunction of `<col> = <num>` and `<col> IS [NOT] NULL`
+            // so partial indexes like
+            //   WHERE cancelled = 0 AND master_id IS NOT NULL   (migration 0097)
+            // are modelled the way real SQLite does: a row participates in the
+            // index ONLY when it satisfies EVERY predicate, and a conflict can
+            // occur only when the inserting row AND an existing row are both in
+            // the index. (A bare `<col> = <num>` stays backward-compatible.)
+            const whereBody = sql.match(/WHERE\s+([\s\S]+?)\s+DO\b/i);
+            const preds = whereBody
+              ? whereBody[1].split(/\s+AND\s+/i).map(p => p.trim()).map(p => {
+                  const eq = p.match(/^(\w+)\s*=\s*(-?\d+)$/);
+                  if (eq) {
+                    const col = eq[1], want = parseInt(eq[2], 10);
+                    // null → SQLite default for INTEGER NOT NULL DEFAULT 0
+                    return r => (r[col] == null ? want === 0 : r[col] === want);
+                  }
+                  const notNull = p.match(/^(\w+)\s+IS\s+NOT\s+NULL$/i);
+                  if (notNull) { const col = notNull[1]; return r => r[col] != null; }
+                  const isNull = p.match(/^(\w+)\s+IS\s+NULL$/i);
+                  if (isNull) { const col = isNull[1]; return r => r[col] == null; }
+                  return () => true; // unsupported predicate → permissive
                 })
-              : (() => true);
-            const existingIdx = extractors.length
+              : [];
+            const partialFilter = r => preds.every(fn => fn(r));
+            // The inserting row must itself be in the partial index, else it can
+            // never conflict (e.g. an unassigned booking with master_id IS NULL
+            // is outside `WHERE master_id IS NOT NULL` and always inserts).
+            const existingIdx = (extractors.length && partialFilter(row))
               ? table.findIndex(r =>
                   partialFilter(r) && extractors.every(fn => fn(r) === fn(row)))
               : -1;

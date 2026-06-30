@@ -1,18 +1,22 @@
 /**
  * #P0-1 — saveApt MUST collapse concurrent bookings of the same active slot
- * down to a single successful row, returning SLOT_TAKEN for the losers.
+ * for an ASSIGNED master down to a single successful row, returning SLOT_TAKEN
+ * for the losers.
  *
- * The defence is a partial UNIQUE index on
- * (tenant_id, COALESCE(master_id, -1), date, time) WHERE cancelled = 0
- * (migration 0044) plus an INSERT … ON CONFLICT DO NOTHING in saveApt.
+ * The defence is the partial UNIQUE index (migration 0097)
+ *   (tenant_id, master_id, date, time) WHERE cancelled = 0 AND master_id IS NOT NULL
+ * plus an INSERT … ON CONFLICT DO NOTHING in saveApt whose target MATCHES it.
  *
- * The test stresses two paths:
- *   - D1 path: many parallel saveApt calls against the same slot.
- *   - KV path: post-insert race detector (best-effort) when no D1 is bound.
+ * 0097 deliberately narrowed uniqueness to master-assigned rows: a salon that
+ * runs ONE shared (no-master) calendar wants Google-Calendar-style overlap, so
+ * UNASSIGNED bookings (master_id IS NULL) are OUTSIDE the index and may overlap.
+ * (Regression guard for C1: the audit found the old ON CONFLICT target still
+ * used COALESCE(master_id,-1), which no longer matches the 0097 index and made
+ * real D1 throw a non-UNIQUE parse error → 500 on every booking.)
  *
- * The mock D1 honours ON CONFLICT semantics for the bare-identifier portion
- * of the conflict spec; that is sufficient to detect a tenant_id+date+time
- * collision even though COALESCE(master_id, -1) is filtered out.
+ * The mock D1 (test/helpers/mock-db.js) models the partial predicate faithfully:
+ * both the inserting row and existing rows must satisfy
+ * `cancelled = 0 AND master_id IS NOT NULL` to collide.
  */
 import { describe, it, expect } from 'vitest';
 import { makeCtx } from './helpers/mock-db.js';
@@ -35,20 +39,33 @@ describe('saveApt — atomic slot booking (#P0-1)', () => {
     expect(SLOT_TAKEN).toBe(SLOT_TAKEN);
   });
 
-  it('first INSERT wins, subsequent identical INSERTs return SLOT_TAKEN', async () => {
+  it('first INSERT wins, subsequent identical INSERTs for the same master return SLOT_TAKEN', async () => {
     const ctx = baseCtx();
     const apt1 = await saveApt(ctx, {
-      ...SLOT, chatId: 1001, ts: Date.now() + 3_600_000,
+      ...SLOT, masterId: 5, chatId: 1001, ts: Date.now() + 3_600_000,
       userName: 'A', userPhone: '+1',
     });
     expect(apt1).not.toBe(SLOT_TAKEN);
     expect(apt1?.id).toMatch(/^a/);
 
     const apt2 = await saveApt(ctx, {
-      ...SLOT, chatId: 1002, ts: Date.now() + 3_600_000,
+      ...SLOT, masterId: 5, chatId: 1002, ts: Date.now() + 3_600_000,
       userName: 'B', userPhone: '+2',
     });
     expect(apt2).toBe(SLOT_TAKEN);
+  });
+
+  it('unassigned bookings (no master) at the same slot may overlap — 0097 shared-calendar', async () => {
+    const ctx = baseCtx('t_dbl_unassigned_overlap');
+    const a = await saveApt(ctx, {
+      ...SLOT, chatId: 1, ts: Date.now() + 3_600_000, userName: 'X', userPhone: '+x',
+    });
+    const b = await saveApt(ctx, {
+      ...SLOT, chatId: 2, ts: Date.now() + 3_600_000, userName: 'Y', userPhone: '+y',
+    });
+    expect(a).not.toBe(SLOT_TAKEN);
+    // master_id IS NULL → outside the partial index → no conflict → overlap allowed
+    expect(b).not.toBe(SLOT_TAKEN);
   });
 
   it('different times for the same master succeed independently', async () => {
@@ -75,12 +92,12 @@ describe('saveApt — atomic slot booking (#P0-1)', () => {
     expect(b).not.toBe(SLOT_TAKEN);
   });
 
-  it('cancelled appointment frees the slot for re-booking', async () => {
+  it('cancelled appointment frees the slot for re-booking (same master)', async () => {
     // Cancelled rows are excluded from the partial UNIQUE index, so a fresh
-    // booking of the same slot must succeed.
+    // booking of the same assigned-master slot must succeed.
     const ctx = baseCtx('t_dbl_cancel_replay');
     const first = await saveApt(ctx, {
-      ...SLOT, chatId: 1, ts: 1, userName: 'X', userPhone: '+x',
+      ...SLOT, masterId: 8, chatId: 1, ts: 1, userName: 'X', userPhone: '+x',
     });
     expect(first).not.toBe(SLOT_TAKEN);
     // Mark cancelled via parameterised UPDATE — the mock's _parseUpdate
@@ -92,20 +109,21 @@ describe('saveApt — atomic slot booking (#P0-1)', () => {
       1, first.id,
     );
     const second = await saveApt(ctx, {
-      ...SLOT, chatId: 2, ts: 2, userName: 'Y', userPhone: '+y',
+      ...SLOT, masterId: 8, chatId: 2, ts: 2, userName: 'Y', userPhone: '+y',
     });
     expect(second).not.toBe(SLOT_TAKEN);
   });
 
-  it('many concurrent INSERTs collapse to a single non-cancelled row', async () => {
+  it('many concurrent INSERTs for one master collapse to a single non-cancelled row', async () => {
     // Real production would see this with two browser tabs / two channels
-    // racing the same slot. The partial UNIQUE plus ON CONFLICT DO NOTHING
-    // make sure exactly one wins.
+    // racing the same assigned-master slot. The partial UNIQUE plus ON CONFLICT
+    // DO NOTHING make sure exactly one wins.
     const ctx = baseCtx('t_dbl_concurrent');
     const N = 25;
     const calls = Array.from({ length: N }, (_, i) =>
       saveApt(ctx, {
         ...SLOT,
+        masterId: 12,
         chatId: 5000 + i,
         ts: 1,
         userName: `U${i}`,

@@ -324,17 +324,25 @@ export async function saveApt(ctx, apt) {
   apt.rejectComment = null;
   apt.cancelReason = null;
 
-  // Atomic INSERT relying on idx_apt_unique_active_slot (migration 0044).
+  // Atomic INSERT relying on idx_apt_unique_active_slot. Migration 0097 rebuilt
+  // that index as (tenant_id, master_id, date, time) WHERE cancelled=0 AND
+  // master_id IS NOT NULL, so the ON CONFLICT target MUST match it exactly —
+  // bare master_id + the same partial predicate. A COALESCE(master_id,-1)
+  // target matches no index, and D1/SQLite rejects the statement at prepare
+  // time ("ON CONFLICT clause does not match…"); that is NOT a UNIQUE violation,
+  // so the catch below would re-throw → 500 on every booking. Unassigned
+  // bookings (master_id IS NULL) are outside the partial index → they never
+  // conflict and may overlap (the 0097 shared-calendar intent).
   // ON CONFLICT DO NOTHING — when a concurrent isolate just booked the same
-  // active slot, this INSERT becomes a no-op and changes() returns 0, which
-  // we surface as SLOT_TAKEN. This closes the TOCTOU window between the KV
+  // active master slot, this INSERT becomes a no-op and changes() returns 0,
+  // which we surface as SLOT_TAKEN. Closes the TOCTOU window between the KV
   // lock check, getSlots(), and the historical bare INSERT.
   let result;
   try {
     result = await dbRun(ctx,
       `INSERT INTO appointments (id, tenant_id, chat_id, svc_id, date, time, ts, status, master_id, user_name, user_phone, user_tg, confirmed_by, counter_time, counter_comment, reject_comment, cancel_reason, cancelled, rem_h24, rem_h2, google_event_id, google_calendar_id, google_integration_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)
-       ON CONFLICT(tenant_id, COALESCE(master_id, -1), date, time) WHERE cancelled = 0 DO NOTHING`,
+       ON CONFLICT(tenant_id, master_id, date, time) WHERE cancelled = 0 AND master_id IS NOT NULL DO NOTHING`,
       id, ctx.tenantId, apt.chatId, apt.svcId, apt.date, apt.time, apt.ts,
       'pending', apt.masterId, apt.userName || null, apt.userPhone || null, apt.userTg || null,
       null, null, null, null, null,

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   normalizeEmail,
   normalizePhone,
+  buildUserData,
   sendCapiEvent,
 } from '../src/marketing/metaCapi.js';
 
@@ -37,6 +38,34 @@ describe('metaCapi — PII normalization', () => {
 
   it('strips non-digits from phone', () => {
     expect(normalizePhone('+48 (600) 123-456')).toBe('48600123456');
+  });
+});
+
+describe('metaCapi — buildUserData match keys', () => {
+  it('hashes email + phone, passes fbp/fbc/ip/ua through un-hashed', async () => {
+    const ud = await buildUserData({
+      email: '  Owner@Salon.com ',
+      phone: '+48 (600) 123-456',
+      clientIp: '203.0.113.7',
+      userAgent: 'Mozilla/5.0',
+      fbp: 'fb.1.123.abc',
+      fbc: 'fb.1.123.click',
+    });
+    // PII (em/ph) must be SHA-256 hashed of the normalized value
+    expect(ud.em).toEqual([sha256('owner@salon.com')]);
+    expect(ud.ph).toEqual([sha256('48600123456')]);
+    // Meta match keys are already opaque → forwarded raw, never hashed
+    expect(ud.client_ip_address).toBe('203.0.113.7');
+    expect(ud.client_user_agent).toBe('Mozilla/5.0');
+    expect(ud.fbp).toBe('fb.1.123.abc');
+    expect(ud.fbc).toBe('fb.1.123.click');
+    // raw PII must never survive into the payload
+    expect(JSON.stringify(ud).toLowerCase()).not.toContain('owner@salon.com');
+    expect(JSON.stringify(ud)).not.toContain('48600123456');
+  });
+
+  it('omits absent fields — empty input yields an empty object', async () => {
+    expect(await buildUserData({})).toEqual({});
   });
 });
 
@@ -118,5 +147,16 @@ describe('metaCapi — sendCapiEvent payload', () => {
     const res = await sendCapiEvent(ctxWith(), { email: 'a@b.com' });
     expect(res.ok).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns ok:false on a Meta error envelope without throwing (4xx is terminal, no retry)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(makeFetchResponse(400, { error: { message: 'Invalid OAuth access token', code: 190 } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await sendCapiEvent(ctxWith(), { eventName: 'Purchase', email: 'a@b.com' });
+    expect(res.ok).toBe(false);
+    // an auth error (190) is not retried — exactly one network attempt
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

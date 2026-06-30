@@ -146,6 +146,9 @@ WORKERS_AI_API_TOKEN=your_workers_ai_api_token
 # Social automation phase 2 (migration 0127)
 # MARKETING_REQUIRE_APPROVAL=1            # Telegram-approve each post before publish
 # SOCIAL_COMMENTS_AUTOREPLY_ENABLED=0     # autonomous IG/FB comment replies (kill-switch)
+
+# RAG knowledge base (migration 0129)
+# RAG_KB_ENABLED=0                        # embed+retrieve per-tenant KB on the answer path + cron reindex (default off)
 # MARKETING_FB_TENANT_ID=t_...            # FB Page channel tenant (EAA token) — unset until FB connected
 # MARKETING_FB_PAGE_ID=your_fb_page_id    # OR manual FB override secrets:
 # MARKETING_FB_ACCESS_TOKEN=your_fb_page_token

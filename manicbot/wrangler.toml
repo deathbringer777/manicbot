@@ -86,6 +86,13 @@ MARKETING_REQUIRE_APPROVAL = "1"
 # live in src/marketing/social-comments.js regardless.
 SOCIAL_COMMENTS_AUTOREPLY_ENABLED = "0"
 
+# RAG knowledge base (migration 0129). Default "0" (inert): the bot answers
+# exactly as before. Flip to "1" to (a) embed+retrieve the per-tenant KB on the
+# answer path and (b) enable the cron auto-reindex (phaseRagReindex). Before
+# flipping, run `POST /admin/rag/reindex {tenantId}` (or let the cron fill it) so
+# rag_chunks is populated. Embeddings use the AI binding (bge-m3) — no new secret.
+RAG_KB_ENABLED = "0"
+
 # Tenant whose `channel_configs` Facebook row holds the @manicbot_com FB Page
 # token (EAA, connected via the Facebook-OAuth path with pages_manage_posts +
 # pages_manage_engagement). UNSET today — the account is IG-only

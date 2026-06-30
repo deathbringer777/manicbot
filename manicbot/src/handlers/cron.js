@@ -48,6 +48,7 @@ import { runCampaignSend as runMarketingCampaign } from '../services/marketing/s
 import { isReaskEligible, EMAIL_REASK_BATCH, EMAIL_REASK_SCAN_LIMIT } from '../services/marketing/contacts.js';
 import { askEmail } from '../ui/emailAsk.js';
 import { fireAutomationForEvent } from '../services/marketing/automations.js';
+import { dispatchAppointmentAutomation } from '../services/appointmentAutomations.js';
 import { phasePlatformCampaigns } from '../services/platformCampaigns.js';
 
 /**
@@ -1830,6 +1831,11 @@ export function shouldAutoDonePostVisit(apt, endSec, oneDayAgoSec, hardCapAgoSec
  * so we never auto-done an appointment whose Stage-1 prompt has not been
  * delivered (the master would silently lose visits to a TG outage). After
  * POST_VISIT_HARD_CAP_SEC post-end we give up and auto-done regardless.
+ * Each auto-done transition is then recorded via
+ * dispatchAppointmentAutomation('appointment.done') — the SAME seam the
+ * admin-app "done" action uses — so users.lifetime_visits increments and
+ * marketing automations fire. The `visit_confirmed_at IS NULL` candidate
+ * filter makes that dispatch fire exactly once per visit (idempotent).
  */
 async function processPostVisitConfirmations(ctx, nowMs) {
   const nowSec = Math.floor(nowMs / 1000);
@@ -1874,22 +1880,49 @@ async function processPostVisitConfirmations(ctx, nowMs) {
     const dur = svcDurMap.get(a.svc_id) || 60;
     const endSec = Math.floor(a.ts / 1000) + dur * 60; // a.ts ms -> seconds (BUG-03)
     if (shouldAutoDonePostVisit(a, endSec, oneDayAgo, hardCapAgo)) {
-      toAutoDone.push(a.id);
+      toAutoDone.push(a);
     }
   }
+  const autoDoneIds = toAutoDone.map(a => a.id);
   if (toAutoDone.length) {
-    const placeholders = toAutoDone.map(() => '?').join(',');
+    const placeholders = autoDoneIds.map(() => '?').join(',');
     await dbRun(ctx, `
       UPDATE appointments
       SET status = 'done', visit_confirmed_at = ?, visit_confirmed_by = 'auto'
       WHERE tenant_id = ? AND id IN (${placeholders})
-    `, nowSec, ctx.tenantId, ...toAutoDone);
+    `, nowSec, ctx.tenantId, ...autoDoneIds);
+
+    // C6: record each auto-confirmed visit the SAME way the admin-app "done"
+    // action does — route through dispatchAppointmentAutomation so
+    // users.lifetime_visits increments and marketing automations fire. The
+    // candidate scan filters on `visit_confirmed_at IS NULL`, so once the
+    // UPDATE above stamps it, the row can never be re-selected → this fires
+    // exactly once per visit (idempotent). The dispatcher reads camelCase
+    // (apt.id / apt.chatId), so pass a doc-shaped apt, not the raw row.
+    for (const a of toAutoDone) {
+      const apt = {
+        id: a.id,
+        tenantId: ctx.tenantId,
+        chatId: a.chat_id,
+        svcId: a.svc_id,
+        date: a.date,
+        time: a.time,
+        ts: a.ts,
+        masterId: a.master_id,
+        status: 'done',
+      };
+      try {
+        await dispatchAppointmentAutomation(ctx, apt, 'appointment.done');
+      } catch (e) {
+        log.warn('handlers.cron', { action: 'autodone_dispatch_failed', aptId: a.id, error: e?.message?.slice(0, 200) });
+      }
+    }
   }
 
   // Stage 1: T+2h → prompt master, set review_requested_at on success.
   const toPrompt = [];
   for (const a of candidates) {
-    if (toAutoDone.includes(a.id)) continue;
+    if (autoDoneIds.includes(a.id)) continue;
     // Already prompted on a previous cron tick — skip (the analytics event
     // only fires once, see below).
     if (a.review_requested_at != null) continue;
@@ -1964,13 +1997,16 @@ async function processBirthdayAndReturningPromos(ctx, nowMs) {
   // is delegated to the promoCodes.create tRPC procedure via a follow-up
   // worker job to keep the cron function idempotent and fast.
   try {
+    // C3: appointments.ts is epoch MILLISECONDS (migration 0101), so the
+    // 60–90-day window MUST be bound in ms (×1000). Binding seconds here
+    // (nowSec − N·86400) never matched any ms-scale row → win-back promo dead.
     const returning = await dbAll(ctx, `
       SELECT DISTINCT chat_id FROM appointments
       WHERE tenant_id = ?
         AND status = 'done'
         AND ts BETWEEN ? AND ?
       LIMIT 50
-    `, ctx.tenantId, nowSec - 90 * 86400, nowSec - 60 * 86400);
+    `, ctx.tenantId, nowMs - 90 * 86400 * 1000, nowMs - 60 * 86400 * 1000);
     for (const r of returning) {
       // INSERT OR IGNORE + user_id set so the partial UNIQUE index in
       // migration 0055 dedups (tenant_id, user_id, event, day).

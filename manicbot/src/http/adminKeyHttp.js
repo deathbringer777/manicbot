@@ -148,6 +148,27 @@ export async function tryAdminKeyRoutes(request, env, url) {
     return Response.json({ ok: true, jobs });
   }
 
+  // Rebuild the RAG knowledge-base index for one tenant (bge-m3 embeddings →
+  // rag_chunks). ADMIN_KEY-gated. Body: { tenantId }. Runs in the Worker (the
+  // corpus is tiny); idempotent + isolation-scoped. See src/services/ragIngest.js.
+  if (request.method === 'POST' && url.pathname === '/admin/rag/reindex') {
+    if (!isAdminKeyValid(url, env, request)) return forbidden();
+    if (!env.DB) return new Response('DB not bound', { status: 500 });
+    let body;
+    try { body = await request.json(); } catch { return Response.json({ error: 'invalid_json' }, { status: 400 }); }
+    const tenantId = body && typeof body.tenantId === 'string' ? body.tenantId.trim() : '';
+    if (!tenantId) return Response.json({ error: 'tenantId_required' }, { status: 400 });
+    const { reindexTenantKb } = await import('../services/ragIngest.js');
+    const ctx = {
+      ...envCtx(env),
+      AI: env.AI || null,
+      WORKERS_AI_API_TOKEN: env.WORKERS_AI_API_TOKEN || null,
+      CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID || null,
+    };
+    const result = await reindexTenantKb(ctx, tenantId);
+    return Response.json({ ok: !result.error, ...result }, { status: result.error ? 502 : 200 });
+  }
+
   // Sprint 2/6: run one pass of the BOT_ENCRYPTION_KEY rotation sweep.
   // Call repeatedly (cron-friendly) until all tables return 0 remaining.
   if (request.method === 'POST' && url.pathname === '/admin/key-rotation-sweep') {

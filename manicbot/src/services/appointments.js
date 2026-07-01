@@ -8,6 +8,7 @@ import { warsawNow, warsawToUTC, todayStr } from '../utils/date.js';
 import { getMaster } from './users.js';
 import { resolveMasterDay } from './masterSchedule.js';
 import { deleteAppointmentCalendar, loadExternalBusyBlocks } from './google-calendar-oauth.js';
+import { getNoShowPolicy, evaluateNoShowPolicy } from './policy/noShowPolicy.js';
 
 function allKey(dateStr) {
   return `all:${dateStr.slice(0, 7)}`;
@@ -173,6 +174,19 @@ export const BLOCKED_GLOBAL = Object.freeze({ blockedGlobal: true });
 export const BLOCKED_FOR_MASTER = Object.freeze({ blockedForMaster: true });
 
 /**
+ * BLOCKED_NO_SHOW sentinel — returned by saveApt() when the tenant's no-show
+ * policy (`tenant_config` key `no_show_policy`) is configured with
+ * `autoAction: 'auto_block'` and this client's `users.no_show_count` has
+ * reached the policy threshold (C7). Distinct from the 0062 client-block
+ * sentinels: this one is EARNED by repeated no-shows and is self-recoverable
+ * (the client can contact the salon), so callers surface a clearer message
+ * rather than the neutral "slot unavailable" used for manual blocks.
+ * Only `auto_block` hard-blocks here — `require_confirm` / `require_prepayment`
+ * are advisory (surfaced elsewhere) and do NOT refuse the booking.
+ */
+export const BLOCKED_NO_SHOW = Object.freeze({ blockedNoShow: true });
+
+/**
  * Check whether a (client, master) pair is allowed to book.
  * Returns one of: `null` (allowed), `BLOCKED_GLOBAL`, `BLOCKED_FOR_MASTER`.
  *
@@ -304,6 +318,19 @@ export async function saveApt(ctx, apt) {
   // is not accepting new bookings right now" — see handlers/message.js).
   const blocked = await checkBookingBlock(ctx, apt.chatId, apt.masterId ?? null);
   if (blocked) return blocked;
+
+  // C7: no-show policy gate. Only tenants who opted into `auto_block` can hard
+  // refuse a self-service booking; the cheap `auto_block` guard keeps the
+  // default-policy path (afterCount 0 / autoAction none) at zero extra reads.
+  const noShowPolicy = await getNoShowPolicy(ctx);
+  if (noShowPolicy.autoAction === 'auto_block' && noShowPolicy.afterCount > 0) {
+    const clientRow = await dbGet(ctx,
+      'SELECT no_show_count FROM users WHERE tenant_id = ? AND chat_id = ?',
+      ctx.tenantId, apt.chatId,
+    );
+    const decision = evaluateNoShowPolicy(noShowPolicy, { noShowCount: clientRow?.no_show_count });
+    if (decision.decision === 'blocked') return BLOCKED_NO_SHOW;
+  }
 
   const countRow = await dbGet(ctx,
     'SELECT COUNT(*) as cnt FROM appointments WHERE tenant_id = ? AND chat_id = ? AND cancelled = 0 AND ts > ?',

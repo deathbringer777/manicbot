@@ -9,7 +9,7 @@ import { getState, setState, clearState, checkRateLimit } from '../services/stat
 import { getLang, setLang } from '../services/chat.js';
 import { getUser, isAdmin, isMaster, isBlocked, canManageApt, getAdminId, getMaster, saveMaster, deleteMaster, blockUser, unblockUser, listMasters, isPlatformAdmin, getRole, isRegComplete } from '../services/users.js';
 import { saveServices, loadAboutPhotos, saveAboutPhotos, getAutoConfirm } from '../services/services.js';
-import { cancelApt, getApts, getSlots, getAdminAllApts, loadDayAppointments, saveApt, SLOT_TAKEN, BLOCKED_GLOBAL, BLOCKED_FOR_MASTER, getAptById, updateApt } from '../services/appointments.js';
+import { cancelApt, getApts, getSlots, getAdminAllApts, loadDayAppointments, saveApt, SLOT_TAKEN, BLOCKED_GLOBAL, BLOCKED_FOR_MASTER, BLOCKED_NO_SHOW, getAptById, updateApt } from '../services/appointments.js';
 import { getTicket, setTicket, setTicketMaster, clearTicket, resetHumanRequestCount, buildTicketInternalNote } from '../services/tickets.js';
 import { claimTicket, closeTicket } from '../support/tickets.js';
 import { notifyAptStaff, notifyAptStaffAutoConfirmed, sendAptConfirmedToClient, notifyStaffAptCancelled, notifyStaffConsultantRequest, confirmAllPendingApts } from '../notifications.js';
@@ -1581,6 +1581,12 @@ export async function onCb(ctx, cb) {
     // we don't leak the block status to the (blocked) client.
     if (apt === BLOCKED_GLOBAL || apt === BLOCKED_FOR_MASTER) {
       return send(ctx, cid, fill(t(lg, 'no_slots'), { d: fmtDate(lg, st.date) }), calKb(lg, 0));
+    }
+    // C7: no-show auto_block — unlike the neutral 0062 blocks, this one is
+    // earned and self-recoverable, so give the client an actionable message
+    // (contact the salon) rather than a bare "no slots".
+    if (apt === BLOCKED_NO_SHOW) {
+      return send(ctx, cid, t(lg, 'apt_blocked_no_show'), mainKb(lg));
     }
     if (!apt) {
       return send(ctx, cid, fill(t(lg, 'book_limit'), { n: String(MAX_APTS) }), mainKb(lg));

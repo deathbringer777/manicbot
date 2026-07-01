@@ -68,6 +68,7 @@ export default {
   book_err: '❌ Błąd. Zacznij rezerwację od nowa.',
   book_limit: '⚠️ Osiągnięto limit wizyt ({n}). Anuluj jedną z obecnych.',
   slot_taken: '😔 Ten termin został właśnie zajęty. Wybierz inny:',
+  apt_blocked_no_show: '⚠️ Rezerwacja online jest obecnie niedostępna z powodu wcześniejszych nieodbytych wizyt. Skontaktuj się bezpośrednio z salonem, aby umówić wizytę.',
 
   my_title: '📋 <b>Moje wizyty</b>',
   my_empty: 'Nie masz nadchodzących wizyt.\n\n💅 Chcesz się umówić?',

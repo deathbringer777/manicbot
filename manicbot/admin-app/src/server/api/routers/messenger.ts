@@ -471,7 +471,11 @@ export const messengerRouter = createTRPCRouter({
       return {
         thread,
         // Soft-deleted rows keep their place (tombstone) but never leak content.
-        messages: messages
+        // Use the LIVE-enriched array so booking-request cards carry the current
+        // appointment status (`liveAppointment`), not just the post-time snapshot
+        // (finding C5). Both `messagesWithLive` and this tombstone map spread
+        // `...m`, so the overlay survives to the response.
+        messages: messagesWithLive
           .map((m) => (m.deletedAt ? { ...m, body: "", attachmentsJson: null } : m))
           .reverse(), // chronological in render
         nextCursor,

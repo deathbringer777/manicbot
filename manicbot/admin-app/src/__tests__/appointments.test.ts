@@ -400,6 +400,42 @@ describe("appointmentsRouter", () => {
       expect(vals.ts).toBeGreaterThan(0);
     });
 
+    it("fires a silent sync_calendar push with the NEW slot so the Google event moves (C4)", async () => {
+      const dbMock = createDbMock([
+        [{ ...baseApt, googleEventId: "gcal_evt_123", googleCalendarId: "cal_1", googleIntegrationId: 7 }],
+        [{ svcId: "manicure", duration: 60 }],
+      ]);
+      const caller = createCaller(makeAdminCtx(dbMock.db) as never);
+
+      await caller.rescheduleAppointment({
+        tenantId: "t_demo",
+        appointmentId: "apt_1",
+        newDate: "2026-05-21",
+        newTime: "14:30",
+        newMasterId: 200,
+      });
+
+      // The calendar-only `sync_calendar` action must be pushed to the Worker
+      // with the NEW slot — this is what actually moves the linked Google event
+      // (the ≤15-min phaseGcalSync cron never re-picks a row that already has a
+      // google_event_id). Silent by design: no client "moved" message.
+      const syncCall = fetchMock.mock.calls.find(([, opts]) => {
+        try {
+          return JSON.parse((opts as RequestInit).body as string).action === "sync_calendar";
+        } catch {
+          return false;
+        }
+      });
+      expect(syncCall).toBeTruthy();
+      const body = JSON.parse((syncCall![1] as RequestInit).body as string);
+      expect(body.apt.date).toBe("2026-05-21");
+      expect(body.apt.time).toBe("14:30");
+      expect(body.apt.masterId).toBe(200);
+      // googleEventId forwarded so the Worker PATCHes the existing event
+      // (a payload without it would CREATE a duplicate under read-after-write).
+      expect(body.apt.googleEventId).toBe("gcal_evt_123");
+    });
+
     it("keeps existing masterId when newMasterId is omitted", async () => {
       const dbMock = createDbMock([
         [baseApt],

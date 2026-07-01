@@ -28,10 +28,19 @@ Once connected, ManicBot pushes each booking into the calendar via
   already `confirmed`) → Worker `action: "sync_calendar"`. This action is
   **calendar-only**: it pushes the event but does NOT message the client, so a
   staff-entered booking stays silent to the client.
+- Dashboard: **drag-to-reschedule** — `appointments.rescheduleAppointment`
+  → Worker `action: "sync_calendar"` (calendar-only, silent). The push carries
+  the row's `googleEventId`, so the Worker **PATCHes** the existing event to the
+  new slot instead of creating a duplicate. This immediate push is REQUIRED
+  here: the reschedule keeps `google_event_id` on the row, so the fallback cron
+  below — which only selects rows *missing* `google_event_id` — will never
+  re-sync a moved booking on its own (finding C4).
 
 The `phaseGcalSync` cron (every 15 min) is the **fallback** that retries any
 `status='confirmed'` row still missing `google_event_id` (e.g. the immediate
-push failed, or the Worker was unreachable). All outbound paths are gated by the
+push failed, or the Worker was unreachable). Note it does NOT reconcile a
+*rescheduled* row — that already has a `google_event_id` and relies on the
+immediate `sync_calendar` push above. All outbound paths are gated by the
 `calendar` plan feature (`canUse(ctx, 'calendar')` — `pro`/`max` only).
 
 > Note: the "last sync" timestamp shown in the Mini App is the **inbound**

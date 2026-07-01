@@ -8,6 +8,7 @@
     "start": "wrangler dev",
     "test": "vitest run",
     "test:ws": "vitest run --config vitest.workers.config.mjs",
+    "test:d1": "vitest run --config vitest.d1.config.mjs",
     "lint": "eslint \"src/**/*.js\"",
     "check-schema": "node scripts/check-schema-tables.mjs",
     "check-migrations": "node scripts/check-migrations.mjs",

@@ -653,12 +653,17 @@ export const appointmentsRouter = createTRPCRouter({
    *     preserved on the row so the sync becomes a PATCH, not a re-create.
    *   - Re-arms the reminder flags (`remH24 / remH2 = 0`) so the cron fires
    *     reminders for the NEW time, not the old one.
-   *   - Worker notify is intentionally NOT called here — drag-to-reschedule
+   *   - Client notify is intentionally NOT sent here — drag-to-reschedule
    *     happens frequently during the day and we don't want to spam the
    *     client with a "your appointment moved" message every time the
    *     owner nudges a block by 15 minutes. The explicit "Save" flow in
    *     the detail panel uses `appointments.update` (below) which DOES
    *     notify — separation by user intent.
+   *   - A SILENT, calendar-only `sync_calendar` push IS fired (C4) so the
+   *     linked Google event follows the move. It does NOT message the client;
+   *     it's the only trigger that moves the event, because phaseGcalSync
+   *     only ever selects rows with google_event_id IS NULL and thus skips an
+   *     already-synced (rescheduled) row despite its reset sync flags.
    */
   rescheduleAppointment: protectedProcedure
     .input(z.object({
@@ -831,6 +836,30 @@ export const appointmentsRouter = createTRPCRouter({
             .bind(input.tenantId, actorId, "booking.rescheduled", props, now).run();
         }
       } catch { /* non-fatal */ }
+
+      // C4: fire-and-forget SILENT calendar push. `sync_calendar` is
+      // calendar-only (no client message) and PATCHes the existing Google event
+      // to the new slot. We forward the google_* fields so the Worker PATCHes
+      // even under read-after-write lag (a payload without googleEventId would
+      // CREATE a duplicate event at the new time, orphaning the old one).
+      notifyWorker("sync_calendar", apt.id, input.tenantId, null, {
+        apt: {
+          id: apt.id,
+          tenantId: input.tenantId,
+          chatId: apt.chatId,
+          svcId: apt.svcId,
+          date: input.newDate,
+          time: input.newTime,
+          ts: newTs,
+          status: apt.status,
+          masterId: newMasterId,
+          userName: apt.userName,
+          userPhone: apt.userPhone,
+          googleEventId: apt.googleEventId,
+          googleCalendarId: apt.googleCalendarId,
+          googleIntegrationId: apt.googleIntegrationId,
+        },
+      }).catch(() => {});
 
       return { ok: true, appointmentId: apt.id, unchanged: false };
     }),

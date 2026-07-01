@@ -6,7 +6,13 @@ export default defineConfig({
     // The MessengerHub WebSocket e2e runs in the workers pool, not node — it
     // has its own config (vitest.workers.config.js / npm run test:ws). Exclude
     // it here so `npm test` (node) doesn't try to load `cloudflare:test`.
-    exclude: [...configDefaults.exclude, 'test/messenger-ws-integration.test.js'],
+    // Same for the real-D1 integration specs (`*.d1.test.js`,
+    // vitest.d1.config.mjs / npm run test:d1) — they also need `cloudflare:test`.
+    exclude: [
+      ...configDefaults.exclude,
+      'test/messenger-ws-integration.test.js',
+      'test/**/*.d1.test.js',
+    ],
     // Node.js environment — crypto.subtle доступен в Node 19+
     // @cloudflare/vitest-pool-workers установлен, но не используется:
     // Workers-specific API (Cache, Durable Objects) не нужны в unit-тестах.

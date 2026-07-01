@@ -68,6 +68,7 @@ export default {
   book_err: '❌ Error. Please start the booking again.',
   book_limit: '⚠️ Appointment limit reached ({n}). Cancel one of your current appointments to create a new one.',
   slot_taken: '😔 This time slot was just taken. Please choose another:',
+  apt_blocked_no_show: '⚠️ Online booking is currently unavailable due to previous missed appointments. Please contact the salon directly to book.',
 
   my_title: '📋 <b>My Appointments</b>',
   my_empty: 'You have no upcoming appointments.\n\n💅 Would you like to book one?',
